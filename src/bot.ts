@@ -65,6 +65,7 @@ import {
     editMessageReplyMarkup
 } from './messages/settings/auto_sell';
 import { swapToken } from "./services/jupiter";
+import { runSniper } from "./services/sniper";
 import { editPositionsMessage, sendPositionsMessageWithImage, getPositions } from './messages/positions';
 import { editSettingsMessage, sendSettingsMessage, sendSettingsMessageWithImage } from "./messages/settings";
 import { buyToken } from "./messages/buy/buy";
@@ -96,6 +97,7 @@ import { error } from "console";
 import { TippingSettings } from "./models/tipSettings";
 import { editReferralMessage, sendReferralMessage } from "./messages/referral";
 import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/trendingCoins";
+import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/sniper/sniper";
 // import { sendWelcomeVideo } from "./utils/welcomevideo";
 // import { editMultiMessageWithAddress } from './messages/buy/multi';
 
@@ -350,6 +352,9 @@ bot.onText(/\/positions/, async (msg, match) => {
 bot.on("polling_error", (error) => {
     console.error(error);
 });
+
+const userLastMessage = new Map(); // user_id -> message_id
+const userLastTokens = new Map(); // user_id -> token_address
 
 bot.on("callback_query", async (callbackQuery) => {
     console.log("debug callback_query", `\x1b[35m${callbackQuery.data}\x1b[0m`);
@@ -2764,8 +2769,1193 @@ ${await t('privateKey.p7', userId)}`,
                 }
             }
         }
-    } catch (error) { }
+
+        // Sniper bot
+        if (sel_action === "sniper") {
+            bot.deleteMessage(chatId, messageId);
+            sendSniperMessageeWithImage(bot, chatId, userId, messageId);
+        }
+        if (sel_action === "sniper_refresh") {
+            editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "is_snipping") {
+            user.sniper.is_snipping = !user.sniper.is_snipping;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+            if (user.sniper.is_snipping) {
+                const message = bot.sendMessage(chatId, `${await t('🚀 SNIPER ACTIVE — ready to snipe new listings. Stay sharp!', userId)}`);
+                setTimeout(async () => {
+                    await bot.deleteMessage(chatId, (await message).message_id).catch(() => { });
+                }, 10000);
+            } else {
+                const message1 = bot.sendMessage(chatId, `${await t('🛑 Sniper stopped — monitoring paused', userId)}`);
+                setTimeout(async () => {
+                    await bot.deleteMessage(chatId, (await message1).message_id).catch(() => { });
+                }, 10000);
+            }
+        }
+
+        if (sel_action === "allowAutoSell") {
+            user.sniper.allowAutoSell = !user.sniper.allowAutoSell;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        
+        if (sel_action === "allowAutoBuy") {
+            user.sniper.allowAutoBuy = !user.sniper.allowAutoBuy;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "sniper_mev") {
+            user.sniper.mev = !user.sniper.mev;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "sniper_social") {
+            user.sniper.social_check = !user.sniper.social_check;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "sniper_twitter") {
+            user.sniper.twitter_check = !user.sniper.twitter_check;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "advance_action") {
+            user.sniper.advance_mode = !user.sniper.advance_mode;
+            await user.save();
+            await editSniperMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "sniper_slippage") {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.slippageInput', userId)}`,
+                // {`
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const slippageValue = Number(reply.text || "");
+                        if (isNaN(slippageValue) || slippageValue <= 0 || slippageValue > 100) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidSlippage', userId)}`,
+                                // { reply_markup: { force_reply: true } },
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newSlippageValue = Number(newReply.text || "");
+                                        if (isNaN(newSlippageValue) || newSlippageValue < 0 || newSlippageValue > 100) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidSlippage', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.slippage = newSlippageValue;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.slippage = slippageValue;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_buyAmount") {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.buy_x', userId)}`,
+                // {`
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const buyAmountValue = Number(reply.text || "");
+                        if (isNaN(buyAmountValue) || buyAmountValue <= 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newBuyAmountValue = Number(newReply.text || "");
+                                        if (isNaN(newBuyAmountValue) || newBuyAmountValue <= 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.buy_amount = newBuyAmountValue;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.buy_amount = buyAmountValue;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_buyAmount") {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.buy_x', userId)}`,
+                // {`
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const buyAmountValue = Number(reply.text || "");
+                        if (isNaN(buyAmountValue) || buyAmountValue <= 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newBuyAmountValue = Number(newReply.text || "");
+                                        if (isNaN(newBuyAmountValue) || newBuyAmountValue <= 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.buy_amount = newBuyAmountValue;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.buy_amount = buyAmountValue;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_buyLimit") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the purchase number. If you enter 1, the bot will trade the token only once.', userId)}`,
+                // {`
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const buyLimit = Number(reply.text || "");
+                        if (isNaN(buyLimit) || buyLimit <= 0 || !Number.isInteger(buyLimit)) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newBuyLimit = Number(newReply.text || "");
+                                        if (isNaN(newBuyLimit) || newBuyLimit <= 0 || !Number.isInteger(newBuyLimit)) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.buy_limit = newBuyLimit;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.buy_limit = buyLimit;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_takeProfit") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the take profit amount.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const takeProfitPercent = Number(reply.text || "");
+                        if (isNaN(takeProfitPercent) || takeProfitPercent < 0 || takeProfitPercent > 100) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newTakeProfitPercent = Number(newReply.text || "");
+                                        if (isNaN(newTakeProfitPercent) || newTakeProfitPercent <= 0 || newTakeProfitPercent > 100) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.take_profit = newTakeProfitPercent;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.take_profit = takeProfitPercent;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_stopLoss") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the stop loss amount.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const stopLossPercent = Number(reply.text || "");
+                        if (isNaN(stopLossPercent) || stopLossPercent > 0 || stopLossPercent < -100) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newStopLossPercent = Number(newReply.text || "");
+                                        if (isNaN(newStopLossPercent) || newStopLossPercent >= 0 || newStopLossPercent < -100) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.stop_loss = newStopLossPercent;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.stop_loss = stopLossPercent;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_timeLimit") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter a time limit. If you enter 10, the bot will sell your tokens after 10 minutes.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const timeLimit = Number(reply.text || "");
+                        if (isNaN(timeLimit) || timeLimit < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newTimelimit = Number(newReply.text || "");
+                                        if (isNaN(newTimelimit) || newTimelimit <= 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.time_limit = newTimelimit;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.time_limit = timeLimit;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_boundingMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the bonding curve min percent.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const bonding_curve_min = Number(reply.text || "");
+                        if (isNaN(bonding_curve_min) || bonding_curve_min < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newBondingCurveMin = Number(newReply.text || "");
+                                        if (isNaN(newBondingCurveMin) || newBondingCurveMin < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.bonding_curve_min = newBondingCurveMin;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.bonding_curve_min = bonding_curve_min;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_bondingMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the bonding curve max percent.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const bondingMax = Number(reply.text || "");
+                        if (isNaN(bondingMax) || bondingMax < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newBondingCurveMax = Number(newReply.text || "");
+                                        if (isNaN(newBondingCurveMax) || newBondingCurveMax < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.bonding_curve_max = newBondingCurveMax;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.bonding_curve_max = bondingMax;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_MCMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the minium marcket cap', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const mcMin = Number(reply.text || "");
+                        if (isNaN(mcMin) || mcMin < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMcMin = Number(newReply.text || "");
+                                        if (isNaN(newMcMin) || newMcMin < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.min_mc = newMcMin;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.min_mc = mcMin;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_MCMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the maxium marcket cap', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const mcMax = Number(reply.text || "");
+                        if (isNaN(mcMax) || mcMax < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMcMax = Number(newReply.text || "");
+                                        if (isNaN(newMcMax) || newMcMax < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.max_mc = newMcMax;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.max_mc = mcMax;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_tokenAgeMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the minimum token age in minutes.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const minTokenAge = Number(reply.text || "");
+                        if (isNaN(minTokenAge) || minTokenAge < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMinTokenAge = Number(newReply.text || "");
+                                        if (isNaN(newMinTokenAge) || newMinTokenAge < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.min_token_age = newMinTokenAge;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.min_token_age = minTokenAge;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+
+        if (sel_action === "sniper_tokenAgeMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the maximum token age in minutes.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const maxTokenAge = Number(reply.text || "");
+                        if (isNaN(maxTokenAge) || maxTokenAge < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMaxTokenAge = Number(newReply.text || "");
+                                        if (isNaN(newMaxTokenAge) || newMaxTokenAge < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.max_token_age = newMaxTokenAge;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.max_token_age = maxTokenAge;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_holdersMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the minimum holder numbers.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const minHolders = Number(reply.text || "");
+                        if (isNaN(minHolders) || minHolders < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMinHolders = Number(newReply.text || "");
+                                        if (isNaN(newMinHolders) || newMinHolders < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.min_holders = newMinHolders;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.min_holders = minHolders;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+
+        if (sel_action === "sniper_holdersMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the maximum holders numbers.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const maxHolders = Number(reply.text || "");
+                        if (isNaN(maxHolders) || maxHolders < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMaxHolders = Number(newReply.text || "");
+                                        if (isNaN(newMaxHolders) || newMaxHolders < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.max_holders = newMaxHolders;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.max_holders = maxHolders;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_volumeMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the minium volume.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const minVolume = Number(reply.text || "");
+                        if (isNaN(minVolume) || minVolume < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMinVolume = Number(newReply.text || "");
+                                        if (isNaN(newMinVolume) || newMinVolume < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.min_vol = newMinVolume;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.min_vol = minVolume;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+
+        if (sel_action === "sniper_volumeMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the maximum volume.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const maxVolume = Number(reply.text || "");
+                        if (isNaN(maxVolume) || maxVolume < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMaxVolume = Number(newReply.text || "");
+                                        if (isNaN(newMaxVolume) || newMaxVolume < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.max_vol = newMaxVolume;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.max_vol = maxVolume;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_liquidityMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the minimum liquidity.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const minLiquidity = Number(reply.text || "");
+                        if (isNaN(minLiquidity) || minLiquidity < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMinLiquidity = Number(newReply.text || "");
+                                        if (isNaN(newMinLiquidity) || newMinLiquidity < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.min_liq = newMinLiquidity;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.min_liq = minLiquidity;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_liquidityMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the maximum liquidity.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const maxLiquidity = Number(reply.text || "");
+                        if (isNaN(maxLiquidity) || maxLiquidity < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMaxLiquidity = Number(newReply.text || "");
+                                        if (isNaN(newMaxLiquidity) || newMaxLiquidity < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.max_liq = newMaxLiquidity;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.max_liq = maxLiquidity;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_TxnMin") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the minimum transaction numbers.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const minTxns = Number(reply.text || "");
+                        if (isNaN(minTxns) || minTxns < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMinTxns = Number(newReply.text || "");
+                                        if (isNaN(newMinTxns) || newMinTxns < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.TXNS_MIN = newMinTxns;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.TXNS_MIN = minTxns;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+        if (sel_action === "sniper_TxnMax") {
+            bot.sendMessage(
+                chatId,
+                `${await t('Enter the maximum transaction numbers.', userId)}`,
+                // {
+                //     reply_markup: {
+                //         force_reply: true,
+                //     },
+                // },
+            ).then((sentMessage) => {
+                bot.once('text',
+                    async (reply) => {
+                        const maxTxns = Number(reply.text || "");
+                        if (isNaN(maxTxns) || maxTxns < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidAmount', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    async (newReply) => {
+                                        const newMaxTxns = Number(newReply.text || "");
+                                        if (isNaN(newMaxTxns) || newMaxTxns < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidAmount', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            user.sniper.TXNS_MAX = newMaxTxns;
+                                            await user.save();
+                                            editSniperMessage(bot, chatId, userId, messageId);
+                                        }
+                                        bot.deleteMessage(chatId, newReply.message_id);
+                                    },
+                                );
+                            });
+                        } else {
+                            user.sniper.TXNS_MAX = maxTxns;
+                            await user.save();
+                            editSniperMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, sentMessage.message_id);
+                            bot.deleteMessage(chatId, reply.message_id);
+                        }, 5000);
+                    },
+                );
+            });
+        }
+
+    } catch (error) {
+        console.error("Error handling callback query:", error);
+    }
 });
+
+
 
 async function setBotCommands() {
     bot.setMyCommands([
@@ -2951,6 +4141,62 @@ const main = async () => {
     setInterval(() => {
         checkAndAutoSell();
     }, 10000);
+
+    // Run the sniper script continuously
+    setInterval(async () => {
+        try {
+            // console.log("🚀 Running sniper script...");
+            const users = await User.find({ "sniper.is_snipping": true });
+            // console.log(`👥 Found ${users.length} active snipers.`);
+            for (const user of users) {
+                console.log(`🤖 Sniper settings for user ${user.userId}:`, user.sniper);
+                await runSniper(user.userId
+                    // async (tokenList: any) => {
+
+                    //     if (!tokenList || tokenList.length === 0) return;
+
+                    //     const lastMsgId = userLastMessage.get(user.userId);
+                    //     const previouMsgId = userLastMessage.get(user.userId) - 1;
+                    //     const msg = `🔥 Detected active tokens:\n\n` +
+                    //         (user.sniper.Tokenlist).map((t: any, i: any) => `${i + 1}. https://pump.fun/coin/${t}`).join('\n');
+
+                    //     try {
+                    //         if (lastMsgId) {
+                    //             await bot.deleteMessage(Number(user.userId), lastMsgId).catch(() => { }); // ignore errors
+                    //             await bot.deleteMessage(Number(user.userId), previouMsgId).catch(() => { }); // ignore errors
+                    //             console.log("Deleted last message ID:", lastMsgId);
+                    //         }
+                    //         const sent = await bot.sendMessage(Number(user.userId), msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+                    //         console.log("Sent new message ID:", sent.message_id);
+                    //         userLastMessage.set(user.userId, sent.message_id);
+                    //         userLastTokens.set(user.userId, tokenList); // update last tokens
+                    //     } catch (e) {
+                    //         console.error("Failed to send Telegram message:", e);
+                    // }
+
+
+                    // Optionally: call your local snipe function here,
+                    // or let sniper.js handle buying. Example:
+                    // await snipeToken(tokenList[0]);
+                    // }
+                ); // Pass the active users' IDs to the sniper script
+                // const lastMsgId = userLastMessage.get(user.userId);
+                // if (lastMsgId) {
+                //     await bot.deleteMessage(Number(user.userId), lastMsgId).catch(() => { }); // ignore errors
+                //     console.log("Deleted last message ID:", lastMsgId);
+                // }
+                // const msg = `🔥 Detected active tokens:\n\n` +
+                //     (user.sniper.Tokenlist).map((t: any, i: any) => `${i + 1}. https://pump.fun/coin/${t}`).join('\n');
+
+                // const sent = await bot.sendMessage(Number(user.userId), msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
+
+
+            }
+        } catch (error) {
+            console.error("⚠️ Error in sniper script:", error);
+        }
+    }, 10000); // Adjust the interval as needed (e.g., every 5 seconds)
+
     const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
     if (!settings) throw new Error("Tipping settings not found!");
     setInterval(async () => {

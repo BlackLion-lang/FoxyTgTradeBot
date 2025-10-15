@@ -63,9 +63,9 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
                 { text: `${await t('menu.settings', userId)}`, callback_data: "settings" },
                 { text: `${await t('menu.help', userId)}`, callback_data: "help" },
             ],
-            // [
-            //     { text: `🥇 Trending Coin `, callback_data: "trending_coin" },
-            // ],
+            [
+                { text: `🔫 Sniper 🔫`, callback_data: "sniper" },
+            ],
             [
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
                 { text: `${await t('menu.trendingCoin', userId)}`, callback_data: "trending_coin" },

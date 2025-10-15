@@ -1,6 +1,8 @@
 import mongoose from "mongoose";
 import { mongoConnection } from "../config/connection";
-import { timeStamp } from "console";
+import { time, timeStamp } from "console";
+import { approveInstructionData } from "@solana/spl-token";
+import { am } from "@raydium-io/raydium-sdk-v2/lib/api-80d620f3";
 
 
 const userSchema = new mongoose.Schema(
@@ -25,11 +27,6 @@ const userSchema = new mongoose.Schema(
         wallets: {
             type: [
                 {
-                    positions: [
-                        {
-                            token: String,
-                            profit: Number
-                        }],
                     publicKey: { type: String, default: "" },
                     secretKey: { type: String, default: "" },
                     balance: { type: String, default: "0" },
@@ -55,6 +52,14 @@ const userSchema = new mongoose.Schema(
                             name: String,
                             tip: Number,
                             pnl: { type: Boolean, default: true },
+                        }],
+                    positions: [
+                        {
+                            amount: { type: Number, default: 0 },
+                            solAmount: { type: Number, default: 0 },
+                            mint: { type: String, default: "" },
+                            price: { type: Number, default: 0 },
+                            timestamp: { type: Number, default: Date.now() },
                         }],
                 },
             ],
@@ -147,16 +152,6 @@ const userSchema = new mongoose.Schema(
                     },
                     default: {},
                 },
-                // buy_method: {
-                //     type: String,
-                //     default: "Ultra",
-                //     enum: ["Ultra", "Jito", "Bloxroute", "Auto", "Node"],
-                // },
-                // sell_method: {
-                //     type: String,
-                //     default: "Ultra",
-                //     enum: ["Ultra", "Jito", "Bloxroute", "Auto", "Node"],
-                // },
 
                 mev: { type: Boolean, default: true },
 
@@ -186,6 +181,45 @@ const userSchema = new mongoose.Schema(
                         "fr"
                     ],
                 },
+            },
+            default: {},
+        },
+        sniper: {
+            type: {
+                is_snipping: { type: Boolean, default: false },
+                allowAutoSell: { type: Boolean, default: true },
+                allowAutoBuy: { type: Boolean, default: true },
+                advance_mode: { type: Boolean, default: false },
+                min_mc: { type: Number, default: null },
+                max_mc: { type: Number, default: null },
+                min_liq: { type: Number, default: null },
+                max_liq: { type: Number, default: null },
+                min_vol: { type: Number, default: null },
+                max_vol: { type: Number, default: null },
+                TXNS_MIN: { type: Number, default: null },
+                TXNS_MAX: { type: Number, default: null },
+                min_token_age: { type: Number, default: null },
+                max_token_age: { type: Number, default: null },
+                min_holders: { type: Number, default: null },
+                max_holders: { type: Number, default: null },
+                bonding_curve_min: { type: Number, default: null },
+                bonding_curve_max: { type: Number, default: null },
+                time_limit: { type: Number, default: null }, //minutes
+                social_check: { type: Boolean, default: false },
+                twitter_check: { type: Boolean, default: false },
+                buy_amount: { type: Number, default: null },
+                buy_limit: { type: Number, default: null },
+                buy_tip: { type: Number, default: null },
+                sell_tip: { type: Number, default: null },
+                slippage: { type: Number, default: 10 },
+                mev: { type: Boolean, default: true },
+                auto_sell: { type: Boolean, default: false },
+                take_profit: { type: Number, default: null },
+                stop_loss: { type: Number, default: null },
+                tokenlist: {
+                    type: [String],
+                    default: [],
+                }
             },
             default: {},
         },
