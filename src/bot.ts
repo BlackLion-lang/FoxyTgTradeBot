@@ -98,6 +98,7 @@ import { TippingSettings } from "./models/tipSettings";
 import { editReferralMessage, sendReferralMessage } from "./messages/referral";
 import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/trendingCoins";
 import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/sniper/sniper";
+import { sendTokenListMessage } from "./messages/sniper/tokenDetection";
 // import { sendWelcomeVideo } from "./utils/welcomevideo";
 // import { editMultiMessageWithAddress } from './messages/buy/multi';
 
@@ -342,6 +343,39 @@ bot.onText(/\/positions/, async (msg, match) => {
     else {
         if (isWhitelisted) {
             CommandHandler.positions(bot, msg, match);
+        } else {
+            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
+        }
+    }
+});
+
+bot.onText(/\/help/, async (msg, match) => {
+    // Fetch the whitelist from your database
+    const whiteListUsers = await WhiteListUser.find({});
+
+    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    if (!settings) throw new Error("Tipping settings not found!");
+
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+
+    const userId = Number(fromId);
+
+    // Check if the user is whitelisted by username
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith('@')
+            ? u.telegramId.slice(1)
+            : u.telegramId;
+
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser) {
+        CommandHandler.help(bot, msg, match);
+    }
+    else {
+        if (isWhitelisted) {
+            CommandHandler.help(bot, msg, match);
         } else {
             await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
         }
@@ -2779,6 +2813,10 @@ ${await t('privateKey.p7', userId)}`,
             editSniperMessage(bot, chatId, userId, messageId);
         }
 
+        if (sel_action === "detection") {
+            sendTokenListMessage(bot, chatId, userId, messageId);
+        }
+
         if (sel_action === "is_snipping") {
             user.sniper.is_snipping = !user.sniper.is_snipping;
             await user.save();
@@ -2891,64 +2929,6 @@ ${await t('privateKey.p7', userId)}`,
             bot.sendMessage(
                 chatId,
                 `${await t('messages.buy_x', userId)}`,
-                // {`
-                //     reply_markup: {
-                //         force_reply: true,
-                //     },
-                // },
-            ).then((sentMessage) => {
-                bot.once('text',
-                    async (reply) => {
-                        const buyAmountValue = Number(reply.text || "");
-                        if (isNaN(buyAmountValue) || buyAmountValue <= 0) {
-                            bot.sendMessage(
-                                chatId,
-                                `${await t('errors.invalidAmount', userId)}`,
-                            ).then((newSentMessage) => {
-                                setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
-                                }, 10000);
-                                bot.once('text',
-                                    async (newReply) => {
-                                        const newBuyAmountValue = Number(newReply.text || "");
-                                        if (isNaN(newBuyAmountValue) || newBuyAmountValue <= 0) {
-                                            bot.sendMessage(
-                                                chatId,
-                                                `${await t('errors.invalidAmount', userId)}`,
-                                                // { reply_markup: { force_reply: true } },
-                                            );
-                                        } else {
-                                            user.sniper.buy_amount = newBuyAmountValue;
-                                            await user.save();
-                                            editSniperMessage(bot, chatId, userId, messageId);
-                                        }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
-                                );
-                            });
-                        } else {
-                            user.sniper.buy_amount = buyAmountValue;
-                            await user.save();
-                            editSniperMessage(bot, chatId, userId, messageId);
-                        }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
-                );
-            });
-        }
-
-        if (sel_action === "sniper_buyAmount") {
-            bot.sendMessage(
-                chatId,
-                `${await t('messages.buy_x', userId)}`,
-                // {`
-                //     reply_markup: {
-                //         force_reply: true,
-                //     },
-                // },
             ).then((sentMessage) => {
                 bot.once('text',
                     async (reply) => {
@@ -3960,7 +3940,7 @@ ${await t('privateKey.p7', userId)}`,
 async function setBotCommands() {
     bot.setMyCommands([
         { command: "/start", description: `${await t('commands.start')}` },
-        // { command: "/referrals", description: "View your Nebual referrals." },
+        { command: "/help", description: "Help Center" },
         { command: "/menu", description: `${await t('commands.menu')}` },
         { command: "/settings", description: `${await t('commands.setting')}` },
         { command: "/wallets", description: `${await t('commands.wallet')}` },
@@ -4150,59 +4130,19 @@ const main = async () => {
             // console.log(`👥 Found ${users.length} active snipers.`);
             for (const user of users) {
                 console.log(`🤖 Sniper settings for user ${user.userId}:`, user.sniper);
-                await runSniper(user.userId
-                    // async (tokenList: any) => {
-
-                    //     if (!tokenList || tokenList.length === 0) return;
-
-                    //     const lastMsgId = userLastMessage.get(user.userId);
-                    //     const previouMsgId = userLastMessage.get(user.userId) - 1;
-                    //     const msg = `🔥 Detected active tokens:\n\n` +
-                    //         (user.sniper.Tokenlist).map((t: any, i: any) => `${i + 1}. https://pump.fun/coin/${t}`).join('\n');
-
-                    //     try {
-                    //         if (lastMsgId) {
-                    //             await bot.deleteMessage(Number(user.userId), lastMsgId).catch(() => { }); // ignore errors
-                    //             await bot.deleteMessage(Number(user.userId), previouMsgId).catch(() => { }); // ignore errors
-                    //             console.log("Deleted last message ID:", lastMsgId);
-                    //         }
-                    //         const sent = await bot.sendMessage(Number(user.userId), msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
-                    //         console.log("Sent new message ID:", sent.message_id);
-                    //         userLastMessage.set(user.userId, sent.message_id);
-                    //         userLastTokens.set(user.userId, tokenList); // update last tokens
-                    //     } catch (e) {
-                    //         console.error("Failed to send Telegram message:", e);
-                    // }
-
-
-                    // Optionally: call your local snipe function here,
-                    // or let sniper.js handle buying. Example:
-                    // await snipeToken(tokenList[0]);
-                    // }
-                ); // Pass the active users' IDs to the sniper script
-                // const lastMsgId = userLastMessage.get(user.userId);
-                // if (lastMsgId) {
-                //     await bot.deleteMessage(Number(user.userId), lastMsgId).catch(() => { }); // ignore errors
-                //     console.log("Deleted last message ID:", lastMsgId);
-                // }
-                // const msg = `🔥 Detected active tokens:\n\n` +
-                //     (user.sniper.Tokenlist).map((t: any, i: any) => `${i + 1}. https://pump.fun/coin/${t}`).join('\n');
-
-                // const sent = await bot.sendMessage(Number(user.userId), msg, { parse_mode: 'Markdown', disable_web_page_preview: true });
-
-
+                await runSniper(user.userId);    
             }
         } catch (error) {
             console.error("⚠️ Error in sniper script:", error);
         }
-    }, 10000); // Adjust the interval as needed (e.g., every 5 seconds)
+    }, 30000); // Adjust the interval as needed (e.g., every 5 seconds)
 
     const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
     if (!settings) throw new Error("Tipping settings not found!");
     setInterval(async () => {
         settings.BotStatus = new Date();
         await settings.save();
-    }, 10000);
+    }, 20000);
 };
 
 main();

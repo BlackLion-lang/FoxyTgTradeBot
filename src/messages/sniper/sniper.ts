@@ -30,7 +30,8 @@ export const getSniper = async (
         // `${await t('Buy Tip', userId)}\n` +
         // `${await t('Sell Tip', userId)}\n\n` +
         // `<strong>${await t('settings.p5', userId)}</strong>`;
-        `${tokenlist.length > 0 ? `${cap}` : ""} \n\n` +
+        `${tokenlist.length > 0 ? `${cap}` : "No detective active tokens"} \n\n` +
+        `<a href="https://Google.fr">${await t('Example link', userId)}</a>\n\n` +
         `It is the panel of the sniper bot. Here you can configure all the parameters of the bot.\n\n` +
         `If you have any questions, please let me know. If you want, I will add more options according your strategy. \n\n` +
         `<strong>Important:</strong> The bot is not a guarantee of profit all the time. Please use it with caution and at your own risk.\n\n`;
@@ -41,6 +42,10 @@ export const getSniper = async (
                 {
                     text: user.sniper.is_snipping ? `🛑 ${await t('Stop Snipping', userId)}` : `🎯 ${await t('Start Snipping', userId)}`,
                     callback_data: "is_snipping",
+                },
+                {
+                    text: `🌍 Token Detection`,
+                    callback_data: "detection",
                 }
             ],
             [
@@ -113,7 +118,7 @@ export const getSniper = async (
                 { text: `${await t('Max Liquidity', userId)} : $${user.sniper.max_liq}K`, callback_data: "sniper_liquidityMax" },
             ],
             [
-                { text: `${await t('MIN TXNS', userId)} : ${user.sniper.TXNS_MIN}`, callback_data: "sniper_TxnMin" },
+                { text: `${await t('Min TXNS', userId)} : ${user.sniper.TXNS_MIN}`, callback_data: "sniper_TxnMin" },
                 { text: `${await t('Max TXNS', userId)} : ${user.sniper.TXNS_MAX}`, callback_data: "sniper_TxnMax" },
             ],
             [
@@ -126,6 +131,10 @@ export const getSniper = async (
                 {
                     text: user.sniper.is_snipping ? `🛑 ${await t('Stop Snipping', userId)}` : `🎯 ${await t('Start Snipping', userId)}`,
                     callback_data: "is_snipping",
+                },
+                {
+                    text: `🌍 Token Detection`,
+                    callback_data: "detection",
                 }
             ],
             [

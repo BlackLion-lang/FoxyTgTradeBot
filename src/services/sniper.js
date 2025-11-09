@@ -190,13 +190,13 @@ export async function runSniper(user_id, onTokensDetected) {
       console.log(`Buy Transaction sent: ${mintAddress} : https://solscan.io/tx/${signature}`);
       await connection.confirmTransaction({ signature, ...blockhash }, 'confirmed');
       console.log(`Buy Transaction confirmed: ${mintAddress} : in ${Date.now() - submitTime}ms | Total: ${Date.now() - startTime}ms | Preparation: ${prepareTime - startTime}ms`);
-      active_wallet.positions.push({
-        amount: tokenAmount,
-        solAmount: solAmount,
-        mint: mintAddress,
-        price: tokenAmount / solAmount,
-        timeStamp: Date.now(),
-      });
+      // active_wallet.positions.push({
+      //   amount: tokenAmount,
+      //   solAmount: solAmount,
+      //   mint: mintAddress,
+      //   price: tokenAmount / solAmount,
+      //   timeStamp: Date.now(),
+      // });
       console.log('------------------------------ End buy ------------------------------');
     } catch (error) {
       console.log('buy failed ', mintAddress);
@@ -297,7 +297,7 @@ export async function runSniper(user_id, onTokensDetected) {
           keys: [position.mint] // array of token CAs to watch
         }
         ws.send(JSON.stringify(payload));
-        // buyCnt--;
+        buyCnt--;
         // positions = active_wallet?.positions.filter(e => e.mint != position.mint);
         // fs.writeFileSync('positions.json', JSON.stringify(positions, null, 2));
       }
@@ -307,11 +307,6 @@ export async function runSniper(user_id, onTokensDetected) {
   const initAxiomService = async () => {
     const axiom = new AxiomService();
     await axiom.refreshAccessToken();
-
-    const TOKEN_WINDOW = 5 * 60 * 1000; // 5 minutes
-    const MIN_BUYS_THRESHOLD = 5;       // threshold for active token
-    const activity = new Map(); // JS automatically infers the type
-    let previousTokens = [];
 
 
     setInterval(async () => {
@@ -354,9 +349,9 @@ export async function runSniper(user_id, onTokensDetected) {
 
           }
         }).catch(() => {
-          // axiom.refreshAccessToken();
+          axiom.refreshAccessToken();
         });
-    }, 10000);
+    }, 20000);
 
   }
   initAxiomService();
@@ -383,7 +378,7 @@ export async function runSniper(user_id, onTokensDetected) {
       for (let index = 0; index < active_wallet.positions.length; index++) {
         const position = active_wallet.positions[index];
         console.log('Re-subscribing to position:', position.mint);
-        console.log("datenow", Date.now(), Number(position.timestamp) + 1000 * user.sniper.time_limit * 60);
+        console.log(`Token Sell pending : ${user.sniper.time_limit} min`, Date.now(), Number(position.timestamp) + 1000 * user.sniper.time_limit * 60);
         if (ALLOW_AUTO_SELL && position.timestamp + 1000 * user.sniper.time_limit * 60 < Date.now()) {
           console.log(`Position ${position.mint} is older than ${user.sniper.time_limit} minutes, selling...`, position);
           if (user.sniper.allowAutoSell) {
@@ -391,7 +386,7 @@ export async function runSniper(user_id, onTokensDetected) {
           }
         }
       }
-    }, 10000);
+    }, 5000);
 
   });
 
@@ -420,16 +415,16 @@ export async function runSniper(user_id, onTokensDetected) {
         }
         if (txData.txType == "buy") {
           if (txData.traderPublicKey == user.wallets.find((w) => w.is_active_wallet)?.publicKey) {
-            // buyCnt++;
+            buyCnt++;
             console.log(`Bought position: ${txData.mint} | https://pump.fun/coin/${txData.mint} | Price: ${txData.tokenAmount / txData.solAmount}`);
-            // active_wallet.positions.push({
-            //   amount: txData.tokenAmount,
-            //   solAmount: txData.solAmount,
-            //   mint: txData.mint,
-            //   price: txData.tokenAmount / txData.solAmount,
-            //   timeStamp: Date.now(),
-            // });
-            // await user.save();
+            active_wallet.positions.push({
+              amount: txData.tokenAmount,
+              solAmount: txData.solAmount,
+              mint: txData.mint,
+              price: txData.tokenAmount / txData.solAmount,
+              timeStamp: Date.now(),
+            });
+            await user.save();
           }
         }
         if (txData.txType == "sell" && txData.traderPublicKey == active_wallet.publicKey) {
@@ -438,7 +433,7 @@ export async function runSniper(user_id, onTokensDetected) {
             keys: [txData.mint] // array of token CAs to watch
           }
           ws.send(JSON.stringify(payload));
-          // buyCnt--;
+          buyCnt--;
           active_wallet.positions = active_wallet.positions.filter(e => e.mint != txData.mint);
         }
       }

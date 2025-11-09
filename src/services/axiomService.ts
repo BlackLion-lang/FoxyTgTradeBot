@@ -458,7 +458,7 @@ export default class AxiomService {
         `[${new Date().toLocaleString()}] ✅ Received ${data.length} new tokens`
       );
 
-      console.log(`[${new Date().toLocaleString()}] new tokens`, data.length, data.map((token: any) => token.tokenAddress).join(','));
+      // console.log(`[${new Date().toLocaleString()}] new tokens`, data.length, data.map((token: any) => token.tokenAddress).join(','));
 
       return data;
     } catch (e: any) {
