@@ -182,7 +182,7 @@ export const getPairByAddress = async (tokenAddress: string) => {
         .then((res) => res.json())
         .then(async ({ pairs }) => {
             if (pairs === null || pairs === undefined) {
-                // return fetchPumpFunData(tokenAddress)
+                return fetchPumpFunData(tokenAddress)
                 throw "No pair";
             }
             const pair = pairs.find(
@@ -195,7 +195,7 @@ export const getPairByAddress = async (tokenAddress: string) => {
                 pair === undefined ||
                 (pair.dexId === "pumpfun" && pair.liquidity === undefined)
             ) {
-                // return fetchPumpFunData(tokenAddress)
+                return fetchPumpFunData(tokenAddress)
                 throw "No pair";
             } else if (pair === null || pair === undefined) {
                 throw new Error("No pair");
@@ -206,13 +206,41 @@ export const getPairByAddress = async (tokenAddress: string) => {
                 priceUsd: pair.priceUsd,
                 priceNative: pair.priceNative,
                 liquidity: pair.liquidity.usd,
-                bonding_curve: 0,
+                bonding_curve: 10,
                 market_cap: pair.marketCap,
                 symbol: pair.baseToken.symbol,
                 name: pair.baseToken.name,
             };
         });
 };
+
+export const fetchPumpFunData = async (tokenAddress: string) => {
+    const pumpUrl = `https://frontend-api-v3.pump.fun/coins/${tokenAddress}`;
+    const res = await fetch(pumpUrl);
+    const data = await res.json();
+    if (!data) {
+        throw new Error("No pair");
+    }
+    const solPrice = getSolPrice();
+    const liquidity =
+        (data.virtual_sol_reserves * solPrice) / LAMPORTS_PER_SOL;
+    const marketCap = data.usd_market_cap;
+    const realTokenReserves =
+        data.virtual_token_reserves / 10 ** 6 - 73000000;
+    const bondingCurve =
+        100 - ((realTokenReserves - 206900000) * 100) / 793100000;
+    return {
+        address: data.mint,
+        dexId: "pumpfun",
+        price: (marketCap / data.total_supply) * 10 ** 6,
+        liquidity,
+        bonding_curve: bondingCurve,
+        market_cap: marketCap,
+        symbol: data.symbol,
+        name: data.name,
+    };
+};
+
 let tokenPrice = 0;
 export const getTokenPrice = async (tokenAddress: string): Promise<string> => {
     try {

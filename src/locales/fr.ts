@@ -206,7 +206,7 @@ export const fr: Translations = {
         p3: "🐦 Pour les dernières mises à jour et actualités, suivez-nous sur Twitter.",
         p4: "💬 Besoin d'aide ? Contactez notre Responsable Support ci-dessous.",
         p5: "Nous sommes là pour vous 24/7 !",
-        documentation: "📚 Documentation",
+        documentation: "📚 Guide de démarrage",
         contactSupport: "💬 Contacter le support",
     },
 

@@ -37,6 +37,9 @@ export const getHelp = async (
                     text: `${await t('help.contactSupport', userId)}`,
                     url: "https://the-cryptofox-learning.com/",
                 },
+               
+            ],
+            [
                 { 
                     text: `${await t('help.documentation', userId)}`, 
                     url: "https://the-cryptofox-learning.com/" 

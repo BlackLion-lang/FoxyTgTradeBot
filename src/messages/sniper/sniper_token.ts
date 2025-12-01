@@ -3,100 +3,159 @@ import {
     getBalance,
     getSolPrice,
     getTokenBalance,
-    getTokenSecurityInfo,
     isValidSolanaAddress,
+    getTokenSecurityInfo
 } from "../../services/solana";
 import { getPairByAddress, fetchPumpFunData } from "../../services/dexscreener";
+import { getAdminPanelMarkup, getMenuMarkup } from "../../utils/markup";
+import { getMenu, sendMenu } from "../index";
+import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendMenuMessage, sendMenuMessageWithImage } from "../index";
 import {
     formatNumberStyle,
     formatWithSuperscript,
     getCurrentTime,
     getLastUpdatedTime,
-    msToTime,
-    isMEVProtect,
-    getFrenchTime,
     getlocationTime,
+    getFrenchTime,
+    isMEVProtect,
+    msToTime
 } from "../../services/other";
 import { getImage } from "../Image/image"
-import {
-    sendSellMessageWithAddress,
-    sendSellMessage,
-    editSellMessageWithAddress,
-    getSell
-} from "../sell";
 import { User } from "../../models/user";
-import { limitOrderData } from "../../models/limitOrder";
 import { connection } from "../../config/connection";
-import { LAMPORTS_PER_SOL, Message, PublicKey } from "@solana/web3.js";
-import { get } from "node:https";
+import { PublicKey } from "@solana/web3.js";
 import { swapToken } from "../../services/jupiter";
-import { toTokenPrice } from "@raydium-io/raydium-sdk-v2";
-import { DefaultDeserializer } from "node:v8";
+import { Market } from "@raydium-io/raydium-sdk-v2";
 import { t } from "../../locales";
-import { sendMenu, sendMenuMessage } from "..";
 import { TippingSettings } from "../../models/tipSettings";
-import { settings } from "../../commands/settings";
+import { limitOrderData } from "../../models/limitOrder";
 
-// let invest = 0;
+let invest = 0;
+let pnl = 0;
+let pnlpercent = 0;
+let selltoken = 0;
 
-export const getBuy = async (userId: number, address: string) => {
+export const getSniperSell = async (userId: number, address: string) => {
+
     const pairArray = await getPairByAddress(address);
     const pair = pairArray[0];
-    // console.log("pair",pair)
     const user = await User.findOne({ userId });
+
     if (!user) throw "No User";
+
+    const settings = await TippingSettings.findOne();
+    if (!settings) throw new Error("Tipping settings not found!");
+    let adminFeePercent;
+    if (user.userId === 7994989802 || user.userId === 2024002049) {
+        adminFeePercent = 0;
+    } else {
+        adminFeePercent = settings.feePercentage / 100;
+    }
+
     const active_wallet = user.wallets.find(
         (wallet) => wallet.is_active_wallet,
     );
     if (!active_wallet) throw "No active Wallet";
-    // const wallet = user?.wallets. || []
+
+    const grouped: Record<string, any[]> = {};
+
+    for (const trade of active_wallet.tradeHistory) {
+        const tokenAddress = trade?.token_address;
+        // const {
+        //     token_address,
+        //     transaction_type,
+        //     amount, //SOL spent (on buy) or % of token sold (on sell)
+        //     token_amount // token received (on buy) or SOL received (on sell)
+        // } = trade;
+
+        if (!grouped[tokenAddress!]) {
+            grouped[tokenAddress!] = [];
+        }
+        grouped[tokenAddress!].push(trade);
+    }
+
+    const tokenProfitMap: Record<string, number> = {};
+    const marketCapMap: Record<string, number> = {};
+    const usdMap: Record<string, number> = {};
+    const sellMap: Record<string, number> = {};
+    const tokenBalanceMap: Record<string, number> = {};
+
+    const chunkGroup = Object.entries(grouped);
+    const tokens = Object.entries(grouped).filter(obj => {
+        let trades = obj[1];
+        return trades[trades.length - 1]?.token_balance > 0
+    }).map(obj => obj[0]);
+    const tokenNames: Record<string, string> = {};
+    let totalprofit = 0;
+    for (const [token, trades] of chunkGroup) {
+        const lastTrade = trades[trades.length - 1];
+        const latestBalance = lastTrade?.token_balance ?? 0;
+
+        if (latestBalance <= 0) continue; // Skip tokens with 0 balance
+        let tolCap = 0;
+        let profit = 0;
+        let usd = 0;
+        let sell = 0;
+        const sol_price = getSolPrice();
+        for (const trade of trades) {
+            if (trade.transaction_type === "buy") {
+                tolCap += (trade.amount / (trade.token_price)) * trade.mc;
+                profit -= trade.amount; // usd spent
+                usd += trade.amount;
+            } else if (trade.transaction_type === "sell") {
+                profit += trade.token_amount * trade.amount * trade.token_price * (adminFeePercent + 1) / 100; // usd received
+                tolCap -= (trade.token_amount * trade.amount / 100) * trade.mc;
+                sell += trade.token_amount * trade.amount * trade.token_price * (adminFeePercent + 1) / 100;
+            }
+        }
+
+        marketCapMap[token] = tolCap;
+        tokenProfitMap[token] = profit;
+        usdMap[token] = usd;
+        sellMap[token] = sell;
+        // console.log("mxc", tolCap)
+
+        // Step 3: Output results
+        // for (const [token, profit] of Object.entries(tokenProfitMap)) {
+        //     console.log(`🪙 ${token}: ${profit >= 0 ? "+" : ""}${profit.toFixed(4)} SOL`);
+        // }
+    }
+
     const tokenAddress = pair.baseToken.address;
     const priceUsd = pair.priceUsd;
     const priceNative = pair.priceNative;
     const liquidity = pair?.liquidity?.usd;
-    const market_cap = pair?.marketCap;
+    const market_cap = pair.marketCap;
     // const default_balance = await getBalance(default_wallet.publicKey)
     const symbol = pair.baseToken.symbol;
     const name = pair.baseToken.name;
-    // const buy_method = user?.settings.buy_method || "";
-    const MaxSupply = pair.priceNative
-    const currentSupply = pair.priceNative
-    const bonding_curve = Number(currentSupply) / Number(MaxSupply);
-    // const bonding_curve = Number((await fetchPumpFunData(address)).bonding_curve);
+    // const sell_method = user?.settings.sell_method || "";
+    // const dexId = pair.dexId;
+    const bonding_curve = (await fetchPumpFunData(address)).bonding_curve
+
     const tokenBalance = await getTokenBalance(
         new PublicKey(active_wallet.publicKey),
         new PublicKey(tokenAddress),
     );
-    const wallets = user.wallets;
-    const dexId = pair.dexId;
-    const createDate = pair.pairCreatedAt;
-    const now = Date.now();
-    const difftime = (now - createDate);
-    const { days, hours, minutes, seconds } = msToTime(now - createDate);
+    // console.log("debug -> tokenbalance", tokenAddress);
+    // console.log(active_wallet.publicKey)
+    const balance = await getBalance(active_wallet.publicKey);
 
+    const sol_price = getSolPrice();
+    // const createDate = pair.pairCreatedAt;
+    // const now = Date.now();
+    // const difftime = (now - createDate);
+    // const { days, hours, minutes, seconds } = msToTime(now - createDate);
 
     // console.log(`Token Creation Date: ${days}d ${hours}h ${minutes}m ${seconds}s`);
-
-    // console.log("bonding_curve", bonding_curve);
-
-    // active_wallet.positions.push({
-    //     tAddress: tokenAddress.toString(),
-    // });
-    // await user.save();
-
-    const balance = await getBalance(active_wallet.publicKey); // Sol balance maybe
 
     const tokenSecurityInfo = await getTokenSecurityInfo(address)
     const freezeAuthority = tokenSecurityInfo?.freezeAuthority;
     const mintAuthority = tokenSecurityInfo?.mintAuthority;
     const isSafe = tokenSecurityInfo?.safe || false;
 
-    const sol_price = getSolPrice();
-
-
-
-    const freezeStatus = freezeAuthority === null ? "🟢" : "🔴";
-    const mintStatus = mintAuthority === null ? "🟢" : "🔴";
+    const freezeStatus = freezeAuthority === true ? "🟢" : "🔴";
+    const mintStatus = mintAuthority === true ? "🟢" : "🔴";
     let renounceStatus = "🔴"; // Default to red cross
     if (isSafe) {
         renounceStatus = "🟢"; // Green check if safe
@@ -106,16 +165,23 @@ export const getBuy = async (userId: number, address: string) => {
         renounceStatus = "⚠️"; // warning: dev still controls something
     }
 
-    let warning = "";
+    totalprofit = tokenProfitMap[tokenAddress] + tokenBalance * priceUsd * (adminFeePercent + 1);
+    const MarketC = marketCapMap[tokenAddress] / tokenBalance;
+    const sendUsd = usdMap[tokenAddress];
+    const tokensell = sellMap[tokenAddress];
+    // console.log(sendUsd, totalprofit)
+    // invest += sendUsd;
+    // pnl += totalprofit;
+    // pnlpercent += totalprofit / sendUsd
+    // selltoken += tokensell;
 
-    if (difftime < 1000 * 60 * 60 * user.settings.youngTokenDate) {
-        warning = `${await t('buy.p2', userId)}`;
-    } else {
-        warning = `${await t('buy.p3', userId)}`;
-    }
+    // console.log("profit", totalprofit)
+    // console.log("%", totalprofit / sendUsd)
+    // console.log("marketcap", MarketC)
 
+    const icon = totalprofit < 0 ? "🔴" : "🟢";
+    const status = user.sniper.allowAutoSell ? "🟢" : "🔴";
     const text = user.settings.auto_sell.enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
-    const status = user.settings.auto_sell.enabled ? "🟢" : "🔴";
 
     const p1 = user.settings.mev ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
     const p2 = user.settings.mev ? "🟢" : "🔴";
@@ -132,30 +198,30 @@ export const getBuy = async (userId: number, address: string) => {
     })();
 
     const caption =
-        `<strong>${await t('buy.p1', userId)}</strong>\n\n` +
-        `💎 ${name} | <strong>$${symbol}</strong> \n<code>${tokenAddress}</code>\n\n` +
-        `<strong>${warning}</strong> ${days}${await t('buy.p18', userId)} ${hours}h ${minutes}m ${seconds}s ${await t('buy.p17', userId)}\n\n` +
-        `${await t('buy.p4', userId)} <strong>$${formatWithSuperscript(pair.priceUsd)}</strong> - ` +
-        `${await t('buy.p5', userId)} <strong>$${formatNumberStyle(liquidity)}</strong> - ` +
-        `${await t('buy.p6', userId)} <strong>$${formatNumberStyle(market_cap)}</strong>\n\n` +
-        `<strong>${renounceStatus}</strong> ${await t('buy.p7', userId)}\n` +
-        `<strong>${freezeStatus}</strong> ${await t('buy.p8', userId)}\n` +
-        `<strong>${mintStatus}</strong> ${await t('buy.p9', userId)}\n\n` +
-        `${await t('buy.p10', userId)} ${bonding_curve * 100}%\n\n` +
-        // `💸 Price: <strong>${formatWithSuperscript(priceNative)} SOL | $${formatWithSuperscript(pair.priceUsd)}</strong>\n` +
+        `<strong>${await t('sell.p1', userId)}</strong>\n\n` +
+        `💎 ${name} | <strong>$${symbol}</strong>\n <code>${tokenAddress}</code>\n\n` +
+        // `Token Creation Date: ${days}d ${hours}h ${minutes}m ${seconds}s ago\n\n` +
+        `${await t('sell.p2', userId)} <strong>$${formatWithSuperscript(pair.priceUsd)}</strong> - ` +
+        `${await t('sell.p3', userId)} <strong>$${formatNumberStyle(liquidity)}</strong> - ` +
+        `${await t('sell.p4', userId)} <strong>$${formatNumberStyle(market_cap)}</strong>\n\n` +
+        // `👤 Renounced: <strong>Freeze ✅ | Mint ✅</strong>\n` +
+        `<strong>${renounceStatus}</strong> ${await t('sell.p5', userId)}\n` +
+        `<strong>${freezeStatus}</strong> ${await t('sell.p6', userId)}\n` +
+        `<strong>${mintStatus}</strong> ${await t('sell.p7', userId)}\n\n` +
+        // `💸 Price: <strong>${formatWithSuperscript(priceNative)} | $${formatWithSuperscript(pair.priceUsd)}</strong>\n` +
         // `📈 Market Cap: <strong>$${formatNumberStyle(market_cap)}</strong>\n` +
         // `🏦 Liquidity: <strong>$${formatNumberStyle(liquidity)}</strong>\n\n` +
         `💳 <strong>${user.username} (${await t('buy.default', userId)})</strong> : ${balance.toFixed(2)} SOL ($${(balance * sol_price).toFixed(2)} USD)\n` +
         `<code>${active_wallet.publicKey}</code>\n\n` +
-        `<strong>${await t('settings.mev', userId)} :</strong> ${p2} ${p1} \n\n` +
-        `<strong>${await t('buy.p11', userId)} :</strong>\n` +
-        `   <strong>${await t('buy.p12', userId)} :</strong> ${status} ${text}\n` +
-        `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell.takeProfitPercent} %\n` +
-        `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell.stopLossPercent} %\n\n` +
-        // `💰 Token Balance: <strong>${tokenBalance} ${name} | $${(tokenBalance * priceUsd).toFixed(2)}</strong>\n` +
+        `<strong>${await t('settings.mev', userId)} : </strong>${p2} ${p1}\n\n` +
+        `<strong>${await t('sell.p13', userId)}</strong> ${status} ${text}\n\n` +
+        `${await t('sell.p8', userId)} <strong>${tokenBalance} ${symbol} | $${(tokenBalance * priceUsd).toFixed(2)}</strong>\n` +
+        // `<code>${active_wallet.publicKey}</code>\n\n` +
+        `${icon} ${await t('sell.p9', userId)} : ${(totalprofit / sol_price).toFixed(6)} SOL (${(totalprofit * 100 / sendUsd).toFixed(2)}%)\n` +
+        `${await t('sell.p10', userId)} $ ${formatNumberStyle(MarketC)}\n\n` +
         // `💼 Wallet Balance: <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
-        `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
-        `<strong>${await t('buy.p16', userId)}</strong>`
+        `${await t('sell.p11', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
+        `<strong>${await t('sell.p12', userId)}</strong>`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
         [
@@ -170,7 +236,7 @@ export const getBuy = async (userId: number, address: string) => {
         ],
         [
             {
-                text: `${await t('buy.p19', userId)}`,
+                text: `${await t('sell.p15', userId)}`,
                 switch_inline_query: `https://dexscreener.com/solana/${address}`,
             },
         ],
@@ -178,27 +244,27 @@ export const getBuy = async (userId: number, address: string) => {
             { text: `💳 ${active_wallet.label} : ${balance.toFixed(2)} SOL ( $${(balance * sol_price).toFixed(2)} )`, callback_data: "wallets_default" },
         ],
         [
-            { text: `${await t('buy.settings', userId)}`, callback_data: "settings" },
+            { text: `${await t('sell.settings', userId)}`, callback_data: "settings" },
             {
-                text: `💦 ${await t('buy.buy', userId)} : ${user.settings.slippage.buy_slippage}%`,
-                callback_data: "settings_buy_slippage"
+                text: `💦 ${await t('sell.sell', userId)} : ${user.settings.slippage.sell_slippage}%`,
+                callback_data: "settings_sell_slippage",
             }
         ],
         [
-            { text: `💰${await t('buy.buy', userId)} ${user?.settings.quick_buy.buy_amount[0]} SOL`, callback_data: "buy_01" },
-            { text: `💰${await t('buy.buy', userId)} ${user?.settings.quick_buy.buy_amount[1]} SOL`, callback_data: "buy_05" },
-            { text: `💰${await t('buy.buy', userId)} ${user?.settings.quick_buy.buy_amount[2]} SOL`, callback_data: "buy_1" },
+            { text: `💰${await t('sell.sell', userId)} ${user.settings.quick_sell.sell_percent[0]}%`, callback_data: "sell_10" },
+            { text: `💰${await t('sell.sell', userId)} ${user.settings.quick_sell.sell_percent[1]}%`, callback_data: "sell_20" },
+            { text: `💰${await t('sell.sell', userId)} ${user.settings.quick_sell.sell_percent[2]}%`, callback_data: "sell_50" },
         ],
         [
-            { text: `💰${await t('buy.buy', userId)} ${user?.settings.quick_buy.buy_amount[3]} SOL`, callback_data: "buy_2" },
-            { text: `💰${await t('buy.buy', userId)} ${user?.settings.quick_buy.buy_amount[4]} SOL`, callback_data: "buy_5" },
-            { text: `💰${await t('buy.buy', userId)} X SOL`, callback_data: "buy_x" },
+            { text: `💰${await t('sell.sell', userId)} ${user.settings.quick_sell.sell_percent[3]}%`, callback_data: "sell_75" },
+            { text: `💰${await t('sell.sell', userId)} ${user.settings.quick_sell.sell_percent[4]}%`, callback_data: "sell_100" },
+            { text: `💰${await t('sell.sell', userId)} X %`, callback_data: "sell_x" },
         ],
         [
             { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
-            { text: `${await t('refresh', userId)}`, callback_data: "buy_refresh" },
+            { text: `${await t('refresh', userId)}`, callback_data: "sell_refresh" },
         ],
-        // [{ text: "🗑 Close", callback_data: "buy_close" }],
+        // [{ text: "🗑 Close", callback_data: "sell_close" }],
     ];
 
     const newMarkup: TelegramBot.InlineKeyboardMarkup = {
@@ -208,53 +274,23 @@ export const getBuy = async (userId: number, address: string) => {
     return { caption, markup: newMarkup };
 };
 
-export const sendBuyMessage = async (
+export const sendSniperSellMessage = async (
     bot: TelegramBot,
     chatId: number,
     userId: number,
     messageId: number,
+    address: string
 ) => {
-    bot.sendMessage(
-        chatId,
-        `${await t('messages.buy', userId)}`,
-        {
-            parse_mode: "Markdown",
-            // reply_markup: {
-            //     force_reply: true,
-            // },
-        },
-    ).then((sentMessage) => {
-        bot.once('text', async (reply) => {
-            const address = reply.text || "";
-            if (!isValidSolanaAddress(address)) {
-                const errorMessage = bot.sendMessage(
-                    chatId,
-                    `${await t('errors.invalidAddress', userId)}`,
-                );
-                setTimeout(async () => {
-                    bot.deleteMessage(chatId, (await errorMessage).message_id);
-                }, 5000);
-            } else {
-                try {
-                    const { caption, markup } = await getBuy(userId, address);
-                    // const imagePath = "./src/assets/Buy.jpg"; // Ensure the image is in this path
-                    bot.deleteMessage(chatId, messageId)
-                    bot.sendMessage(chatId, caption, {
-                        parse_mode: "HTML",
-                        reply_markup: markup,
-                    });
-                } catch (error) {
-                    console.error(error);
-                    bot.sendMessage(chatId, `${await t('errors.notToken', userId)}`);
-                }
-            }
-            bot.deleteMessage(chatId, sentMessage.message_id);
-            bot.deleteMessage(chatId, reply.message_id);
-        });
+    const { caption, markup } = await getSniperSell(userId, address);
+
+    bot.deleteMessage(chatId, messageId)
+    bot.sendMessage(chatId, caption, {
+        parse_mode: "HTML",
+        reply_markup: markup,
     });
 };
 
-export const editBuyMessageWithAddress = async (
+export const editSniperSell = async (
     bot: TelegramBot,
     chatId: number,
     userId: number,
@@ -262,7 +298,7 @@ export const editBuyMessageWithAddress = async (
     address: string,
 ) => {
     try {
-        const { caption, markup } = await getBuy(userId, address);
+        const { caption, markup } = await getSniperSell(userId, address);
 
         // Try to edit as text message first
         try {
@@ -288,14 +324,14 @@ export const editBuyMessageWithAddress = async (
     } catch (error: any) {
         // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
-            console.log('Buy message is already up to date');
+            console.log('Sell message is already up to date');
             return; // Silent return, this is not an error
         }
-        console.error('Error editing buy message:', error);
+        console.error('Error editing sell message:', error);
     }
 };
 
-export const sendBuyMessageWithAddress = async (
+export const sendSniperBuyWithAddress = async (
     bot: TelegramBot,
     chatId: number,
     userId: number,
@@ -503,12 +539,11 @@ export const sendBuyMessageWithAddress = async (
 
             console.log("debug -> sellMenu")
 
-            const { caption, markup } = await getSell(userId, tokenAddress);
-            bot.sendMessage(chatId, caption, {
-                parse_mode: "HTML",
-                reply_markup: markup,
-            });
-
+            // const { caption, markup } = await getSell(userId, tokenAddress);
+            // bot.sendMessage(chatId, caption, {
+            //     parse_mode: "HTML",
+            //     reply_markup: markup,
+            // });
             return;
 
         } else {

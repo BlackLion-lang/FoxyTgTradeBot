@@ -17,8 +17,14 @@ export const getSniper = async (
     if (!active_wallet) throw "No active Wallet";
     const balance = await getBalance(active_wallet.publicKey);
 
-    const tokenlist = user.sniper.tokenlist || [];
-    console.log("User Token List:", tokenlist);
+    let tokenlist;
+
+    if (!user.sniper.is_snipping){
+        tokenlist = [];
+    }else{
+        tokenlist = user.sniper.tokenlist || [];
+    };
+    // console.log("User Token List:", tokenlist);
 
     const cap = `🔥 Detected active tokens:\n\n` +
         (user.sniper.tokenlist).map((t: any, i: any) => `${i + 1}. https://pump.fun/coin/${t}`).join('\n');
@@ -68,11 +74,11 @@ export const getSniper = async (
             ],
             [
                 {
-                    text: user.sniper.allowAutoBuy ? `🟢 ${await t('Allow Auto Buy', userId)}` : `🔴 ${await t('Allow Auto Buy', userId)}`,
+                    text: user.sniper.allowAutoBuy ? `🔴 ${await t('Allow Auto Buy', userId)}` : `🟢 ${await t('Allow Auto Buy', userId)}`,
                     callback_data: "allowAutoBuy",
                 },
                 {
-                    text: user.sniper.allowAutoSell ? `🟢 ${await t('Allow Auto Sell', userId)}` : `🔴 ${await t('Allow Auto Sell', userId)}`,
+                    text: user.sniper.allowAutoSell ? `🔴 ${await t('Allow Auto Sell', userId)}` : `🟢 ${await t('Allow Auto Sell', userId)}`,
                     callback_data: "allowAutoSell",
                 }
             ],

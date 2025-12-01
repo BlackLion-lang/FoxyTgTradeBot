@@ -54,6 +54,12 @@ import {
     sendBuyMessageWithAddress,
 } from "./messages/buy";
 import {
+    editSniperSell,
+    getSniperSell,
+    sendSniperBuyWithAddress,
+    sendSniperSellMessage,
+} from "./messages/sniper/sniper_token";
+import {
     sendSellMessageWithAddress,
     sendSellMessage,
     editSellMessageWithAddress,
@@ -73,6 +79,7 @@ import { TokenAmount } from "@raydium-io/raydium-sdk-v2";
 import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './messages/settings/profitLevel';
 import { editFeeAutoMessage, editFeeMessage, sendFeeAutoMessage, sendFeeMessage } from './messages/settings/fee';
 import { WhiteListUser } from "./models/whitelist";
+import { SubscribeModel } from "./models/subscribe";
 import { editRenameWalletMessage, sendRenameWalletMessage } from "./messages/wallets/rename";
 import { editSlippageMessage, sendSlippageMessage } from './messages/settings/slippage';
 import { editQuickBuyMessage, sendQuickBuyMessage } from './messages/settings/quick_buy';
@@ -98,7 +105,8 @@ import { TippingSettings } from "./models/tipSettings";
 import { editReferralMessage, sendReferralMessage } from "./messages/referral";
 import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/trendingCoins";
 import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/sniper/sniper";
-import { sendTokenListMessage } from "./messages/sniper/tokenDetection";
+import { sendTokenListMessage, editTokenListMessage } from "./messages/sniper/tokenDetection";
+import { handleSubscriptionAction } from "./subscribe";
 // import { sendWelcomeVideo } from "./utils/welcomevideo";
 // import { editMultiMessageWithAddress } from './messages/buy/multi';
 
@@ -130,6 +138,51 @@ interface CurrentOpenedDictionary {
 
 export const userCurrentOpened: CurrentOpenedDictionary = {};
 
+const SUBSCRIPTION_REQUIRED_MESSAGE =
+    "❌ You need an active subscription to use this feature.\n\n💳 Press the *Subscribe* button in the main menu to activate your subscription.";
+
+const SUBSCRIPTION_REQUIRED_MARKUP: TelegramBot.InlineKeyboardMarkup = {
+    inline_keyboard: [
+        [{ text: "💳 Subscribe", callback_data: "subscribe" }],
+        [{ text: "⬅️ Back to Menu", callback_data: "menu_back" }],
+    ],
+};
+
+const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
+    const subscription = await SubscribeModel.findOne({ telegramId, active: true })
+        .sort({ expiresAt: -1 })
+        .lean();
+
+    if (!subscription) {
+        return false;
+    }
+
+    if (typeof subscription.expiresAt === "number" && subscription.expiresAt > 0) {
+        return subscription.expiresAt > Date.now();
+    }
+
+    return true;
+};
+
+const ensureSubscriptionForSniper = async (
+    botInstance: TelegramBot,
+    chatId: number,
+    telegramId: number,
+): Promise<boolean> => {
+    const active = await hasActiveSubscription(telegramId);
+
+    if (active) {
+        return true;
+    }
+
+    await botInstance.sendMessage(chatId, SUBSCRIPTION_REQUIRED_MESSAGE, {
+        parse_mode: "Markdown",
+        reply_markup: SUBSCRIPTION_REQUIRED_MARKUP,
+    });
+
+    return false;
+};
+
 type WalletType = {
     label: string;
     publicKey: string;
@@ -158,11 +211,19 @@ type WalletType = {
 
 const bot = new TelegramBot(process.env.TOKEN || "", { polling: true });
 
+// Exported function to send messages from other modules
+export const sendMessageToUser = async (userId: number, message: string, options: any = {}) => {
+    try {
+        await bot.sendMessage(userId, message, options);
+    } catch (error) {
+        console.error(`Failed to send message to user ${userId}:`, error);
+    }
+};
+
 // bot.onText(/\/start/, async (msg, match) => {
 //     // await sendWelcomeVideo(bot, msg.chat.id, msg.from?.id || 0);
 //     CommandHandler.start(bot, msg, match)
 // });
-
 
 bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
     const fromId = msg.from?.id?.toString();
@@ -170,6 +231,7 @@ bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
 
     const chatId = msg.chat.id;
     const arg = match?.[1] || "";
+    console.log("Start command arg:", chatId);
 
     if (arg.startsWith("ref_")) {
         console.log("start with referral Id");
@@ -390,6 +452,77 @@ bot.on("polling_error", (error) => {
 const userLastMessage = new Map(); // user_id -> message_id
 const userLastTokens = new Map(); // user_id -> token_address
 
+// Track active text handlers per user to allow cleanup
+const activeTextHandlers = new Map<number, NodeJS.Timeout>(); // user_id -> timeout
+
+// Helper function to create a user-filtered text handler with cleanup
+const createUserTextHandler = (targetUserId: number, handler: (reply: TelegramBot.Message) => void | Promise<void>, timeoutMs: number = 300000) => {
+    // Clear any existing handler for this user
+    cleanupUserTextHandler(targetUserId);
+    
+    const wrappedHandler = (msg: TelegramBot.Message) => {
+        // Only process messages from the target user
+        if (msg.from?.id === targetUserId) {
+            cleanupUserTextHandler(targetUserId);
+            handler(msg);
+            return true;
+        }
+        return false;
+    };
+    
+    // Set timeout to auto-cleanup after 5 minutes
+    const timeout = setTimeout(() => {
+        cleanupUserTextHandler(targetUserId);
+    }, timeoutMs);
+    
+    activeTextHandlers.set(targetUserId, timeout);
+    
+    return wrappedHandler;
+};
+
+// Cleanup function to remove active text handlers
+const cleanupUserTextHandler = (userId: number) => {
+    const timeout = activeTextHandlers.get(userId);
+    if (timeout) {
+        clearTimeout(timeout);
+        activeTextHandlers.delete(userId);
+    }
+};
+
+// Safe delete message helper
+const safeDeleteMessage = async (bot: TelegramBot, chatId: number, messageId: number) => {
+    try {
+        await bot.deleteMessage(chatId, messageId);
+    } catch (error: any) {
+        // Ignore "message not found" errors
+        if (error.response?.body?.description?.includes('message to delete not found') ||
+            error.message?.includes('message to delete not found')) {
+            // Silently ignore
+            return;
+        }
+        // Log other errors but don't throw
+        console.error('Error deleting message:', error.message);
+    }
+};
+
+// Safe edit message helper
+const safeEditMessage = async (bot: TelegramBot, chatId: number, messageId: number, editFn: () => Promise<any>) => {
+    try {
+        await editFn();
+    } catch (error: any) {
+        // Ignore "message not found" and "message not modified" errors
+        if (error.response?.body?.description?.includes('message to edit not found') ||
+            error.response?.body?.description?.includes('message is not modified') ||
+            error.message?.includes('message to edit not found') ||
+            error.message?.includes('message is not modified')) {
+            // Silently ignore
+            return;
+        }
+        // Log other errors but don't throw
+        console.error('Error editing message:', error.message);
+    }
+};
+
 bot.on("callback_query", async (callbackQuery) => {
     console.log("debug callback_query", `\x1b[35m${callbackQuery.data}\x1b[0m`);
     try {
@@ -412,6 +545,15 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         const userId = from.id;
+        
+        // Clean up any active text handlers when user interacts with callback (navigation away from input)
+        // Only cleanup if it's a navigation action (not an input trigger)
+        const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back", 
+            "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions", 
+            "help", "sniper", "trending_coin", "referral_system"];
+        if (navigationActions.includes(sel_action || "")) {
+            cleanupUserTextHandler(userId);
+        }
         const users = (await User.findOne({ userId })) || new User();
         // Regular expression to extract the token balance
         // const message = `${await t('sell.p13', userId)} <tg-token>${balance} ${symbol}</tg-token>`;
@@ -433,6 +575,17 @@ bot.on("callback_query", async (callbackQuery) => {
         // const chatId = ctx.callbackQuery?.message?.chat.id;
         const messageId = ctx?.message_id || 0;
 
+        const subscriptionHandled = await handleSubscriptionAction({
+            bot,
+            action: sel_action,
+            chatId,
+            telegramId: userId,
+            callbackQueryId,
+        });
+        if (subscriptionHandled) {
+            return;
+        }
+
         const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
         if (!settings) throw new Error("Tipping settings not found!");
 
@@ -442,7 +595,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
         if (sel_action === "admin_panel") {
             console.log('debug-> admin panel messsage');
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendAdminPanelMessage(bot, chatId, userId);
         }
 
@@ -457,7 +610,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const inputUserId = reply.text?.trim();
                         if (!inputUserId) {
                             bot.sendMessage(
@@ -474,9 +627,9 @@ bot.on("callback_query", async (callbackQuery) => {
                             );
                         }
                         // sendMenuMessage(bot, chatId, userId, messageId);
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
-                    },
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }),
                 );
             });
             return;
@@ -493,15 +646,15 @@ bot.on("callback_query", async (callbackQuery) => {
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const inputUserId = reply.text?.trim();
                         if (!inputUserId) {
                             bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidId', userId)}`,
                             );
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
+                            await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                            await safeDeleteMessage(bot, chatId, reply.message_id);
                             return;
                         }
 
@@ -527,9 +680,9 @@ bot.on("callback_query", async (callbackQuery) => {
                         }
 
                         // Clean up messages
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
-                    },
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }),
                 );
             });
             return;
@@ -541,7 +694,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 `${await t('messages.enterreferral', userId)}`,
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const date = Number(reply.text || "");
                         if (isNaN(date) || date < 0) {
                             bot.sendMessage(
@@ -549,10 +702,10 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidsettings', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 3000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newdate = Number(newReply.text || "");
                                         if (isNaN(newdate) || newdate < 1 || newdate > 100) {
                                             bot.sendMessage(
@@ -565,8 +718,8 @@ bot.on("callback_query", async (callbackQuery) => {
                                             await settings.save();
                                             editSettingsMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -574,11 +727,11 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 2000);
-                    }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 2000);
+                    }),
                 );
             });
         }
@@ -589,7 +742,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 `${await t('messages.enterreferralSettings', userId)}`,
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const date = Number(reply.text || "");
                         if (isNaN(date) || date < 0) {
                             bot.sendMessage(
@@ -597,10 +750,10 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidsettings', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 3000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newdate = Number(newReply.text || "");
                                         if (isNaN(newdate) || newdate < 1 || newdate > 100) {
                                             bot.sendMessage(
@@ -613,8 +766,8 @@ bot.on("callback_query", async (callbackQuery) => {
                                             await settings.save();
                                             editSettingsMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -622,11 +775,11 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 2000);
-                    }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 2000);
+                    }),
                 );
             });
         }
@@ -637,7 +790,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 `${await t('messages.entertip', userId)}`,
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const date = Number(reply.text || "");
                         if (isNaN(date) || date < 0 || date > 100) {
                             bot.sendMessage(
@@ -645,10 +798,10 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.iinvalidtip', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 3000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newdate = Number(newReply.text || "");
                                         if (isNaN(newdate) || newdate < 1 || newdate > 100) {
                                             bot.sendMessage(
@@ -661,8 +814,8 @@ bot.on("callback_query", async (callbackQuery) => {
                                             await settings.save();
                                             editSettingsMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -670,11 +823,11 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 2000);
-                    }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 2000);
+                    }),
                 );
             });
         }
@@ -685,7 +838,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 `${await t('messages.walletLimits', userId)}`,
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const date = Number(reply.text || "");
                         if (isNaN(date) || date < 1 || date > 100) {
                             bot.sendMessage(
@@ -693,10 +846,10 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidwallets', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 3000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newdate = Number(newReply.text || "");
                                         if (isNaN(newdate) || newdate < 1 || newdate > 100) {
                                             bot.sendMessage(
@@ -709,8 +862,8 @@ bot.on("callback_query", async (callbackQuery) => {
                                             await settings.save();
                                             editSettingsMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -718,11 +871,11 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 2000);
-                    }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 2000);
+                    }),
                 );
             });
         }
@@ -742,12 +895,12 @@ bot.on("callback_query", async (callbackQuery) => {
                 chatId,
                 `${await t('messages.renameWallet1', userId)}`,
             ).then((sentMessage) => {
-                bot.once("text", async (reply) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
                     const label = reply.text || "";
 
                     // Clean up the message first
-                    bot.deleteMessage(chatId, reply.message_id);
-                    bot.deleteMessage(chatId, sentMessage.message_id);
+                    await safeDeleteMessage(bot, chatId, reply.message_id);
+                    await safeDeleteMessage(bot, chatId, sentMessage.message_id);
 
                     if (hasSpecialCharacters(label)) {
                         bot.sendMessage(
@@ -766,7 +919,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
                         editAdminPanelMessage(bot, chatId, userId, messageId);
                     }
-                });
+                }));
             });
         }
 
@@ -775,7 +928,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 chatId,
                 `${await t('messages.importwallet5', userId)}`,
             ).then((sentMessage) => {
-                bot.once("text", async (reply) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
                     const label = reply.text || "";
                     if (hasSpecialCharacters(label)) {
                         bot.sendMessage(
@@ -791,9 +944,9 @@ bot.on("callback_query", async (callbackQuery) => {
                         bot.sendMessage(
                             chatId,
                             `${await t('messages.importwallet3', userId)}`,
-                        ).then((sentMessage) => {
-                            bot.once("text", async (reply) => {
-                                const input = reply.text || "";
+                        ).then((sentMessage2) => {
+                            bot.once("text", createUserTextHandler(userId, async (reply2) => {
+                                const input = reply2.text || "";
                                 if (isValidPrivateKey(input)) {
                                     const { publicKey } = walletFromPrvKey(input);
                                     const balance = await getBalance(publicKey);
@@ -805,7 +958,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                             `${await t('messages.importwallet4', userId)}`,
                                         );
                                         setTimeout(() => {
-                                            bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
+                                            bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => { });
                                         }, 5000);
                                     } else {
                                         const secretKey = encryptSecretKey(input, "password")
@@ -820,14 +973,14 @@ bot.on("callback_query", async (callbackQuery) => {
                                     bot.sendMessage(
                                         chatId,
                                         `${await t('errors.invalidPrivateKey', userId)}`);
-                                bot.deleteMessage(chatId, reply.message_id);
-                                bot.deleteMessage(chatId, sentMessage.message_id);
-                            });
+                                bot.deleteMessage(chatId, reply2.message_id);
+                                bot.deleteMessage(chatId, sentMessage2.message_id);
+                            }));
                         });
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
                     }
-                });
+                }));
             });
         }
 
@@ -879,7 +1032,8 @@ bot.on("callback_query", async (callbackQuery) => {
 
         // Welcome
         if (sel_action === "welcome") {
-            await bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
             sendWelcomeMessage(bot, chatId, userId, messageId, userTelegramId);
         }
 
@@ -904,7 +1058,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
         //Referral system
         if (sel_action === "referral_system") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendReferralMessage(bot, chatId, userId);
         }
 
@@ -914,7 +1068,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 `${await t(`${await t('referral.message1', userId)}`, userId)}`,
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const address = String(reply.text || "");
                         if (!isValidSolanaAddress(address)) {
                             bot.sendMessage(
@@ -922,10 +1076,10 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('referral.message2', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 6000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newaddress = String(newReply.text || "");
                                         if (!isValidSolanaAddress(newaddress)) {
                                             bot.sendMessage(
@@ -937,8 +1091,8 @@ bot.on("callback_query", async (callbackQuery) => {
                                             await user.save();
                                             editReferralMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -946,11 +1100,11 @@ bot.on("callback_query", async (callbackQuery) => {
                             await user.save();
                             editReferralMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -980,14 +1134,17 @@ bot.on("callback_query", async (callbackQuery) => {
 
         // Menu
         if (sel_action === "menu_back") {
-            await bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
             sendMenu(bot, chatId, userId, messageId);
         }
         if (sel_action === "menu_close") {
-            await bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
         }
         // Buy
         if (sel_action === "buy") {
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
             sendBuyMessage(bot, chatId, userId, messageId);
         }
 
@@ -1000,6 +1157,9 @@ bot.on("callback_query", async (callbackQuery) => {
         // }
 
         if (sel_action === "buy_refresh" || sel_action === "buy_back") {
+            if (sel_action === "buy_back") {
+                cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+            }
 
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
@@ -1056,6 +1216,9 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "sell_refresh" || sel_action === "sell_back") {
+            if (sel_action === "sell_back") {
+                cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+            }
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
 
@@ -1107,6 +1270,43 @@ bot.on("callback_query", async (callbackQuery) => {
             //         }
             //     }, 3000);
             // }
+            return;
+        }
+
+        if ((sel_action ?? "").startsWith("sniper_buy_")) {
+            const indexStr = sel_action?.replace("sniper_buy_", "") || "";
+            const tokenIndex = Number(indexStr) - 1;
+            const sniperTokenList = users?.sniper?.tokenlist || [];
+
+            if (isNaN(tokenIndex) || tokenIndex < 0 || tokenIndex >= sniperTokenList.length) {
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: `${await t('errors.notToken', userId)}`,
+                    show_alert: true,
+                });
+                return;
+            }
+
+            const targetTokenAddress = sniperTokenList[tokenIndex];
+            const sniperBuyAmount = Number(users?.sniper?.buy_amount)
+
+            if (sniperBuyAmount <= 0) {
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: `${await t('errors.invalidAmount', userId)}`,
+                    show_alert: true,
+                });
+                return;
+            }
+
+            await sendSniperBuyWithAddress(
+                bot,
+                chatId,
+                userId,
+                messageId,
+                targetTokenAddress,
+                sniperBuyAmount,
+            ); 
+
+            await sendSniperSellMessage(bot, chatId, userId, messageId, targetTokenAddress)
             return;
         }
 
@@ -1178,7 +1378,7 @@ bot.on("callback_query", async (callbackQuery) => {
             ).then((sentMessage) => {
                 console.log('debug buy_x sel_action', sel_action);
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const tradeAmount = Number(reply.text || "");
                         if (isNaN(tradeAmount) || tradeAmount <= 0) {
                             bot.sendMessage(
@@ -1197,9 +1397,9 @@ bot.on("callback_query", async (callbackQuery) => {
                                 tradeAmount,
                             );
                         }
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
-                    },
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }),
                 );
             });
         }
@@ -1213,6 +1413,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
         // Sell Assets
         if (sel_action === "sell") {
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
             sendSellMessage(bot, chatId, userId, messageId);
         }
 
@@ -1294,7 +1495,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 // { reply_markup: { force_reply: true } },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const tokenSellPercent = Number(reply.text || "");
                         if (
                             isNaN(tokenSellPercent) ||
@@ -1316,9 +1517,9 @@ bot.on("callback_query", async (callbackQuery) => {
                                 Number(tokenBalance),
                             );
                         }
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
-                    },
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }),
                 );
             });
             return;
@@ -1326,11 +1527,15 @@ bot.on("callback_query", async (callbackQuery) => {
 
         // wallets
         if (sel_action === "wallets") {
-            bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
             sendWalletsMessageWithImage(bot, chatId, userId, messageId);
         }
         // Wallets main actions
         if (sel_action === "wallets_refresh" || sel_action === "wallets_back") {
+            if (sel_action === "wallets_back") {
+                cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+            }
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
 
@@ -1365,7 +1570,7 @@ bot.on("callback_query", async (callbackQuery) => {
             // console.log('debug wallets_back', sel_action)
             editWalletsMessage(bot, chatId, userId, messageId);
             if (sel_action === "wallets_back") {
-                bot.deleteMessage(chatId, messageId);
+                await safeDeleteMessage(bot, chatId, messageId);
                 sendWalletsMessageWithImage(bot, chatId, userId, messageId);
             }
             if (sel_action === "wallets_refresh") {
@@ -1392,7 +1597,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
         // Wallet -> Withdraw
         if (sel_action === "wallets_withdraw") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendWithdrawWalletsMessage(bot, chatId, userId, messageId);
         }
 
@@ -1550,7 +1755,7 @@ ${amount} SOL ⇄ <code>${toAddress}</code>
                 const wallet = user.wallets[index]
                 bot.sendMessage(chatId, `${await t('messages.withdraw1', userId)}`)
                     .then((sentMessage1) => {
-                        bot.once('text', async (reply) => {
+                        bot.once('text', createUserTextHandler(userId, async (reply) => {
                             const amount = Number(reply.text || "");
                             if (isNaN(amount)) {
                                 bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
@@ -1565,12 +1770,12 @@ ${amount} SOL ⇄ <code>${toAddress}</code>
                             const availableLamports = Math.max(amount * LAMPORTS_PER_SOL - rentExempt - 10000, 0);
                             const maxSendable = (availableLamports / LAMPORTS_PER_SOL) > 0 ? availableLamports / LAMPORTS_PER_SOL : 0;
 
-                            bot.deleteMessage(chatId, reply.message_id).catch(() => { });
+                            await safeDeleteMessage(bot, chatId, reply.message_id);
                             bot.deleteMessage(chatId, sentMessage1.message_id).catch(() => { });
 
                             bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
                                 .then(sentMessage2 => {
-                                    bot.once('text', async neewReply => {
+                                    bot.once('text', createUserTextHandler(userId, async neewReply => {
                                         const address = neewReply.text || ''
 
                                         bot.deleteMessage(chatId, neewReply.message_id).catch(() => { });
@@ -1599,10 +1804,10 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                         } else {
                                             bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`)
                                         }
-                                    })
-                                })
-                        })
-                    })
+                                    }));
+                                });
+                        }));
+                    });
             }
         }
         // Wallets -> Switch
@@ -1627,7 +1832,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 reply_markup: { force_reply: true },
             }).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const walletName = reply.text?.trim();
 
                         if (!walletName || hasSpecialCharacters(walletName)) {
@@ -1672,10 +1877,9 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         setTimeout(() => {
                             bot.deleteMessage(chatId, sent.message_id);
                         }, 5000);
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
-                    }
-                );
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }));
             });
 
             return;
@@ -1697,7 +1901,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         // Wallets -> Export
         if (sel_action === "wallets_export") {
             const imagePath = "./src/assets/privateKey.jpg"; // Ensure the image is in this path
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             bot.sendPhoto(chatId, imagePath, {
                 caption: dangerZoneMessage,
                 parse_mode: "HTML",
@@ -1714,19 +1918,19 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         }
 
         if (sel_action === "wallets_export_cancel") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendWalletsMessageWithImage(bot, chatId, userId, messageId);
             return;
         }
 
         if (sel_action === "wallets_private_key") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendPrivateKeyWalletMessageWithImage(bot, chatId, userId, messageId);
         }
 
         if (sel_action?.startsWith("wallets_private_key_")) {
             // Extract the wallet index from the action, e.g., "wallets_private_key_2"
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             console.log('debug wallets_private_key_', sel_action);
             const index = Number(sel_action.split("wallets_private_key_")[1]);
             const user = await User.findOne({ userId });
@@ -1783,7 +1987,7 @@ ${await t('privateKey.p7', userId)}`,
         }
 
         if (sel_action?.startsWith("copy_to_clipboard_")) {
-            await bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             const index = Number(sel_action.split("copy_to_clipboard_")[1]);
             const user = await User.findOne({ userId });
 
@@ -1865,7 +2069,7 @@ ${await t('privateKey.p7', userId)}`,
         // }
 
         if (sel_action === "wallets_export_confirm_delete") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendWalletsMessageWithImage(bot, chatId, userId, messageId);
             return;
         }
@@ -1873,7 +2077,7 @@ ${await t('privateKey.p7', userId)}`,
         // Wallets -> Rename
         if (sel_action === "wallets_rename") {
             console.log('debug wallets_rename', sel_action);
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendRenameWalletMessage(bot, chatId, userId, messageId);
         }
 
@@ -1886,7 +2090,7 @@ ${await t('privateKey.p7', userId)}`,
                 { reply_markup: { force_reply: true } },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const newName = reply.text?.trim();
                         if (!newName) {
                             bot.sendMessage(chatId, `${await t('errors.invalidwWalletName1', userId)}`);
@@ -1903,23 +2107,22 @@ ${await t('privateKey.p7', userId)}`,
                             }, 5000);
                             editRenameWalletMessage(bot, chatId, userId, messageId);
                         }
-                        bot.deleteMessage(chatId, sentMessage.message_id);
-                        bot.deleteMessage(chatId, reply.message_id);
-                    },
-                );
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }));
             });
             return;
         }
 
         // Wallets -> Delete
         if (sel_action === "wallets_delete") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendDeleteWalletMessage(bot, chatId, userId, messageId);
             return;
         }
 
         if (sel_action === "wallets_delete_cancel") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             return;
         }
 
@@ -2013,7 +2216,7 @@ ${await t('privateKey.p7', userId)}`,
             // Delete the confirmation dialog
             if (messageId > 0) {
                 try {
-                    await bot.deleteMessage(chatId, messageId);
+                    await safeDeleteMessage(bot, chatId, messageId);
                 } catch (e) {
                     // Ignore if already deleted or not found
                 }
@@ -2022,7 +2225,7 @@ ${await t('privateKey.p7', userId)}`,
             // Wait a moment then delete success message and show updated wallets
             setTimeout(async () => {
                 try {
-                    await bot.deleteMessage(chatId, sent.message_id);
+                    await safeDeleteMessage(bot, chatId, sent.message_id);
                     // Send fresh wallets message
                 } catch (e) {
                     // If deletion fails, just send new wallets message
@@ -2036,7 +2239,7 @@ ${await t('privateKey.p7', userId)}`,
 
         // Handle wallets_delete_[index] (where index is a number)
         if (sel_action?.match(/^wallets_delete_\d+$/)) {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             const index = Number(sel_action.split("wallets_delete_")[1]);
             const wallet = user.wallets[index];
             if (!wallet) {
@@ -2065,7 +2268,8 @@ ${await t('privateKey.p7', userId)}`,
 
         //positions
         if (sel_action == "positions") {
-            bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
             sendPositionsMessageWithImage(bot, chatId, userId, messageId, 0, 0, wallets[0].label);
         }
 
@@ -2177,7 +2381,7 @@ ${await t('privateKey.p7', userId)}`,
                 // { parse_mode: "HTML", reply_markup: { force_reply: true } },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const address = reply.text || "";
                         const wallet = user?.wallets;
 
@@ -2205,18 +2409,19 @@ ${await t('privateKey.p7', userId)}`,
                                 }, 5000);
                             }
                             setTimeout(() => {
-                                bot.deleteMessage(chatId, sentMessage.message_id);
-                                bot.deleteMessage(chatId, reply.message_id);
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
                             }, 5000);
                         }
-                    });
+                    }));
             });
             return;
         }
 
         // Setting
         if (sel_action === "settings") {
-            bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
             sendSettingsMessageWithImage(bot, chatId, userId, messageId);
         } else if (sel_action === "settings_fee") {
             editFeeMessage(bot, chatId, userId, messageId);
@@ -2230,51 +2435,50 @@ ${await t('privateKey.p7', userId)}`,
                 //     },
                 // },
             ).then((sentMessage) => {
-                bot.once('text',
-                    async function handleReply(reply) {
-                        const feeValue = Number(reply.text || "");
-                        if (isNaN(feeValue) || feeValue < 0 || feeValue > 1) {
-                            bot.sendMessage(
-                                chatId,
-                                `${await t('errors.invalidFee', userId)}`,
-                                // { reply_markup: { force_reply: true } }
-                            ).then((newSentMessage) => {
-                                setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
-                                }, 10000);
-                                bot.once('text',
-                                    handleReply
-                                );
-                            });
-                        } else {
-                            switch (sel_action) {
-                                case "settings_fee_buy_fee":
-                                    user.settings.fee_setting.buy_fee = feeValue;
-                                    break;
-                                case "settings_fee_sell_fee":
-                                    user.settings.fee_setting.sell_fee = feeValue;
-                                    break;
-                                case "settings_fee_buy_tip":
-                                    user.settings.fee_setting.buy_tip = feeValue;
-                                    break;
-                                case "settings_fee_sell_tip":
-                                    user.settings.fee_setting.sell_tip = feeValue;
-                                    break;
-                            }
-                            await user.save();
-                            editFeeMessage(bot, chatId, userId, messageId);
+                const handleReply = createUserTextHandler(userId, async function handleReply(reply) {
+                    const feeValue = Number(reply.text || "");
+                    if (isNaN(feeValue) || feeValue < 0 || feeValue > 1) {
+                        bot.sendMessage(
+                            chatId,
+                            `${await t('errors.invalidFee', userId)}`,
+                            // { reply_markup: { force_reply: true } }
+                        ).then((newSentMessage) => {
+                            setTimeout(() => {
+                                bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                            }, 10000);
+                            bot.once('text',
+                                handleReply
+                            );
+                        });
+                    } else {
+                        switch (sel_action) {
+                            case "settings_fee_buy_fee":
+                                user.settings.fee_setting.buy_fee = feeValue;
+                                break;
+                            case "settings_fee_sell_fee":
+                                user.settings.fee_setting.sell_fee = feeValue;
+                                break;
+                            case "settings_fee_buy_tip":
+                                user.settings.fee_setting.buy_tip = feeValue;
+                                break;
+                            case "settings_fee_sell_tip":
+                                user.settings.fee_setting.sell_tip = feeValue;
+                                break;
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
+                        await user.save();
+                        editFeeMessage(bot, chatId, userId, messageId);
                     }
-                );
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 5000);
+                });
+                bot.once('text', handleReply);
             });
         }
 
         if (sel_action === "settings_buy_slippage" || sel_action === "settings_sell_slippage") {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendSlippageMessage(bot, chatId, userId, messageId);
         }
 
@@ -2292,7 +2496,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const slippageValue = Number(reply.text || "");
                         if (isNaN(slippageValue) || slippageValue < 0 || slippageValue > 100) {
                             bot.sendMessage(
@@ -2301,10 +2505,10 @@ ${await t('privateKey.p7', userId)}`,
                                 // { reply_markup: { force_reply: true } },
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newSlippageValue = Number(newReply.text || "");
                                         if (isNaN(newSlippageValue) || newSlippageValue < 0 || newSlippageValue > 100) {
                                             bot.sendMessage(
@@ -2324,8 +2528,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSlippageMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -2340,11 +2544,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSlippageMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -2372,7 +2576,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const date = Number(reply.text || "");
                         if (isNaN(date) || date < 1 || date > 24) {
                             bot.sendMessage(
@@ -2380,10 +2584,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidyoung', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 6000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newdate = Number(newReply.text || "");
                                         if (isNaN(newdate) || newdate < 1 || newdate > 24) {
                                             bot.sendMessage(
@@ -2396,8 +2600,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSettingsMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -2405,18 +2609,18 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSettingsMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
 
         //settings>quick
         if (sel_action === 'settings_quick_buy' || sel_action === 'settings_quick_buy_refresh') {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendQuickBuyMessage(bot, chatId, userId, messageId);
         }
         else if (sel_action?.startsWith('settings_quick_buy_amount_')) {
@@ -2424,12 +2628,12 @@ ${await t('privateKey.p7', userId)}`,
             if (!isNaN(index)) {
                 bot.sendMessage(chatId, `${await t('messages.quickBuy', userId)}`)
                     .then(sentMessage => {
-                        bot.once('text', async reply => {
+                        bot.once('text', createUserTextHandler(userId, async reply => {
                             const buy_amount = Number(reply.text)
                             if (isNaN(buy_amount) || buy_amount < 0) {
                                 const errorMessage = await bot.sendMessage(chatId, `${await t('errors.invalidBuy', userId)}`)
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, errorMessage.message_id);
+                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => {});
                                 }, 5000);
                             } else {
                                 user.settings.quick_buy.buy_amount[index] = buy_amount
@@ -2437,29 +2641,29 @@ ${await t('privateKey.p7', userId)}`,
                                 editQuickBuyMessage(bot, chatId, userId, messageId)
                             }
                             setTimeout(() => {
-                                bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
-                                bot.deleteMessage(chatId, reply.message_id);
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
                             }, 5000);
-                        })
+                        }))
                     })
             }
 
         }
 
         if (sel_action === 'settings_quick_sell' || sel_action === 'settings_quick_sell_refresh') {
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
             sendQuickSellMessage(bot, chatId, userId, messageId)
         } else if (sel_action?.startsWith('settings_quick_sell_percent_')) {
             const index = Number(sel_action?.split('settings_quick_sell_percent_')[1])
             if (!isNaN(index)) {
                 bot.sendMessage(chatId, `${await t('messages.quickSell', userId)}`)
                     .then(sentMessage => {
-                        bot.once('text', async reply => {
+                        bot.once('text', createUserTextHandler(userId, async reply => {
                             const sell_percent = Number(reply.text)
                             if (isNaN(sell_percent) || sell_percent < 0 || sell_percent > 100) {
                                 const errorMessage = await bot.sendMessage(chatId, `${await t('errors.invalidSell', userId)}`)
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, errorMessage.message_id);
+                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => {});
                                 }, 5000);
                             } else {
                                 user.settings.quick_sell.sell_percent[index] = sell_percent
@@ -2467,19 +2671,21 @@ ${await t('privateKey.p7', userId)}`,
                                 editQuickSellMessage(bot, chatId, userId, messageId)
                             }
                             setTimeout(() => {
-                                bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
-                                bot.deleteMessage(chatId, reply.message_id);
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
                             }, 5000);
-                        })
+                        }))
                     })
             }
 
         }
 
         if (sel_action === "settings_back") {
-            bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+            await safeDeleteMessage(bot, chatId, messageId);
             sendSettingsMessageWithImage(bot, chatId, userId, messageId);
         } else if (sel_action === "settings_fee_back") {
+            cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
             editFeeMessage(bot, chatId, userId, messageId);
         } else if (sel_action === "autotip_refresh") {
             editFeeAutoMessage(bot, chatId, userId, messageId);
@@ -2516,7 +2722,7 @@ ${await t('privateKey.p7', userId)}`,
         //Settings -> auto_sell
         if (sel_action === "settings_auto_sell") {
             sendAutoSellMessage(bot, chatId, userId, messageId);
-            bot.deleteMessage(chatId, messageId);
+            await safeDeleteMessage(bot, chatId, messageId);
         }
         if (sel_action === "settings_auto_Sell_toggle") {
             user.settings.auto_sell.enabled = !user.settings.auto_sell.enabled;
@@ -2580,7 +2786,7 @@ ${await t('privateKey.p7', userId)}`,
                 `${await t('messages.tp', userId)}`
             );
 
-            bot.once('text', async (reply) => {
+            bot.once('text', createUserTextHandler(userId, async (reply) => {
                 const TpPercent = Number(reply.text || "");
                 await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
                 await bot.deleteMessage(chatId, reply.message_id).catch(() => { });
@@ -2595,7 +2801,7 @@ ${await t('privateKey.p7', userId)}`,
                         bot.deleteMessage(chatId, errorMessage.message_id).catch(() => { });
                     }, 10000);
 
-                    bot.once('text', async (newReply) => {
+                    bot.once('text', createUserTextHandler(userId, async (newReply) => {
                         const newTpPercent = Number(newReply.text || "");
                         await bot.deleteMessage(chatId, newReply.message_id).catch(() => { });
 
@@ -2609,13 +2815,13 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                         }
-                    });
+                    }));
                 } else {
                     user.settings.auto_sell.takeProfitPercent = TpPercent;
                     await user.save();
                     editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                 }
-            });
+            }));
 
             return;
         }
@@ -2626,7 +2832,7 @@ ${await t('privateKey.p7', userId)}`,
                 `${await t('messages.sl', userId)}`
             );
 
-            bot.once('text', async (reply) => {
+            bot.once('text', createUserTextHandler(userId, async (reply) => {
                 const SlPercent = Number(reply.text || "");
                 await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
                 await bot.deleteMessage(chatId, reply.message_id).catch(() => { });
@@ -2642,7 +2848,7 @@ ${await t('privateKey.p7', userId)}`,
                         bot.deleteMessage(chatId, errorMessage.message_id).catch(() => { });
                     }, 10000);
 
-                    bot.once('text', async (newReply) => {
+                    bot.once('text', createUserTextHandler(userId, async (newReply) => {
                         const newSlPercent = Number(newReply.text || "");
                         await bot.deleteMessage(chatId, newReply.message_id).catch(() => { });
 
@@ -2656,13 +2862,13 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                         }
-                    });
+                    }));
                 } else {
                     user.settings.auto_sell.stopLossPercent = SlPercent;
                     await user.save();
                     editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                 }
-            });
+            }));
             return;
         }
 
@@ -2776,7 +2982,8 @@ ${await t('privateKey.p7', userId)}`,
 
         // Trending Coin
         if (sel_action === "trending_coin") {
-            await bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await safeDeleteMessage(bot, chatId, messageId);
             sendTrendingPageMessage(bot, chatId, userId, 1); // always start on page 1
         }
 
@@ -2794,23 +3001,37 @@ ${await t('privateKey.p7', userId)}`,
 
         // Help
         else if (sel_action === "help") {
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
             sendHelpMessageWithImage(bot, chatId, userId, messageId);
             if (messageId) {
-                try {
-                    await bot.deleteMessage(chatId, messageId);
-                } catch (e) {
-                    // Ignore if already deleted or not found
-                }
+                await safeDeleteMessage(bot, chatId, messageId);
             }
         }
 
         // Sniper bot
         if (sel_action === "sniper") {
-            bot.deleteMessage(chatId, messageId);
+            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            let allowed: boolean;
+            if (user.userId === 7994989802 || user.userId === 2024002049) {
+                allowed = true;
+            } else {
+                allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
+            }
+
+            // const allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
+            
+            if (!allowed) {
+                return;
+            }
+
+            if (messageId) {
+                await safeDeleteMessage(bot, chatId, messageId);
+            }
+
             sendSniperMessageeWithImage(bot, chatId, userId, messageId);
         }
         if (sel_action === "sniper_refresh") {
-            editSniperMessage(bot, chatId, userId, messageId);
+            editTokenListMessage(bot, chatId, userId, messageId);
         }
 
         if (sel_action === "detection") {
@@ -2827,6 +3048,9 @@ ${await t('privateKey.p7', userId)}`,
                     await bot.deleteMessage(chatId, (await message).message_id).catch(() => { });
                 }, 10000);
             } else {
+                // Stop the sniper when user disables it
+                const { stopSniper } = await import("./services/sniper");
+                stopSniper(userId);
                 const message1 = bot.sendMessage(chatId, `${await t('🛑 Sniper stopped — monitoring paused', userId)}`);
                 setTimeout(async () => {
                     await bot.deleteMessage(chatId, (await message1).message_id).catch(() => { });
@@ -2840,7 +3064,7 @@ ${await t('privateKey.p7', userId)}`,
             await editSniperMessage(bot, chatId, userId, messageId);
         }
 
-        
+
         if (sel_action === "allowAutoBuy") {
             user.sniper.allowAutoBuy = !user.sniper.allowAutoBuy;
             await user.save();
@@ -2882,7 +3106,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const slippageValue = Number(reply.text || "");
                         if (isNaN(slippageValue) || slippageValue <= 0 || slippageValue > 100) {
                             bot.sendMessage(
@@ -2891,10 +3115,10 @@ ${await t('privateKey.p7', userId)}`,
                                 // { reply_markup: { force_reply: true } },
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newSlippageValue = Number(newReply.text || "");
                                         if (isNaN(newSlippageValue) || newSlippageValue < 0 || newSlippageValue > 100) {
                                             bot.sendMessage(
@@ -2907,8 +3131,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -2916,11 +3140,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -2931,7 +3155,7 @@ ${await t('privateKey.p7', userId)}`,
                 `${await t('messages.buy_x', userId)}`,
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const buyAmountValue = Number(reply.text || "");
                         if (isNaN(buyAmountValue) || buyAmountValue <= 0) {
                             bot.sendMessage(
@@ -2939,10 +3163,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newBuyAmountValue = Number(newReply.text || "");
                                         if (isNaN(newBuyAmountValue) || newBuyAmountValue <= 0) {
                                             bot.sendMessage(
@@ -2955,8 +3179,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -2964,11 +3188,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -2984,7 +3208,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const buyLimit = Number(reply.text || "");
                         if (isNaN(buyLimit) || buyLimit <= 0 || !Number.isInteger(buyLimit)) {
                             bot.sendMessage(
@@ -2992,10 +3216,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newBuyLimit = Number(newReply.text || "");
                                         if (isNaN(newBuyLimit) || newBuyLimit <= 0 || !Number.isInteger(newBuyLimit)) {
                                             bot.sendMessage(
@@ -3008,8 +3232,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3017,11 +3241,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3037,7 +3261,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const takeProfitPercent = Number(reply.text || "");
                         if (isNaN(takeProfitPercent) || takeProfitPercent < 0 || takeProfitPercent > 100) {
                             bot.sendMessage(
@@ -3045,10 +3269,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newTakeProfitPercent = Number(newReply.text || "");
                                         if (isNaN(newTakeProfitPercent) || newTakeProfitPercent <= 0 || newTakeProfitPercent > 100) {
                                             bot.sendMessage(
@@ -3061,8 +3285,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3070,11 +3294,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3090,7 +3314,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const stopLossPercent = Number(reply.text || "");
                         if (isNaN(stopLossPercent) || stopLossPercent > 0 || stopLossPercent < -100) {
                             bot.sendMessage(
@@ -3098,10 +3322,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newStopLossPercent = Number(newReply.text || "");
                                         if (isNaN(newStopLossPercent) || newStopLossPercent >= 0 || newStopLossPercent < -100) {
                                             bot.sendMessage(
@@ -3114,8 +3338,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3123,11 +3347,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3143,7 +3367,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const timeLimit = Number(reply.text || "");
                         if (isNaN(timeLimit) || timeLimit < 0) {
                             bot.sendMessage(
@@ -3151,10 +3375,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newTimelimit = Number(newReply.text || "");
                                         if (isNaN(newTimelimit) || newTimelimit <= 0) {
                                             bot.sendMessage(
@@ -3167,8 +3391,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3176,11 +3400,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3196,7 +3420,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const bonding_curve_min = Number(reply.text || "");
                         if (isNaN(bonding_curve_min) || bonding_curve_min < 0) {
                             bot.sendMessage(
@@ -3204,10 +3428,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newBondingCurveMin = Number(newReply.text || "");
                                         if (isNaN(newBondingCurveMin) || newBondingCurveMin < 0) {
                                             bot.sendMessage(
@@ -3220,8 +3444,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3229,11 +3453,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3249,7 +3473,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const bondingMax = Number(reply.text || "");
                         if (isNaN(bondingMax) || bondingMax < 0) {
                             bot.sendMessage(
@@ -3257,10 +3481,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newBondingCurveMax = Number(newReply.text || "");
                                         if (isNaN(newBondingCurveMax) || newBondingCurveMax < 0) {
                                             bot.sendMessage(
@@ -3273,8 +3497,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3282,11 +3506,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3302,7 +3526,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const mcMin = Number(reply.text || "");
                         if (isNaN(mcMin) || mcMin < 0) {
                             bot.sendMessage(
@@ -3310,10 +3534,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMcMin = Number(newReply.text || "");
                                         if (isNaN(newMcMin) || newMcMin < 0) {
                                             bot.sendMessage(
@@ -3326,8 +3550,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3335,11 +3559,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3355,7 +3579,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const mcMax = Number(reply.text || "");
                         if (isNaN(mcMax) || mcMax < 0) {
                             bot.sendMessage(
@@ -3363,10 +3587,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMcMax = Number(newReply.text || "");
                                         if (isNaN(newMcMax) || newMcMax < 0) {
                                             bot.sendMessage(
@@ -3379,8 +3603,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3388,11 +3612,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3408,7 +3632,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const minTokenAge = Number(reply.text || "");
                         if (isNaN(minTokenAge) || minTokenAge < 0) {
                             bot.sendMessage(
@@ -3416,10 +3640,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMinTokenAge = Number(newReply.text || "");
                                         if (isNaN(newMinTokenAge) || newMinTokenAge < 0) {
                                             bot.sendMessage(
@@ -3432,8 +3656,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3441,11 +3665,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3462,7 +3686,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const maxTokenAge = Number(reply.text || "");
                         if (isNaN(maxTokenAge) || maxTokenAge < 0) {
                             bot.sendMessage(
@@ -3470,10 +3694,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMaxTokenAge = Number(newReply.text || "");
                                         if (isNaN(newMaxTokenAge) || newMaxTokenAge < 0) {
                                             bot.sendMessage(
@@ -3486,8 +3710,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3495,11 +3719,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3515,7 +3739,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const minHolders = Number(reply.text || "");
                         if (isNaN(minHolders) || minHolders < 0) {
                             bot.sendMessage(
@@ -3523,10 +3747,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMinHolders = Number(newReply.text || "");
                                         if (isNaN(newMinHolders) || newMinHolders < 0) {
                                             bot.sendMessage(
@@ -3539,8 +3763,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3548,11 +3772,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3569,7 +3793,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const maxHolders = Number(reply.text || "");
                         if (isNaN(maxHolders) || maxHolders < 0) {
                             bot.sendMessage(
@@ -3577,10 +3801,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMaxHolders = Number(newReply.text || "");
                                         if (isNaN(newMaxHolders) || newMaxHolders < 0) {
                                             bot.sendMessage(
@@ -3593,8 +3817,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3602,11 +3826,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3622,7 +3846,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const minVolume = Number(reply.text || "");
                         if (isNaN(minVolume) || minVolume < 0) {
                             bot.sendMessage(
@@ -3630,10 +3854,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMinVolume = Number(newReply.text || "");
                                         if (isNaN(newMinVolume) || newMinVolume < 0) {
                                             bot.sendMessage(
@@ -3646,8 +3870,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3655,11 +3879,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3676,7 +3900,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const maxVolume = Number(reply.text || "");
                         if (isNaN(maxVolume) || maxVolume < 0) {
                             bot.sendMessage(
@@ -3684,10 +3908,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMaxVolume = Number(newReply.text || "");
                                         if (isNaN(newMaxVolume) || newMaxVolume < 0) {
                                             bot.sendMessage(
@@ -3700,8 +3924,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3709,11 +3933,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3729,7 +3953,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const minLiquidity = Number(reply.text || "");
                         if (isNaN(minLiquidity) || minLiquidity < 0) {
                             bot.sendMessage(
@@ -3737,10 +3961,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMinLiquidity = Number(newReply.text || "");
                                         if (isNaN(newMinLiquidity) || newMinLiquidity < 0) {
                                             bot.sendMessage(
@@ -3753,8 +3977,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3762,11 +3986,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3782,7 +4006,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const maxLiquidity = Number(reply.text || "");
                         if (isNaN(maxLiquidity) || maxLiquidity < 0) {
                             bot.sendMessage(
@@ -3790,10 +4014,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMaxLiquidity = Number(newReply.text || "");
                                         if (isNaN(newMaxLiquidity) || newMaxLiquidity < 0) {
                                             bot.sendMessage(
@@ -3806,8 +4030,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3815,11 +4039,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3835,7 +4059,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const minTxns = Number(reply.text || "");
                         if (isNaN(minTxns) || minTxns < 0) {
                             bot.sendMessage(
@@ -3843,10 +4067,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMinTxns = Number(newReply.text || "");
                                         if (isNaN(newMinTxns) || newMinTxns < 0) {
                                             bot.sendMessage(
@@ -3859,8 +4083,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3868,11 +4092,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3888,7 +4112,7 @@ ${await t('privateKey.p7', userId)}`,
                 // },
             ).then((sentMessage) => {
                 bot.once('text',
-                    async (reply) => {
+                    createUserTextHandler(userId, async (reply) => {
                         const maxTxns = Number(reply.text || "");
                         if (isNaN(maxTxns) || maxTxns < 0) {
                             bot.sendMessage(
@@ -3896,10 +4120,10 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    bot.deleteMessage(chatId, newSentMessage.message_id).catch(() => { });
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
                                 }, 10000);
                                 bot.once('text',
-                                    async (newReply) => {
+                                    createUserTextHandler(userId, async (newReply) => {
                                         const newMaxTxns = Number(newReply.text || "");
                                         if (isNaN(newMaxTxns) || newMaxTxns < 0) {
                                             bot.sendMessage(
@@ -3912,8 +4136,8 @@ ${await t('privateKey.p7', userId)}`,
                                             await user.save();
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
-                                        bot.deleteMessage(chatId, newReply.message_id);
-                                    },
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
                                 );
                             });
                         } else {
@@ -3921,11 +4145,11 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sentMessage.message_id);
-                            bot.deleteMessage(chatId, reply.message_id);
-                        }, 5000);
-                    },
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            }, 5000);
+                    }),
                 );
             });
         }
@@ -3940,7 +4164,7 @@ ${await t('privateKey.p7', userId)}`,
 async function setBotCommands() {
     bot.setMyCommands([
         { command: "/start", description: `${await t('commands.start')}` },
-        { command: "/help", description: "Help Center" },
+        { command: "/help", description: "Centre d'aide" },
         { command: "/menu", description: `${await t('commands.menu')}` },
         { command: "/settings", description: `${await t('commands.setting')}` },
         { command: "/wallets", description: `${await t('commands.wallet')}` },
@@ -4122,20 +4346,19 @@ const main = async () => {
         checkAndAutoSell();
     }, 10000);
 
-    // Run the sniper script continuously
+    // Run the sniper script continuously - but only start new ones, existing ones are managed
     setInterval(async () => {
-        try {
-            // console.log("🚀 Running sniper script...");
-            const users = await User.find({ "sniper.is_snipping": true });
-            // console.log(`👥 Found ${users.length} active snipers.`);
-            for (const user of users) {
-                console.log(`🤖 Sniper settings for user ${user.userId}:`, user.sniper);
-                await runSniper(user.userId);    
-            }
-        } catch (error) {
-            console.error("⚠️ Error in sniper script:", error);
+    try {
+        const users = await User.find({ "sniper.is_snipping": true });
+        console.log(`👥 Found ${users.length} active snipers.`);
+        for (const user of users) {
+            // runSniper will check if already running and skip if so
+            await runSniper(user.userId);
         }
-    }, 30000); // Adjust the interval as needed (e.g., every 5 seconds)
+    } catch (error) {
+        console.error("⚠️ Error in sniper script:", error);
+    }
+    }, 60000); // Check every 60 seconds instead of 30 to reduce calls
 
     const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
     if (!settings) throw new Error("Tipping settings not found!");

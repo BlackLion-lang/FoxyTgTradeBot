@@ -204,7 +204,7 @@ export const en: Translations = {
         p3: "🐦 For the latest updates and news, follow us on Twitter.",
         p4: "💬 Need assistance? Contact our Support Manager below.",
         p5: "We are here for you 24/7 !",
-        documentation: "📚 Documentation",
+        documentation: "📚 Getting Started Guide",
         contactSupport: "💬 Contact Support",
     },
 

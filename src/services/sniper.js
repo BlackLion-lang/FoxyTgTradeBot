@@ -10,13 +10,20 @@ import dotenv from 'dotenv';
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "../config/security";
 console.log('Pump Sniper service starting...');
 import AxiomService from './axiomService';
-
-import { get } from 'http';
+import { sendMessageToUser } from "../bot"; // Import the sendMessageToUser function
 import {
+  getBalance,
+  getSolanaPrice,
   getSolPrice,
-} from "./solana";
+  getTokenBalance,
+  getTokenPriceInSOL,
+  isValidPrivateKey,
+  isValidSolanaAddress,
+  setSolPrice,
+  walletCreate,
+  walletFromPrvKey,
+} from "../services/solana";
 import { map } from '@coral-xyz/borsh';
-import { error } from 'console';
 dotenv.config();
 
 const RPC_ENDPOINT = "https://mainnet.helius-rpc.com/?api-key=8cdb777a-195a-4cfe-a1ec-d5a4f70ccfe1";
@@ -28,7 +35,31 @@ const connection = new Connection(
 const onlineSdk = new OnlinePumpSdk(connection);
 
 const offlineSdk = new PumpSdk();
-// console.log("offlineSdk",offlineSdk)
+
+// Sniper manager to track running instances
+const activeSnipers = new Map(); // user_id -> { ws, intervals, axiom, cleanup }
+
+// Shared AxiomService instance
+let sharedAxiomService = null;
+let axiomRefreshInterval = null;
+
+// Initialize shared AxiomService
+const initSharedAxiomService = async () => {
+  if (!sharedAxiomService) {
+    sharedAxiomService = new AxiomService();
+    await sharedAxiomService.refreshAccessToken();
+    
+    // Refresh token every 30 minutes (instead of on every pulse)
+    if (!axiomRefreshInterval) {
+      axiomRefreshInterval = setInterval(async () => {
+        if (sharedAxiomService) {
+          await sharedAxiomService.refreshAccessToken();
+        }
+      }, 30 * 60 * 1000); // 30 minutes
+    }
+  }
+  return sharedAxiomService;
+};
 
 // Helper function to get SPL token balance
 const getSPLBalance = async (connection, mint, owner) => {
@@ -41,17 +72,66 @@ const getSPLBalance = async (connection, mint, owner) => {
   }
 };
 
-export async function runSniper(user_id, onTokensDetected) {
+// Cleanup function for a sniper instance
+export function stopSniper(user_id) {
+  const sniper = activeSnipers.get(user_id);
+  if (sniper) {
+    console.log(`🛑 Stopping sniper for user: ${user_id}`);
+    
+    // Close WebSocket
+    if (sniper.ws && sniper.ws.readyState === WebSocket.OPEN) {
+      sniper.ws.close();
+    }
+    
+    // Clear intervals
+    if (sniper.intervals) {
+      sniper.intervals.forEach(interval => clearInterval(interval));
+    }
+    
+    // Remove from active snipers
+    activeSnipers.delete(user_id);
+    console.log(`✅ Sniper stopped for user: ${user_id}`);
+  }
+}
+
+export async function runSniper(user_id) {
+  // Check if sniper is already running
+  if (activeSnipers.has(user_id)) {
+    console.log(`⏭️  Sniper already running for user: ${user_id}, skipping...`);
+    return;
+  }
+
+  // Check if user wants sniper to run
+  const user = await User.findOne({ userId: user_id });
+  if (!user || !user.sniper.is_snipping) {
+    console.log(`⏭️  User ${user_id} has sniper disabled, skipping...`);
+    return;
+  }
+
+  console.log(`🚀 Starting sniper for user: ${user_id}`);
 
   const ws = new WebSocket('wss://pumpportal.fun/api/data');
+  
+  // Initialize cleanup tracking
+  const intervals = [];
+  const cleanup = () => {
+    stopSniper(user_id);
+  };
 
-  const user = await User.findOne({ userId: user_id });
-  if (!user) throw "No User";
+  // Store sniper instance
+  activeSnipers.set(user_id, { ws, intervals, cleanup });
+
+  if (!user) {
+    stopSniper(user_id);
+    throw "No User";
+  }
   console.log('User found:', user.userId);
 
   const active_wallet = user.wallets.find(
     (wallet) => wallet.is_active_wallet,
   );
+
+  const balance = await getBalance(new PublicKey(active_wallet.publicKey));
 
   const sol_price = await getSolPrice();
 
@@ -101,13 +181,26 @@ export async function runSniper(user_id, onTokensDetected) {
 
   //   console.error("Failed to read positions from file:", error);
   // }
-  let buyCnt = active_wallet?.positions?.length;
+  let buyCnt = active_wallet?.positions?.length || 0;
   const buy = async (mintAddress) => {
     console.log('------------------------------ Start buy ------------------------------');
     console.log('mintAddress', mintAddress);
 
+    // Check if sniper should still run
+    const currentUser = await User.findOne({ userId: user_id });
+    if (!currentUser || !currentUser.sniper.is_snipping) {
+      console.log(`🛑 User ${user_id} disabled sniper during buy, stopping...`);
+      stopSniper(user_id);
+      return;
+    }
+
     // get encrypted secret from user wallets (make sure your decrypt function takes a key not hardcoded "password")
-    const encrypted = user.wallets.find((w) => w.is_active_wallet)?.secretKey;
+    const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+    if (!currentActiveWallet) {
+      throw new Error("No active wallet found for user.");
+    }
+    
+    const encrypted = currentActiveWallet.secretKey;
     if (!encrypted) throw new Error("No active wallet secret found for user.");
 
     const privateKeyBase64 = decryptSecretKey(encrypted, "password");
@@ -123,8 +216,12 @@ export async function runSniper(user_id, onTokensDetected) {
     const signerKeyPair = Keypair.fromSecretKey(secretKeyBytes);
 
     const accountUser = signerKeyPair.publicKey;
+    const currentBalance = await getBalance(new PublicKey(accountUser));
+    console.log('Current SOL balance:', currentBalance / LAMPORTS_PER_SOL);
 
-    if (processing || buyCnt >= BUY_LIMIT) return;
+    const currentBuyCnt = currentActiveWallet?.positions?.length || 0;
+    const currentBuyLimit = Number(currentUser.sniper.buy_limit);
+    if (processing || currentBuyCnt >= currentBuyLimit) return;
     const startTime = Date.now();
     processing = true;
     try {
@@ -136,7 +233,8 @@ export async function runSniper(user_id, onTokensDetected) {
       const mint = new PublicKey(mintAddress);
 
       const { bondingCurveAccountInfo, bondingCurve, associatedUserAccountInfo } = await onlineSdk.fetchBuyState(mint, accountUser);
-      const solAmount = new BN(BUY_AMOUNT * LAMPORTS_PER_SOL); // Amount of SOL to spend
+      const currentBuyAmount = Number(currentUser.sniper.buy_amount);
+      const solAmount = new BN(currentBuyAmount * LAMPORTS_PER_SOL); // Amount of SOL to spend
       console.log('bondingCurve', bondingCurve);
       // console,log('associatedUserAccountInfo', associatedUserAccountInfo);
       // console.log('bondingCurveAccountInfo', bondingCurveAccountInfo);
@@ -165,6 +263,7 @@ export async function runSniper(user_id, onTokensDetected) {
       }
 
 
+      const currentSlippage = currentUser.sniper.slippage;
       const instructions = await offlineSdk.buyInstructions({
         global,
         bondingCurveAccountInfo,
@@ -174,7 +273,7 @@ export async function runSniper(user_id, onTokensDetected) {
         user: accountUser,
         solAmount,
         amount: tokenAmount,
-        slippage
+        slippage: currentSlippage
       });
       console.log('buying token', mintAddress);
       const message = new TransactionMessage({
@@ -197,6 +296,9 @@ export async function runSniper(user_id, onTokensDetected) {
       //   price: tokenAmount / solAmount,
       //   timeStamp: Date.now(),
       // });
+      const tokenUrl = `https://solscan.io/token/${mintAddress}`;
+      const msg = `✅ Successfully bought token: [${mintAddress}](${tokenUrl})\nAmount: ${currentBuyAmount} SOL`;
+      await sendMessageToUser(user_id, msg, { parse_mode: "Markdown" });
       console.log('------------------------------ End buy ------------------------------');
     } catch (error) {
       console.log('buy failed ', mintAddress);
@@ -215,15 +317,22 @@ export async function runSniper(user_id, onTokensDetected) {
     try {
       console.log('------------------------------ Start sell ------------------------------');
       const startTime = Date.now();
-      // const bondingCurvePda = offlineSdk.bondingCurvePda(position.mint);
-      // const [bondingCurve, bondingCurveAccountInfo, blockhash] = await Promise.all([
-      //     offlineSdk.fetchBondingCurve(position.mint),
-      //     connection.getAccountInfo(bondingCurvePda),
-      //     connection.getLatestBlockhash("finalized")
-      // ]);
+      
+      // Check if sniper should still run
+      const currentUser = await User.findOne({ userId: user_id });
+      if (!currentUser || !currentUser.sniper.is_snipping) {
+        console.log(`🛑 User ${user_id} disabled sniper during sell, stopping...`);
+        stopSniper(user_id);
+        return;
+      }
 
       // get encrypted secret from user wallets (make sure your decrypt function takes a key not hardcoded "password")
-      const encrypted = user.wallets.find((w) => w.is_active_wallet)?.secretKey;
+      const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+      if (!currentActiveWallet) {
+        throw new Error("No active wallet found for user.");
+      }
+      
+      const encrypted = currentActiveWallet.secretKey;
       if (!encrypted) throw new Error("No active wallet secret found for user.");
 
       const privateKeyBase64 = decryptSecretKey(encrypted, "password");
@@ -287,111 +396,171 @@ export async function runSniper(user_id, onTokensDetected) {
         { userId: user_id, "wallets.publicKey": active_wallet.publicKey },
         { $pull: { "wallets.$.positions": { mint: mint } } }
       );
+      const tokenUrl = `https://solscan.io/token/${position.mint}`;
+      const msg = `✅ Successfully sold token: [${position.mint}](${tokenUrl})\nAmount: ${position.amount}`;
+      await sendMessageToUser(user_id, msg, { parse_mode: "Markdown" });
       console.log('------------------------------ End sell ------------------------------');
     } catch (error) {
       console.log('sell failed ', position.mint, error);
-      const balance = await getSPLBalance(connection, new PublicKey(position.mint), active_wallet.publicKey);
-      if (balance == 0) {
-        const payload = {
-          method: "unsubscribeTokenTrade",
-          keys: [position.mint] // array of token CAs to watch
+      const currentUser = await User.findOne({ userId: user_id });
+      if (currentUser) {
+        const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+        if (currentActiveWallet) {
+          const balance = await getSPLBalance(connection, new PublicKey(position.mint), new PublicKey(currentActiveWallet.publicKey));
+          if (balance == 0) {
+            const payload = {
+              method: "unsubscribeTokenTrade",
+              keys: [position.mint] // array of token CAs to watch
+            }
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify(payload));
+            }
+            // positions = currentActiveWallet?.positions.filter(e => e.mint != position.mint);
+            // fs.writeFileSync('positions.json', JSON.stringify(positions, null, 2));
+          }
         }
-        ws.send(JSON.stringify(payload));
-        buyCnt--;
-        // positions = active_wallet?.positions.filter(e => e.mint != position.mint);
-        // fs.writeFileSync('positions.json', JSON.stringify(positions, null, 2));
       }
     }
   }
 
   const initAxiomService = async () => {
-    const axiom = new AxiomService();
-    await axiom.refreshAccessToken();
+    // Use shared AxiomService instance
+    const axiom = await initSharedAxiomService();
+    
+    // Check if user still wants sniper to run before each pulse
+    const pulseInterval = setInterval(async () => {
+      // Check if sniper should still run
+      const currentUser = await User.findOne({ userId: user_id });
+      if (!currentUser || !currentUser.sniper.is_snipping) {
+        console.log(`🛑 User ${user_id} disabled sniper, stopping...`);
+        stopSniper(user_id);
+        return;
+      }
 
-
-    setInterval(async () => {
-
-      await axiom.pulse(
-        {
+      try {
+        const data = await axiom.pulse({
           volume: { min: VOLUME_MIN, max: VOLUME_MAX },
           age: { min: AGE_MIN, max: AGE_MAX },
           holders: { min: HOLDER_MIN, max: HOLDER_MAX },
           liquidity: { min: LIQ_MIN, max: LIQ_MAX },
           marketCap: { min: MC_MIN, max: MC_MAX },
           txns: { min: TXNS_MIN, max: TXNS_MAX },
-          // dexPaid: false,
           bondingCurve: { min: BONDING_CURVE_MIN, max: BONDING_CURVE_MAX },
-
           numBuys: { min: 0, max: NUM_BUYS_MAX },
           twitter: { min: null, max: 1 },
-          // devHolding: { min: DEV_HOLDING_MIN, max: DEV_HOLDING_MAX },
-        }).then(async (data) => {
-          // console.log('axiom', data);
-
-
-          if (data.length > 0) {
-
-            const now = Date.now();
-
-            const token = data.pop();
-            console.log("data length", data.length);
-            if (buyCnt >= BUY_LIMIT) return;
-            if (user.sniper.allowAutoBuy) {
-              buy(token.tokenAddress);
-            }
-            // console.log('axiom', token); // Uncommented for debugging
-
-            const tokenlist = data.map(t => t.tokenAddress).slice(-5);
-            user.sniper.tokenlist = tokenlist;
-            await user.save();
-            const msg = `Detected ${data.length} tokens matching criteria: https://pump.fun/\n\n` + tokenlist.join('\n');
-            console.log("token list", msg);
-
-          }
-        }).catch(() => {
-          axiom.refreshAccessToken();
         });
-    }, 20000);
 
+        if (data.length > 0) {
+          const now = Date.now();
+          const token = data.pop();
+          console.log("data length", data.length);
+          
+          // Refresh user data
+          const freshUser = await User.findOne({ userId: user_id });
+          if (!freshUser || !freshUser.sniper.is_snipping) {
+            stopSniper(user_id);
+            return;
+          }
+          
+          const freshActiveWallet = freshUser.wallets.find(w => w.is_active_wallet);
+          const currentBuyCnt = freshActiveWallet?.positions?.length || 0;
+          
+          if (currentBuyCnt >= BUY_LIMIT) return;
+          
+          console.log('User.sniper function', freshUser.sniper.allowAutoBuy);
+          if (freshUser.sniper.allowAutoBuy == true) {
+            const freshBalance = await getBalance(new PublicKey(freshActiveWallet.publicKey));
+            if (freshBalance / LAMPORTS_PER_SOL > BUY_AMOUNT) {
+              buy(token.tokenAddress);
+            } else {
+              console.log("Not enough Balance");
+              await sendMessageToUser(user_id, `⚠️ Insufficient SOL balance to buy tokens. Current balance: ${(freshBalance / LAMPORTS_PER_SOL).toFixed(2)} SOL`, { parse_mode: "Markdown" });
+              return;
+            }
+          }
+
+          const tokenlist = data.map(t => t.tokenAddress).slice(-5);
+          freshUser.sniper.tokenlist = tokenlist;
+          await freshUser.save();
+          const msg = `Detected ${data.length} tokens matching criteria: https://pump.fun/\n\n` + tokenlist.join('\n');
+          console.log("token list", msg);
+        }
+      } catch (error) {
+        console.error(`❌ Pulse error for user ${user_id}:`, error);
+        // Don't refresh token on every error, let the shared refresh handle it
+      }
+    }, 40000);
+    
+    intervals.push(pulseInterval);
   }
+  
   initAxiomService();
 
-  ws.on('open', function open() {
-
-    console.log('WebSocket connection established');
+  ws.on('open', async function open() {
+    console.log(`WebSocket connection established for user: ${user_id}`);
+    
+    // Check if sniper should still run
+    const currentUser = await User.findOne({ userId: user_id });
+    if (!currentUser || !currentUser.sniper.is_snipping) {
+      console.log(`🛑 User ${user_id} disabled sniper, closing WebSocket...`);
+      stopSniper(user_id);
+      return;
+    }
 
     // Subscribing to trades made by accounts
     let payload = {
       method: "subscribeNewToken",
     }
     ws.send(JSON.stringify(payload));
-    for (let index = 0; index < active_wallet.positions.length; index++) {
-      const position = active_wallet.positions[index];
+    
+    const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+    if (currentActiveWallet && currentActiveWallet.positions) {
+      for (let index = 0; index < currentActiveWallet.positions.length; index++) {
+        const position = currentActiveWallet.positions[index];
 
-      payload = {
-        method: "subscribeTokenTrade",
-        keys: [position.mint] // array of token CAs to watch
+        payload = {
+          method: "subscribeTokenTrade",
+          keys: [position.mint] // array of token CAs to watch
+        }
+        ws.send(JSON.stringify(payload));
       }
-      ws.send(JSON.stringify(payload));
     }
-    setInterval(() => {
-      for (let index = 0; index < active_wallet.positions.length; index++) {
-        const position = active_wallet.positions[index];
+    const positionCheckInterval = setInterval(async () => {
+      // Check if sniper should still run
+      const currentUser = await User.findOne({ userId: user_id });
+      if (!currentUser || !currentUser.sniper.is_snipping) {
+        stopSniper(user_id);
+        return;
+      }
+      
+      const currentActiveWallet = currentUser.wallets.find(w => w.is_active_wallet);
+      if (!currentActiveWallet || !currentActiveWallet.positions) return;
+      
+      for (let index = 0; index < currentActiveWallet.positions.length; index++) {
+        const position = currentActiveWallet.positions[index];
         console.log('Re-subscribing to position:', position.mint);
-        console.log(`Token Sell pending : ${user.sniper.time_limit} min`, Date.now(), Number(position.timestamp) + 1000 * user.sniper.time_limit * 60);
-        if (ALLOW_AUTO_SELL && position.timestamp + 1000 * user.sniper.time_limit * 60 < Date.now()) {
-          console.log(`Position ${position.mint} is older than ${user.sniper.time_limit} minutes, selling...`, position);
-          if (user.sniper.allowAutoSell) {
+        console.log(`Token Sell pending : ${currentUser.sniper.time_limit} min`, Date.now(), Number(position.timestamp) + 1000 * currentUser.sniper.time_limit * 60);
+        if (ALLOW_AUTO_SELL && position.timestamp + 1000 * currentUser.sniper.time_limit * 60 < Date.now()) {
+          console.log(`Position ${position.mint} is older than ${currentUser.sniper.time_limit} minutes, selling...`, position);
+          if (currentUser.sniper.allowAutoSell) {
             sell(position);
           }
         }
       }
     }, 5000);
+    
+    intervals.push(positionCheckInterval);
 
   });
 
   ws.on('error', (error) => {
-    console.error('WebSocket error:', error);
+    console.error(`WebSocket error for user ${user_id}:`, error);
+  });
+
+  ws.on('close', () => {
+    console.log(`WebSocket closed for user ${user_id}`);
+    // Clean up when WebSocket closes
+    stopSniper(user_id);
   });
 
   ws.on('message', async function message(data) {
@@ -401,40 +570,62 @@ export async function runSniper(user_id, onTokensDetected) {
         // if (!CHECK_NAME || txData.mint.endsWith("pump"))
         // buy(txData.mint);
       } else if (txData.txType == "buy" || txData.txType == "sell") {
-        const position = active_wallet.positions.find((position) => position.mint == txData.mint);
+        const currentUser = await User.findOne({ userId: user_id });
+        if (!currentUser || !currentUser.sniper.is_snipping) {
+          stopSniper(user_id);
+          return;
+        }
+        
+        const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+        if (!currentActiveWallet) return;
+        
+        const position = currentActiveWallet.positions.find((position) => position.mint == txData.mint);
         console.log('position', position);
         console.log(txData.txType, position?.price, txData.tokenAmount / txData.solAmount)
         if (position) {
           const price = txData.tokenAmount / txData.solAmount;
-          if (price >= position.price * (1 + takeProfit) || price <= position.price * (1 + stopLoss)) {
+          const currentTakeProfit = Number(currentUser.sniper.take_profit) / 100;
+          const currentStopLoss = Number(currentUser.sniper.stop_loss) / 100;
+          if (price >= position.price * (1 + currentTakeProfit) || price <= position.price * (1 + currentStopLoss)) {
             console.log(`Selling position: ${txData.mint} at price ${price} | Original price: ${position.price}`);
-            if (user.sniper.allowAutoSell) {
+            if (currentUser.sniper.allowAutoSell) {
               sell(position);
             }
           }
         }
         if (txData.txType == "buy") {
-          if (txData.traderPublicKey == user.wallets.find((w) => w.is_active_wallet)?.publicKey) {
-            buyCnt++;
-            console.log(`Bought position: ${txData.mint} | https://pump.fun/coin/${txData.mint} | Price: ${txData.tokenAmount / txData.solAmount}`);
-            active_wallet.positions.push({
-              amount: txData.tokenAmount,
-              solAmount: txData.solAmount,
-              mint: txData.mint,
-              price: txData.tokenAmount / txData.solAmount,
-              timeStamp: Date.now(),
-            });
-            await user.save();
+          const currentUser = await User.findOne({ userId: user_id });
+          if (currentUser && currentUser.sniper.is_snipping) {
+            const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+            if (currentActiveWallet && txData.traderPublicKey == currentActiveWallet.publicKey) {
+              console.log(`Bought position: ${txData.mint} | https://pump.fun/coin/${txData.mint} | Price: ${txData.tokenAmount / txData.solAmount}`);
+              currentActiveWallet.positions.push({
+                amount: txData.tokenAmount,
+                solAmount: txData.solAmount,
+                mint: txData.mint,
+                price: txData.tokenAmount / txData.solAmount,
+                timeStamp: Date.now(),
+              });
+              await currentUser.save();
+            }
           }
         }
-        if (txData.txType == "sell" && txData.traderPublicKey == active_wallet.publicKey) {
-          const payload = {
-            method: "unsubscribeTokenTrade",
-            keys: [txData.mint] // array of token CAs to watch
+        if (txData.txType == "sell") {
+          const currentUser = await User.findOne({ userId: user_id });
+          if (currentUser) {
+            const currentActiveWallet = currentUser.wallets.find((w) => w.is_active_wallet);
+            if (currentActiveWallet && txData.traderPublicKey == currentActiveWallet.publicKey) {
+              const payload = {
+                method: "unsubscribeTokenTrade",
+                keys: [txData.mint] // array of token CAs to watch
+              }
+              if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify(payload));
+              }
+              currentActiveWallet.positions = currentActiveWallet.positions.filter(e => e.mint != txData.mint);
+              await currentUser.save();
+            }
           }
-          ws.send(JSON.stringify(payload));
-          buyCnt--;
-          active_wallet.positions = active_wallet.positions.filter(e => e.mint != txData.mint);
         }
       }
     }
