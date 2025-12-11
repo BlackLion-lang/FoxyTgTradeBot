@@ -14,6 +14,7 @@ import {
     VersionedTransaction,
 } from "@solana/web3.js";
 import { connection } from "./config/connection";
+import { bot } from "./config/constant";
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "./config/security";
 import {
     getBalance,
@@ -28,7 +29,7 @@ import {
     walletFromPrvKey,
 } from "./services/solana";
 import { editWalletsMessage, sendWalletsMessageWithImage, sendWalletsMessage } from "./messages/wallets";
-import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendMenuMessage, sendMenuMessageWithImage, editAdminPanelMessage, sendMenu } from "./messages";
+import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendAddSniperUserMessage, sendMenuMessage, sendMenuMessageWithImage, editAdminPanelMessage, sendMenu, sendSnippingSettingsMessage, editSnippingSettingsMessage } from "./messages";
 import {
     extractTokenAddress,
     extractTokenAddress_,
@@ -79,6 +80,7 @@ import { TokenAmount } from "@raydium-io/raydium-sdk-v2";
 import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './messages/settings/profitLevel';
 import { editFeeAutoMessage, editFeeMessage, sendFeeAutoMessage, sendFeeMessage } from './messages/settings/fee';
 import { WhiteListUser } from "./models/whitelist";
+import { SniperWhitelist } from "./models/sniperWhitelist";
 import { SubscribeModel } from "./models/subscribe";
 import { editRenameWalletMessage, sendRenameWalletMessage } from "./messages/wallets/rename";
 import { editSlippageMessage, sendSlippageMessage } from './messages/settings/slippage';
@@ -92,6 +94,9 @@ import { isExistWallet, isExistWalletWithName, txnMethod } from './utils/config'
 import { editDeleteWalletMessage, sendDeleteWalletMessage } from './messages/wallets/delete';
 import { getWithdrawWallet } from './messages/wallets/withdraw';
 import { editPrivateKeyWalletMessage, sendPrivateKeyWalletMessage, sendPrivateKeyWalletMessageWithImage } from './messages/wallets/private_key';
+import * as bundleWalletMenu from './messages/bundlewallet/bundleWalletMenu';
+import fundBundleWalletModule from './messages/bundlewallet/fundBundledWallets';
+import * as bundleBuySell from './messages/bundlewallet/bundleBuySell';
 import { send } from "process";
 import { editLanguageMessage, sendLanguageMessage } from "./messages/settings/language";
 import { resourceLimits } from "worker_threads";
@@ -106,7 +111,7 @@ import { editReferralMessage, sendReferralMessage } from "./messages/referral";
 import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/trendingCoins";
 import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/sniper/sniper";
 import { sendTokenListMessage, editTokenListMessage } from "./messages/sniper/tokenDetection";
-import { handleSubscriptionAction } from "./subscribe";
+import { handleSubscriptionAction, sendSubscriptionOptions } from "./subscribe";
 // import { sendWelcomeVideo } from "./utils/welcomevideo";
 // import { editMultiMessageWithAddress } from './messages/buy/multi';
 
@@ -164,21 +169,31 @@ const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
     return true;
 };
 
+const isSniperWhitelisted = async (userId: number): Promise<boolean> => {
+    const whitelisted = await SniperWhitelist.findOne({ userId });
+    return !!whitelisted;
+};
+
 const ensureSubscriptionForSniper = async (
     botInstance: TelegramBot,
     chatId: number,
     telegramId: number,
 ): Promise<boolean> => {
+    // Check if subscription is required for sniper access
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    if (!settings.sniperSubscriptionRequired) {
+        // Subscription not required, allow access
+        return true;
+    }
+
     const active = await hasActiveSubscription(telegramId);
 
     if (active) {
         return true;
     }
 
-    await botInstance.sendMessage(chatId, SUBSCRIPTION_REQUIRED_MESSAGE, {
-        parse_mode: "Markdown",
-        reply_markup: SUBSCRIPTION_REQUIRED_MARKUP,
-    });
+    // Show subscription menu directly instead of just a message
+    await sendSubscriptionOptions(botInstance, chatId, telegramId);
 
     return false;
 };
@@ -209,7 +224,7 @@ type WalletType = {
 //     );
 // }
 
-const bot = new TelegramBot(process.env.TOKEN || "", { polling: true });
+// Bot instance is imported from config/constant.ts to ensure singleton pattern
 
 // Exported function to send messages from other modules
 export const sendMessageToUser = async (userId: number, message: string, options: any = {}) => {
@@ -444,9 +459,66 @@ bot.onText(/\/help/, async (msg, match) => {
     }
 });
 
+bot.onText(/\/sniper/, async (msg, match) => {
+    // Fetch the whitelist from your database
+    const whiteListUsers = await WhiteListUser.find({});
 
-bot.on("polling_error", (error) => {
-    console.error(error);
+    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    if (!settings) throw new Error("Tipping settings not found!");
+
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+
+    const userId = Number(fromId);
+
+    let allowed: boolean;
+    if (userId !== null && userId !== undefined) {
+        const isWhitelisted = await isSniperWhitelisted(userId);
+        if (isWhitelisted) {
+            allowed = true;
+        } else {
+            allowed = await ensureSubscriptionForSniper(bot, msg.chat.id, userId);
+        }
+    } else {
+        allowed = await ensureSubscriptionForSniper(bot, msg.chat.id, userId);
+    }
+
+    // const allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
+    
+    if (!allowed) {
+        return;
+    }
+
+    // Check if the user is whitelisted by username
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith('@')
+            ? u.telegramId.slice(1)
+            : u.telegramId;
+
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser) {
+        CommandHandler.sniperCommand(bot, msg, match);
+    }
+    else {
+        if (isWhitelisted) {
+            CommandHandler.sniperCommand(bot, msg, match);
+        } else {
+            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
+        }
+    }
+});
+
+
+bot.on("polling_error", (error: any) => {
+    console.error("Polling error:", error);
+    
+    // Handle the specific conflict error
+    if (error.code === "ETELEGRAM" && error.message?.includes("409 Conflict")) {
+        console.error("⚠️ Multiple bot instances detected! Make sure only one instance is running.");
+        console.error("💡 Solution: Stop all bot processes and restart only one instance.");
+    }
 });
 
 const userLastMessage = new Map(); // user_id -> message_id
@@ -688,6 +760,131 @@ bot.on("callback_query", async (callbackQuery) => {
             return;
         }
 
+        if (sel_action === "snipping_settings") {
+            if (messageId) {
+                await safeDeleteMessage(bot, chatId, messageId);
+            }
+            sendSnippingSettingsMessage(bot, chatId, userId);
+            return;
+        }
+
+        if (sel_action === "snipping_toggle_subscription") {
+            settings.sniperSubscriptionRequired = !settings.sniperSubscriptionRequired;
+            await settings.save();
+            editSnippingSettingsMessage(bot, chatId, userId, messageId);
+            return;
+        }
+
+        if (sel_action === "add_sniper_user") {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.addRemoveSniperUser', userId)}`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const inputUserId = reply.text?.trim();
+                        if (!inputUserId) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidId', userId)}`,
+                            );
+                        } else {
+                            sendAddSniperUserMessage(
+                                bot,
+                                chatId,
+                                userId,
+                                inputUserId
+                            );
+                            // Refresh snipping settings menu if we're in that context
+                            if (messageId) {
+                                setTimeout(() => {
+                                    editSnippingSettingsMessage(bot, chatId, userId, messageId).catch(() => {});
+                                }, 2000);
+                            }
+                        }
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }),
+                );
+            });
+            return;
+        }
+
+        if (sel_action === "remove_sniper_user") {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.addRemoveSniperUser', userId)}`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const inputUserId = reply.text?.trim();
+                        if (!inputUserId) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidId', userId)}`,
+                            );
+                            await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                            await safeDeleteMessage(bot, chatId, reply.message_id);
+                            return;
+                        }
+
+                        try {
+                            // Helper function to resolve username or user ID
+                            const resolveUserId = async (input: string): Promise<number | null> => {
+                                const userIdNum = parseInt(input);
+                                if (!isNaN(userIdNum)) {
+                                    return userIdNum;
+                                }
+                                const username = input.startsWith('@') ? input.slice(1) : input;
+                                const user = await User.findOne({ username: username });
+                                if (user && user.userId) {
+                                    return user.userId;
+                                }
+                                return null;
+                            };
+
+                            const resolvedUserId = await resolveUserId(inputUserId);
+                            
+                            if (resolvedUserId === null) {
+                                const errorMessage = await bot.sendMessage(chatId, `${await t('errors.userNotFound', userId)}`);
+                                setTimeout(async () => {
+                                    bot.deleteMessage(chatId, errorMessage.message_id).catch(() => {});
+                                }, 5000);
+                            } else {
+                                const targetUser = await SniperWhitelist.findOne({ userId: resolvedUserId });
+
+                                if (!targetUser) {
+                                    const errorMessage = await bot.sendMessage(chatId, `${await t('errors.targetSniperUser', userId)}`);
+                                    setTimeout(async () => {
+                                        bot.deleteMessage(chatId, errorMessage.message_id).catch(() => {});
+                                    }, 5000);
+                                } else {
+                                    await SniperWhitelist.deleteOne({ userId: resolvedUserId });
+                                    const sentMessage = await bot.sendMessage(chatId, `${await t('messages.removedSniperUser1', userId)} ${inputUserId} ${await t('messages.removedSniperUser2', userId)}`);
+                                    setTimeout(async () => {
+                                        bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                                    }, 5000);
+                                    // Refresh snipping settings menu if we're in that context
+                                    if (messageId) {
+                                        setTimeout(() => {
+                                            editSnippingSettingsMessage(bot, chatId, userId, messageId).catch(() => {});
+                                        }, 2000);
+                                    }
+                                }
+                            }
+                        } catch (err) {
+                            console.error('Error removing sniper user:', err);
+                            bot.sendMessage(chatId, `${await t('errors.removederror', userId)}`);
+                        }
+
+                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                        await safeDeleteMessage(bot, chatId, reply.message_id);
+                    }),
+                );
+            });
+            return;
+        }
+
         if (sel_action === "admin_referral") {
             const sent = bot.sendMessage(
                 chatId,
@@ -875,6 +1072,147 @@ bot.on("callback_query", async (callbackQuery) => {
                                 safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
                                 safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
                             }, 2000);
+                    }),
+                );
+            });
+        }
+
+        if (sel_action === "admin_subscription_price_week") {
+            const sent = bot.sendMessage(
+                chatId,
+                `Enter the subscription price for 1 Week (in SOL):`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const price = Number(reply.text || "");
+                        if (isNaN(price) || price < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `❌ Invalid price. Please enter a valid number (e.g., 0.3)`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                }, 3000);
+                                bot.once('text',
+                                    createUserTextHandler(userId, async (newReply) => {
+                                        const newPrice = Number(newReply.text || "");
+                                        if (isNaN(newPrice) || newPrice < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `❌ Invalid price. Please enter a valid number.`,
+                                            );
+                                        } else {
+                                            settings.subscriptionPriceWeek = newPrice;
+                                            await settings.save();
+                                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                                        }
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
+                                );
+                            });
+                        } else {
+                            settings.subscriptionPriceWeek = price;
+                            await settings.save();
+                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                        }, 2000);
+                    }),
+                );
+            });
+        }
+
+        if (sel_action === "admin_subscription_price_month") {
+            const sent = bot.sendMessage(
+                chatId,
+                `Enter the subscription price for 1 Month (in SOL):`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const price = Number(reply.text || "");
+                        if (isNaN(price) || price < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `❌ Invalid price. Please enter a valid number (e.g., 0.5)`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                }, 3000);
+                                bot.once('text',
+                                    createUserTextHandler(userId, async (newReply) => {
+                                        const newPrice = Number(newReply.text || "");
+                                        if (isNaN(newPrice) || newPrice < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `❌ Invalid price. Please enter a valid number.`,
+                                            );
+                                        } else {
+                                            settings.subscriptionPriceMonth = newPrice;
+                                            await settings.save();
+                                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                                        }
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
+                                );
+                            });
+                        } else {
+                            settings.subscriptionPriceMonth = price;
+                            await settings.save();
+                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                        }, 2000);
+                    }),
+                );
+            });
+        }
+
+        if (sel_action === "admin_subscription_price_year") {
+            const sent = bot.sendMessage(
+                chatId,
+                `Enter the subscription price for 1 Year (in SOL):`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const price = Number(reply.text || "");
+                        if (isNaN(price) || price < 0) {
+                            bot.sendMessage(
+                                chatId,
+                                `❌ Invalid price. Please enter a valid number (e.g., 5)`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                }, 3000);
+                                bot.once('text',
+                                    createUserTextHandler(userId, async (newReply) => {
+                                        const newPrice = Number(newReply.text || "");
+                                        if (isNaN(newPrice) || newPrice < 0) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `❌ Invalid price. Please enter a valid number.`,
+                                            );
+                                        } else {
+                                            settings.subscriptionPriceYear = newPrice;
+                                            await settings.save();
+                                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                                        }
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
+                                );
+                            });
+                        } else {
+                            settings.subscriptionPriceYear = price;
+                            await settings.save();
+                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                        }, 2000);
                     }),
                 );
             });
@@ -1522,6 +1860,18 @@ bot.on("callback_query", async (callbackQuery) => {
                     }),
                 );
             });
+            return;
+        }
+
+        // Bundle Buy handlers
+        if ((sel_action ?? "").startsWith("bundle_buy_")) {
+            await bundleBuySell.handleBundleBuy(User, callbackQuery, tokenAddress, sel_action || "");
+            return;
+        }
+
+        // Bundle Sell handlers
+        if ((sel_action ?? "").startsWith("bundle_sell_")) {
+            await bundleBuySell.handleBundleSell(User, callbackQuery, tokenAddress, sel_action || "");
             return;
         }
 
@@ -2184,6 +2534,54 @@ ${await t('privateKey.p7', userId)}`,
             //     bot.sendMessage(chatId, "❌ No wallets available to set as default.");
             // }
             // return;
+        }
+
+        // Bundle Wallets - Main menu
+        if (sel_action === "bundled_wallets") {
+            await bundleWalletMenu.showBundleWalletMenu(User, callbackQuery, cleanupUserTextHandler, createUserTextHandler);
+            return;
+        }
+
+        // Bundle Wallets - View wallets
+        if (sel_action === "bundle_view") {
+            await bundleWalletMenu.viewBundleWallets(User, callbackQuery);
+            return;
+        }
+
+        // Bundle Wallets - Show create wallet prompt
+        if (sel_action === "bundle_create_menu") {
+            await bundleWalletMenu.showCreateWalletPrompt(callbackQuery, cleanupUserTextHandler, createUserTextHandler);
+            return;
+        }
+
+        // Bundle Wallets - Create wallets
+        if (sel_action?.startsWith("bundle_create_")) {
+            await bundleWalletMenu.createBundleWallets(User, callbackQuery);
+            return;
+        }
+
+        // Bundle Wallets - Fund wallets
+        if (sel_action === "bundle_fund") {
+            await bundleWalletMenu.fundBundleWallets(User, callbackQuery);
+            return;
+        }
+
+        // Bundle Wallets - Clean fund bundles
+        if (sel_action === "bundle_clean_fund") {
+            await bundleWalletMenu.cleanFundBundles(User, callbackQuery);
+            return;
+        }
+
+        // Bundle Wallets - Withdraw from bundles
+        if (sel_action === "bundle_withdraw") {
+            await bundleWalletMenu.withdrawFromBundles(User, callbackQuery, createUserTextHandler);
+            return;
+        }
+
+        // Bundle Wallets - Reset bundled wallets
+        if (sel_action === "bundle_reset") {
+            await bundleWalletMenu.resetBundledWallets(User, callbackQuery, createUserTextHandler);
+            return;
         }
 
         if (sel_action?.startsWith("wallets_delete_confirm_")) {
@@ -3010,10 +3408,17 @@ ${await t('privateKey.p7', userId)}`,
 
         // Sniper bot
         if (sel_action === "sniper") {
+            safeDeleteMessage(bot, chatId, messageId);
             cleanupUserTextHandler(userId); // Clean up any active text handlers
             let allowed: boolean;
-            if (user.userId === 7994989802 || user.userId === 2024002049) {
-                allowed = true;
+            const userUserId = user.userId;
+            if (userUserId !== null && userUserId !== undefined) {
+                const isWhitelisted = await isSniperWhitelisted(userUserId);
+                if (isWhitelisted) {
+                    allowed = true;
+                } else {
+                    allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
+                }
             } else {
                 allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
             }
@@ -4169,7 +4574,7 @@ async function setBotCommands() {
         { command: "/settings", description: `${await t('commands.setting')}` },
         { command: "/wallets", description: `${await t('commands.wallet')}` },
         { command: "/positions", description: `${await t('commands.position')}` },
-        // { command: "/sniper", description: "Launch the Foxy sniper." },
+        { command: "/sniper", description: "Launch the Foxy sniper." },
         // { command: "/copytrade", description: "Foxy Copy-Trading." },
         // { command: "/orders", description: "View limit orders." },
     ])
@@ -4182,6 +4587,24 @@ async function setBotCommands() {
 }
 
 setBotCommands();
+
+// Register fund bundle wallet message handler and bundle buy/sell input handler
+bot.on('message', async (msg) => {
+    if (msg.text && msg.from?.id) {
+        const userId = msg.from.id;
+        
+        // Check if it's a bundle buy/sell input
+        const bundleState = bundleBuySell.bundleBuySellState?.[userId];
+        if (bundleState) {
+            await bundleBuySell.handleBundleBuySellInput(User, userId, msg.text);
+            return;
+        }
+        
+        // Otherwise handle fund wallet reply
+        await fundBundleWalletModule.handleUserReply(msg);
+    }
+});
+
 // Auto sell manin
 
 export async function checkAndAutoSell() {
