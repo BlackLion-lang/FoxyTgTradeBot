@@ -145,6 +145,7 @@ export const getPairByAddress = async (tokenAddress: string) => {
             },
         );
         const data = await response.json();
+        // console.log("token pair data", data)
 
         return data.pairs;
     } catch (error) {

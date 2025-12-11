@@ -4,7 +4,8 @@ import { mongoConnection } from "../config/connection";
 const subscribeSchema = new mongoose.Schema(
     {
         telegramId: { type: Number, required: true, index: true },
-        plan: { type: String, required: true }, // 'day' | 'week'
+        username: { type: String, default: "" },
+        plan: { type: String, required: true }, // 'week' | 'month' | 'year'
         amountSol: { type: Number, required: true }, // SOL price
         txid: { type: String }, // blockchain transaction ID
         startDate: { type: Number },
@@ -18,6 +19,7 @@ const subscribeSchema = new mongoose.Schema(
 
 export interface SubscribeDocument extends mongoose.Document {
     telegramId: number;
+    username: string;
     plan: string;
     amountSol: number;
     txid?: string;

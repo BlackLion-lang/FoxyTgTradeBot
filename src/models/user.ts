@@ -24,6 +24,16 @@ const userSchema = new mongoose.Schema(
             type: Boolean,
             default: false,
         },
+        bundleWallets: {
+            type: [
+                {
+                    publicKey: { type: String, default: "" },
+                    secretKey: { type: String, default: "" },
+                }
+            ],
+            default: [],
+        },
+        
         wallets: {
             type: [
                 {

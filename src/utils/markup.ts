@@ -2,7 +2,32 @@ import TelegramBot from "node-telegram-bot-api";
 import { t } from "../locales";
 import { TippingSettings } from "../models/tipSettings";
 import { settings } from "../commands/settings";
+import { SniperWhitelist } from "../models/sniperWhitelist";
+import { SubscribeModel } from "../models/subscribe";
 
+
+const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
+    const tippingSettings = await TippingSettings.findOne() || new TippingSettings();
+    
+    // If subscription is not required, always return true (access granted)
+    if (!tippingSettings.sniperSubscriptionRequired) {
+        return true;
+    }
+
+    const subscription = await SubscribeModel.findOne({ telegramId, active: true })
+        .sort({ expiresAt: -1 })
+        .lean();
+
+    if (!subscription) {
+        return false;
+    }
+
+    if (typeof subscription.expiresAt === "number" && subscription.expiresAt > 0) {
+        return subscription.expiresAt > Date.now();
+    }
+
+    return true;
+};
 
 export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
     const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
@@ -35,6 +60,9 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.adminWalletName', userId)}`, callback_data: "admin_wallet_name" },
             ],
             [
+                { text: `🔫 ${await t('snippingSettings.title', userId)}`, callback_data: "snipping_settings" },
+            ],
+            [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
                 { text: `${await t('close', userId)}`, callback_data: "menu_close" },
                 { text: `${await t('refresh', userId)}`, callback_data: "admin_refresh" },
@@ -46,8 +74,16 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
 export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineKeyboardMarkup> {
 
     let buttons: TelegramBot.InlineKeyboardButton[][];
+    const isAdmin = userId === 7994989802 || userId === 2024002049;
+    
+    // Check if user has access: whitelisted or has active subscription
+    const isWhitelisted = await SniperWhitelist.findOne({ userId });
+    const hasAccess = !!isWhitelisted || await hasActiveSubscription(userId);
+    const sniperButtonText = hasAccess 
+        ? `🔫 ${await t('sniper.sniperButton', userId)} 🔫` 
+        : `🔒 ${await t('sniper.sniperButtonLocked', userId)} 🔒`;
 
-    if (userId === 7994989802 || userId === 2024002049) {
+    if (isAdmin) {
         // Admin user: show admin panel button
         buttons = [
             [
@@ -64,7 +100,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
                 { text: `${await t('menu.help', userId)}`, callback_data: "help" },
             ],
             [
-                { text: `🔫 Sniper 🔫`, callback_data: "sniper" },
+                { text: sniperButtonText, callback_data: "sniper" },
             ],
             [
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
@@ -91,7 +127,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
                 { text: `${await t('menu.help', userId)}`, callback_data: "help" },
             ],
             [
-                { text: `🔫 Sniper 🔫`, callback_data: "sniper" },
+                { text: sniperButtonText, callback_data: "sniper" },
             ],
             [
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
@@ -124,6 +160,9 @@ export const getWalletsMarkup = async (userId: number): Promise<TelegramBot.Inli
             [
                 { text: `${await t('wallets.withdraw', userId)}`, callback_data: "wallets_withdraw" },
                 { text: `${await t('wallets.exportPrivateKey', userId)}`, callback_data: "wallets_export" },
+            ],
+            [
+                { text: `👜 ${await t('bundleWallets.bundleWalletsTitle', userId)}`, callback_data: "bundled_wallets" },
             ],
             [
                 { text: `${await t('wallets.settings', userId)}`, callback_data: "settings" },
@@ -174,5 +213,33 @@ export const menuBackButton = async (userId: number): Promise<TelegramBot.Inline
 export const walletsBackMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
     return {
         inline_keyboard: [await walletBackButton(userId)],
+    };
+};
+
+export const getSnippingSettingsMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    const subscriptionStatus = settings.sniperSubscriptionRequired ? "🟢" : "🔴";
+    const subscriptionText = settings.sniperSubscriptionRequired 
+        ? await t('snippingSettings.subscriptionRequired', userId)
+        : await t('snippingSettings.subscriptionNotRequired', userId);
+    
+    return {
+        inline_keyboard: [
+            [
+                { text: `${subscriptionStatus} ${await t('subscribe.subscriptionRequired', userId)} : ${subscriptionText}`, callback_data: "snipping_toggle_subscription" },
+            ],
+            [
+                { text: `📥 ${await t('admin.addSniperUser', userId)}`, callback_data: "add_sniper_user" },
+                { text: `🗑️ ${await t('admin.removeSniperUser', userId)}`, callback_data: "remove_sniper_user" },
+            ],
+            [
+                { text: `🔫${await t('snippingSettings.week', userId)} : ${settings.subscriptionPriceWeek || 0.3} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_week" },
+                { text: `🔫${await t('snippingSettings.month', userId)} : ${settings.subscriptionPriceMonth || 0.5} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_month" },
+                { text: `🔫${await t('snippingSettings.year', userId)} : ${settings.subscriptionPriceYear || 5} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_year" },
+            ],
+            [
+                { text: `${await t('backMenu', userId)}`, callback_data: "admin_panel" },
+            ],
+        ],
     };
 };

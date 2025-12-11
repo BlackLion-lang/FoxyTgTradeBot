@@ -5,6 +5,7 @@ import { wallets } from "./wallets";
 import { menus } from "./menus";
 import { help } from "./help";
 import { privateKeyWallet } from "./private";
+import { sniperCommand } from "./sniper";
 
 export const CommandHandler = {
     start,
@@ -13,5 +14,6 @@ export const CommandHandler = {
     privateKeyWallet,
     positions,
     settings,
-    help
+    help,
+    sniperCommand
 };

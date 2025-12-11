@@ -33,22 +33,22 @@ export const getTokenlist = async (
             try {
                 const pairArray = await getPairByAddress(tokenAddress);
                 const pair = pairArray?.[0];
-                const tokenName = pair?.baseToken?.name || "Unknown token";
+                const tokenName = pair?.baseToken?.name || await t('sniper.unknownToken', userId);
 
-                return `${index + 1}. ${tokenName} ${tokenAddress}`;
+                return `<strong>${index + 1}. ${tokenName}</strong> <code>${tokenAddress}</code>`;
             } catch (error) {
                 console.error(
                     "Failed to load token info for",
                     tokenAddress,
                     error,
                 );
-                return `${index + 1}. ${tokenAddress} (details unavailable)`;
+                return `${index + 1}. ${tokenAddress} (${await t('sniper.detailsUnavailable', userId)})`;
             }
         }),
     );
 
     const cap =
-        `🔥 Detected active tokens:\n\n` +
+        `${await t('sniper.detectedActiveTokens', userId)}\n\n` +
         detectedTokens.filter(Boolean).join("\n");
 
     // const pairArray = await getPairByAddress(tokenAddress ? tokenAddress[0] : "");
@@ -64,24 +64,49 @@ export const getTokenlist = async (
         // `${await t('Buy Tip', userId)}\n` +
         // `${await t('Sell Tip', userId)}\n\n` +
         // `<strong>${await t('settings.p5', userId)}</strong>`;
-        `It is the detected token list by bot detection according your setting.\n\n` +
-        `You can see the token information by click below token link. \n\n` +
-        `${tokenlist.length > 0 ? `${cap}` : "No detective active tokens"} \n\n`;
+        `${await t('sniper.tokenDetectionList', userId)}\n\n` +
+        `${await t('sniper.tokenInfoInstruction', userId)} \n\n` +
+        `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [];
     
+    // Dynamically create buttons based on actual token list length (max 5)
     if (tokenlist.length > 0) {
-        options.push(
-            [
-                { text: `${await t('Buy - 1', userId)}`, callback_data: "sniper_buy_1" },
-                { text: `${await t('Buy - 2', userId)}`, callback_data: "sniper_buy_2" },
-            ],
-            [
-                { text: `${await t('Buy - 3', userId)}`, callback_data: "sniper_buy_3" },
-                { text: `${await t('Buy - 4', userId)}`, callback_data: "sniper_buy_4" },
-                { text: `${await t('Buy - 5', userId)}`, callback_data: "sniper_buy_5" },
-            ],
-        );
+        const buttonLabels = [
+            await t('sniper.buyToken1', userId),
+            await t('sniper.buyToken2', userId),
+            await t('sniper.buyToken3', userId),
+            await t('sniper.buyToken4', userId),
+            await t('sniper.buyToken5', userId),
+        ];
+        
+        const buttonCallbacks = [
+            "sniper_buy_1",
+            "sniper_buy_2",
+            "sniper_buy_3",
+            "sniper_buy_4",
+            "sniper_buy_5",
+        ];
+        
+        // Create buttons only for available tokens
+        const tokenButtons: TelegramBot.InlineKeyboardButton[] = [];
+        for (let i = 0; i < tokenlist.length && i < 5; i++) {
+            tokenButtons.push({
+                text: buttonLabels[i],
+                callback_data: buttonCallbacks[i],
+            });
+        }
+        
+        // Layout buttons: 2 buttons per row, then remaining buttons in next row
+        if (tokenButtons.length > 0) {
+            // First row: up to 2 buttons
+            options.push(tokenButtons.slice(0, 2));
+            
+            // Second row: remaining buttons (if any)
+            if (tokenButtons.length > 2) {
+                options.push(tokenButtons.slice(2));
+            }
+        }
     }
     
     options.push([

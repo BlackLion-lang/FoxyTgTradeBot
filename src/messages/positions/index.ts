@@ -136,7 +136,7 @@ export const getPositions = async (
 
         const wallets = user.wallets;
         tokenBalanceMap[token] = priceUsd * tokenBalance;
-        if(tokenBalance * priceUsd > liquidity) continue;
+        // if(tokenBalance * priceUsd > liquidity) continue;
 
         const balance = await getBalance(currentWallet.publicKey); // Sol balance maybe
 

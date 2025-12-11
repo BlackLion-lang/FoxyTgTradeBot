@@ -26,31 +26,25 @@ export const getSniper = async (
     };
     // console.log("User Token List:", tokenlist);
 
-    const cap = `🔥 Detected active tokens:\n\n` +
+    const cap = `${await t('sniper.detectedActiveTokens', userId)}\n\n` +
         (user.sniper.tokenlist).map((t: any, i: any) => `${i + 1}. https://pump.fun/coin/${t}`).join('\n');
 
     const caption =
-        // `<strong>${await t('Wallet', userId)}</strong>\n` +
-        // `<code>${active_wallet.publicKey}</code>\n` +
-        // `${await t('Balance', userId)} ${balance}\n\n` +
-        // `${await t('Buy Tip', userId)}\n` +
-        // `${await t('Sell Tip', userId)}\n\n` +
-        // `<strong>${await t('settings.p5', userId)}</strong>`;
-        `${tokenlist.length > 0 ? `${cap}` : "No detective active tokens"} \n\n` +
+        `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n` +
         `<a href="https://Google.fr">${await t('Example link', userId)}</a>\n\n` +
-        `It is the panel of the sniper bot. Here you can configure all the parameters of the bot.\n\n` +
-        `If you have any questions, please let me know. If you want, I will add more options according your strategy. \n\n` +
-        `<strong>Important:</strong> The bot is not a guarantee of profit all the time. Please use it with caution and at your own risk.\n\n`;
+        `${await t('sniper.panelDescription', userId)}\n\n` +
+        `${await t('sniper.panelDescription2', userId)} \n\n` +
+        `<strong>${await t('sniper.important', userId)}</strong> ${await t('sniper.importantNote', userId)}\n\n`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = user.sniper.advance_mode
         ? [
             [
                 {
-                    text: user.sniper.is_snipping ? `🛑 ${await t('Stop Snipping', userId)}` : `🎯 ${await t('Start Snipping', userId)}`,
+                    text: user.sniper.is_snipping ? `🛑 ${await t('sniper.stopSnipping', userId)}` : `🎯 ${await t('sniper.startSnipping', userId)}`,
                     callback_data: "is_snipping",
                 },
                 {
-                    text: `🌍 Token Detection`,
+                    text: await t('sniper.tokenDetection', userId),
                     callback_data: "detection",
                 }
             ],
@@ -59,31 +53,31 @@ export const getSniper = async (
                     text: user.sniper.mev ? `🟢 ${await t('settings.mev', userId)}` : `🔴 ${await t('settings.mev', userId)}`,
                     callback_data: "sniper_mev",
                 },
-                { text: `${await t('Slippage', userId)} : ${user.sniper.slippage}%`, callback_data: "sniper_slippage" },
+                { text: `${await t('sniper.slippage', userId)} : ${user.sniper.slippage}%`, callback_data: "sniper_slippage" },
             ],
             [
-                { text: `${await t('Buy', userId)} : ${user.sniper.buy_amount} SOL`, callback_data: "sniper_buyAmount" },
-                { text: `${await t('Buy Limit', userId)} : ${user.sniper.buy_limit}`, callback_data: "sniper_buyLimit" },
+                { text: `${await t('sniper.buy', userId)} : ${user.sniper.buy_amount} SOL`, callback_data: "sniper_buyAmount" },
+                { text: `${await t('sniper.buyLimit', userId)} : ${user.sniper.buy_limit}`, callback_data: "sniper_buyLimit" },
             ],
             [
-                { text: `${await t('Take Profit', userId)} : ${user.sniper.take_profit} %`, callback_data: "sniper_takeProfit" },
-                { text: `${await t('Stop Loss', userId)} : ${user.sniper.stop_loss} %`, callback_data: "sniper_stopLoss" },
+                { text: `${await t('sniper.takeProfit', userId)} : ${user.sniper.take_profit} %`, callback_data: "sniper_takeProfit" },
+                { text: `${await t('sniper.stopLoss', userId)} : ${user.sniper.stop_loss} %`, callback_data: "sniper_stopLoss" },
             ],
             [
-                { text: `${await t('Time limit', userId)} : ${user.sniper.time_limit} min`, callback_data: "sniper_timeLimit" },
+                { text: `${await t('sniper.timeLimit', userId)} : ${user.sniper.time_limit} min`, callback_data: "sniper_timeLimit" },
             ],
             [
                 {
-                    text: user.sniper.allowAutoBuy ? `🔴 ${await t('Allow Auto Buy', userId)}` : `🟢 ${await t('Allow Auto Buy', userId)}`,
+                    text: user.sniper.allowAutoBuy ? `🟢 ${await t('sniper.allowAutoBuy', userId)}` : `🔴 ${await t('sniper.allowAutoBuy', userId)}`,
                     callback_data: "allowAutoBuy",
                 },
                 {
-                    text: user.sniper.allowAutoSell ? `🔴 ${await t('Allow Auto Sell', userId)}` : `🟢 ${await t('Allow Auto Sell', userId)}`,
+                    text: user.sniper.allowAutoSell ? `🟢 ${await t('sniper.allowAutoSell', userId)}` : `🔴 ${await t('sniper.allowAutoSell', userId)}`,
                     callback_data: "allowAutoSell",
                 }
             ],
             [
-                { text: `${await t('⬆️Advance', userId)}`, callback_data: "advance_action" },
+                { text: await t('sniper.advance', userId), callback_data: "advance_action" },
             ],
             [
                 // {
@@ -95,37 +89,37 @@ export const getSniper = async (
                 //     callback_data: "allowAutoSell",
                 // },
                 {
-                    text: user.sniper.twitter_check ? `🟢 ${await t('Enable Twitter Channel', userId)}` : `🔴 ${await t('Disable Twitter Channel', userId)}`,
+                    text: user.sniper.twitter_check ? `🟢 ${await t('sniper.enableTwitterChannel', userId)}` : `🔴 ${await t('sniper.disableTwitterChannel', userId)}`,
                     callback_data: "sniper_twitter",
                 },
             ],
             [
-                { text: `${await t('Bonding Curve Min', userId)} : ${user.sniper.bonding_curve_min}%`, callback_data: "sniper_boundingMin" },
-                { text: `${await t('Bonding Curve Max', userId)} : ${user.sniper.bonding_curve_max}%`, callback_data: "sniper_bondingMax" },
+                { text: `${await t('sniper.bondingCurveMin', userId)} : ${user.sniper.bonding_curve_min}%`, callback_data: "sniper_boundingMin" },
+                { text: `${await t('sniper.bondingCurveMax', userId)} : ${user.sniper.bonding_curve_max}%`, callback_data: "sniper_bondingMax" },
             ],
             [
-                { text: `${await t('Min MC', userId)} : $${user.sniper.min_mc}K`, callback_data: "sniper_MCMin" },
-                { text: `${await t('Max MC', userId)} : $${user.sniper.max_mc}K`, callback_data: "sniper_MCMax" },
+                { text: `${await t('sniper.minMC', userId)} : $${user.sniper.min_mc}K`, callback_data: "sniper_MCMin" },
+                { text: `${await t('sniper.maxMC', userId)} : $${user.sniper.max_mc}K`, callback_data: "sniper_MCMax" },
             ],
             [
-                { text: `${await t('Min Token Age', userId)} : ${user.sniper.min_token_age} min`, callback_data: "sniper_tokenAgeMin" },
-                { text: `${await t('Max Token Age', userId)} : ${user.sniper.max_token_age} min`, callback_data: "sniper_tokenAgeMax" },
+                { text: `${await t('sniper.minTokenAge', userId)} : ${user.sniper.min_token_age} min`, callback_data: "sniper_tokenAgeMin" },
+                { text: `${await t('sniper.maxTokenAge', userId)} : ${user.sniper.max_token_age} min`, callback_data: "sniper_tokenAgeMax" },
             ],
             [
-                { text: `${await t('Min Holders', userId)} : ${user.sniper.min_holders}`, callback_data: "sniper_holdersMin" },
-                { text: `${await t('Max Holders', userId)} : ${user.sniper.max_holders}`, callback_data: "sniper_holdersMax" },
+                { text: `${await t('sniper.minHolders', userId)} : ${user.sniper.min_holders}`, callback_data: "sniper_holdersMin" },
+                { text: `${await t('sniper.maxHolders', userId)} : ${user.sniper.max_holders}`, callback_data: "sniper_holdersMax" },
             ],
             [
-                { text: `${await t('Min Volume', userId)} : $${user.sniper.min_vol}K`, callback_data: "sniper_volumeMin" },
-                { text: `${await t('Max Volume', userId)} : $${user.sniper.max_vol}K`, callback_data: "sniper_volumeMax" },
+                { text: `${await t('sniper.minVolume', userId)} : $${user.sniper.min_vol}K`, callback_data: "sniper_volumeMin" },
+                { text: `${await t('sniper.maxVolume', userId)} : $${user.sniper.max_vol}K`, callback_data: "sniper_volumeMax" },
             ],
             [
-                { text: `${await t('Min Liquidity', userId)} : $${user.sniper.min_liq}K`, callback_data: "sniper_liquidityMin" },
-                { text: `${await t('Max Liquidity', userId)} : $${user.sniper.max_liq}K`, callback_data: "sniper_liquidityMax" },
+                { text: `${await t('sniper.minLiquidity', userId)} : $${user.sniper.min_liq}K`, callback_data: "sniper_liquidityMin" },
+                { text: `${await t('sniper.maxLiquidity', userId)} : $${user.sniper.max_liq}K`, callback_data: "sniper_liquidityMax" },
             ],
             [
-                { text: `${await t('Min TXNS', userId)} : ${user.sniper.TXNS_MIN}`, callback_data: "sniper_TxnMin" },
-                { text: `${await t('Max TXNS', userId)} : ${user.sniper.TXNS_MAX}`, callback_data: "sniper_TxnMax" },
+                { text: `${await t('sniper.minTXNS', userId)} : ${user.sniper.TXNS_MIN}`, callback_data: "sniper_TxnMin" },
+                { text: `${await t('sniper.maxTXNS', userId)} : ${user.sniper.TXNS_MAX}`, callback_data: "sniper_TxnMax" },
             ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
@@ -135,11 +129,11 @@ export const getSniper = async (
         : [
             [
                 {
-                    text: user.sniper.is_snipping ? `🛑 ${await t('Stop Snipping', userId)}` : `🎯 ${await t('Start Snipping', userId)}`,
+                    text: user.sniper.is_snipping ? `🛑 ${await t('sniper.stopSnipping', userId)}` : `🎯 ${await t('sniper.startSnipping', userId)}`,
                     callback_data: "is_snipping",
                 },
                 {
-                    text: `🌍 Token Detection`,
+                    text: await t('sniper.tokenDetection', userId),
                     callback_data: "detection",
                 }
             ],
@@ -148,31 +142,31 @@ export const getSniper = async (
                     text: user.sniper.mev ? `🟢 ${await t('settings.mev', userId)}` : `🔴 ${await t('settings.mev', userId)}`,
                     callback_data: "sniper_mev",
                 },
-                { text: `${await t('Slippage', userId)} : ${user.sniper.slippage}%`, callback_data: "sniper_slippage" },
+                { text: `${await t('sniper.slippage', userId)} : ${user.sniper.slippage}%`, callback_data: "sniper_slippage" },
             ],
             [
-                { text: `${await t('Buy', userId)} : ${user.sniper.buy_amount} SOL`, callback_data: "sniper_buyAmount" },
-                { text: `${await t('Buy Limit', userId)} : ${user.sniper.buy_limit}`, callback_data: "sniper_buyLimit" },
+                { text: `${await t('sniper.buy', userId)} : ${user.sniper.buy_amount} SOL`, callback_data: "sniper_buyAmount" },
+                { text: `${await t('sniper.buyLimit', userId)} : ${user.sniper.buy_limit}`, callback_data: "sniper_buyLimit" },
             ],
             [
-                { text: `${await t('Take Profit', userId)} : ${user.sniper.take_profit} %`, callback_data: "sniper_takeProfit" },
-                { text: `${await t('Stop Loss', userId)} : ${user.sniper.stop_loss} %`, callback_data: "sniper_stopLoss" },
+                { text: `${await t('sniper.takeProfit', userId)} : ${user.sniper.take_profit} %`, callback_data: "sniper_takeProfit" },
+                { text: `${await t('sniper.stopLoss', userId)} : ${user.sniper.stop_loss} %`, callback_data: "sniper_stopLoss" },
             ],
             [
-                { text: `${await t('Time limit', userId)} : ${user.sniper.time_limit} min`, callback_data: "sniper_timeLimit" },
+                { text: `${await t('sniper.timeLimit', userId)} : ${user.sniper.time_limit} min`, callback_data: "sniper_timeLimit" },
             ],
             [
                 {
-                    text: user.sniper.allowAutoBuy ? `🟢 ${await t('Allow Auto Buy', userId)}` : `🔴 ${await t('Allow Auto Buy', userId)}`,
+                    text: user.sniper.allowAutoBuy ? `🟢 ${await t('sniper.allowAutoBuy', userId)}` : `🔴 ${await t('sniper.allowAutoBuy', userId)}`,
                     callback_data: "allowAutoBuy",
                 },
                 {
-                    text: user.sniper.allowAutoSell ? `🟢 ${await t('Allow Auto Sell', userId)}` : `🔴 ${await t('Allow Auto Sell', userId)}`,
+                    text: user.sniper.allowAutoSell ? `🟢 ${await t('sniper.allowAutoSell', userId)}` : `🔴 ${await t('sniper.allowAutoSell', userId)}`,
                     callback_data: "allowAutoSell",
                 }
             ],
             [
-                { text: `${await t('⬇️Advance', userId)}`, callback_data: "advance_action" },
+                { text: await t('sniper.advanceDown', userId), callback_data: "advance_action" },
             ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },

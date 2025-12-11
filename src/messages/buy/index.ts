@@ -195,6 +195,9 @@ export const getBuy = async (userId: number, address: string) => {
             { text: `💰${await t('buy.buy', userId)} X SOL`, callback_data: "buy_x" },
         ],
         [
+            { text: await t('bundleWallets.bundleBuyButton', userId), callback_data: "bundle_buy" },
+        ],
+        [
             { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
             { text: `${await t('refresh', userId)}`, callback_data: "buy_refresh" },
         ],
@@ -403,7 +406,7 @@ export const sendBuyMessageWithAddress = async (
                 pnl: true
             });
             await user.save();
-            if (user.settings.auto_sell.enabled) {
+            if (user.settings.auto_sell.enabled || user.sniper.allowAutoSell) {
                 const existingOrder = await limitOrderData.findOne({
                     user_id: userId,
                     token_mint: tokenAddress,

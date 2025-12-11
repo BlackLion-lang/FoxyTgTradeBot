@@ -261,6 +261,9 @@ export const getSell = async (userId: number, address: string) => {
             { text: `💰${await t('sell.sell', userId)} X %`, callback_data: "sell_x" },
         ],
         [
+            { text: await t('bundleWallets.bundleSellButton', userId), callback_data: "bundle_sell" },
+        ],
+        [
             { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
             { text: `${await t('refresh', userId)}`, callback_data: "sell_refresh" },
         ],

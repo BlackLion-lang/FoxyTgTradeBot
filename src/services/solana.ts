@@ -1,7 +1,7 @@
 import { Keypair, LAMPORTS_PER_SOL, PublicKey, TransactionMessage, VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
 import { connection } from "../config/connection";
-import { getAssociatedTokenAddress } from "@solana/spl-token";
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, } from "../config/security";
 
 let sol_price = 0;
@@ -71,20 +71,107 @@ export async function getTokenBalance(
     tokenAddress: PublicKey,
 ) {
     try {
+        // Validate inputs
+        if (!publicKey || !tokenAddress) {
+            console.error(`❌ Invalid inputs: publicKey=${!!publicKey}, tokenAddress=${!!tokenAddress}`);
+            return 0;
+        }
+
+        console.log(`🔍 Checking token balance for ${tokenAddress.toBase58()} in wallet ${publicKey.toBase58()}`);
+
+        // Method 1: Try associated token account (standard way)
         const associatedTokenAccount = await getAssociatedTokenAddress(
             tokenAddress,
             publicKey,
         );
 
-        const tokenAmount = await connection.getTokenAccountBalance(
-            associatedTokenAccount,
-        );
-        const tokenBalance = tokenAmount.value.uiAmount;
-        const tokenDecimal = tokenAmount.value.decimals;
+        console.log(`🔍 Associated token account: ${associatedTokenAccount.toBase58()}`);
 
-        return tokenBalance || 0;
-    } catch (error) {
-        // console.log("error=>getBalance:", error);
+        // First check if the account exists
+        const accountInfo = await connection.getAccountInfo(associatedTokenAccount);
+        
+        if (accountInfo) {
+            console.log(`✅ Associated token account exists, fetching balance...`);
+
+            // Account exists, get the balance
+            const tokenAmount = await connection.getTokenAccountBalance(
+                associatedTokenAccount,
+            );
+            
+            const tokenBalance = tokenAmount.value.uiAmount;
+            const tokenDecimal = tokenAmount.value.decimals;
+            const rawAmount = tokenAmount.value.amount;
+
+            if (tokenBalance !== null && tokenBalance !== undefined) {
+                console.log(`✅ Token balance (associated account): ${tokenBalance} ${tokenAmount.value.uiAmountString || ''} (decimals: ${tokenDecimal}, raw: ${rawAmount})`);
+                return tokenBalance;
+            }
+
+            // If we have raw amount, try to calculate manually
+            if (rawAmount && tokenDecimal !== undefined) {
+                const calculatedBalance = Number(rawAmount) / Math.pow(10, tokenDecimal);
+                console.log(`📊 Calculated balance from raw amount: ${calculatedBalance}`);
+                return calculatedBalance;
+            }
+        } else {
+            console.log(`ℹ️ Associated token account doesn't exist, checking all token accounts...`);
+        }
+
+        // Method 2: Fallback - Check all token accounts for this wallet
+        console.log(`🔍 Searching all token accounts for wallet ${publicKey.toBase58()}...`);
+        
+        try {
+            // Try using getParsedTokenAccountsByOwner (available in web3.js)
+            const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
+                publicKey,
+                {
+                    mint: tokenAddress,
+                },
+            );
+
+            console.log(`📊 Found ${tokenAccounts.value.length} token account(s) for mint ${tokenAddress.toBase58()}`);
+
+            if (tokenAccounts.value.length > 0) {
+                // Sum up all balances from all token accounts
+                let totalBalance = 0;
+                for (const account of tokenAccounts.value) {
+                    const parsedInfo = account.account.data.parsed.info;
+                    const balance = parsedInfo.tokenAmount.uiAmount;
+                    const decimals = parsedInfo.tokenAmount.decimals;
+                    const rawAmount = parsedInfo.tokenAmount.amount;
+                    
+                    console.log(`  💰 Account ${account.pubkey.toBase58()}: balance=${balance}, decimals=${decimals}, raw=${rawAmount}`);
+                    
+                    if (balance !== null && balance !== undefined) {
+                        totalBalance += balance;
+                    } else if (rawAmount && decimals !== undefined) {
+                        // Calculate from raw amount if uiAmount is null
+                        const calculated = Number(rawAmount) / Math.pow(10, decimals);
+                        totalBalance += calculated;
+                    }
+                }
+                
+                if (totalBalance > 0) {
+                    console.log(`✅ Total token balance (from all accounts): ${totalBalance}`);
+                    return totalBalance;
+                }
+            }
+        } catch (fallbackError: any) {
+            console.log(`⚠️ Fallback method failed: ${fallbackError?.message || fallbackError}`);
+            // Continue to return 0 if fallback also fails
+        }
+
+        console.log(`ℹ️ No token balance found for ${tokenAddress.toBase58()} - returning 0`);
+        return 0;
+    } catch (error: any) {
+        // Log the actual error for debugging
+        const errorMessage = error?.message || String(error);
+        const errorCode = error?.code || 'UNKNOWN';
+        console.error(`❌ Error getting token balance for ${tokenAddress.toBase58()}:`, errorMessage);
+        console.error(`❌ Error code: ${errorCode}`);
+        if (error?.stack) {
+            console.error(`❌ Error stack:`, error?.stack);
+        }
         return 0;
     }
 }

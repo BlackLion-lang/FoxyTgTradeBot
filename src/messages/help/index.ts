@@ -37,24 +37,20 @@ export const getHelp = async (
                     text: `${await t('help.contactSupport', userId)}`,
                     url: "https://the-cryptofox-learning.com/",
                 },
-               
+
             ],
             [
-                { 
-                    text: `${await t('help.documentation', userId)}`, 
-                    url: "https://the-cryptofox-learning.com/" 
+                {
+                    text: `${await t('help.documentation', userId)}`,
+                    url: "https://the-cryptofox-learning.com/"
                 },
             ],
-            // [
-            //     {
-            //         text: "🐦 Twitter Updates",
-            //         url: "https://t.me/eniy_trading_bot",
-            //     },
-            //     {
-            //         text: "📢 Announcements",
-            //         url: "https://t.me/eniy_trading_bot",
-            //     },
-            // ],
+            [
+                {
+                    text: `${await t('help.changelogs', userId)}`,
+                    url: "https://the-cryptofox-learning.com/_bot/wiki/changelog.php?token=F39kL1xQ7vP2sN8gR4tY0zC6wB5hJ3m",
+                },
+            ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" }
             ],
@@ -71,7 +67,7 @@ export const sendHelpMessage = async (
     messageId: number,
 ) => {
     try {
-        const { caption, reply_markup  } = await getHelp(userId);
+        const { caption, reply_markup } = await getHelp(userId);
         bot.sendMessage(chatId, caption, {
             parse_mode: "HTML",
             reply_markup,
@@ -119,7 +115,7 @@ export const editHelpMessage = async (
 ) => {
     try {
         const { caption, reply_markup } = await getHelp(userId);
-        
+
         // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {

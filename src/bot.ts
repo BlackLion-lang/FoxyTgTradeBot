@@ -54,12 +54,12 @@ import {
     sendBuyMessage,
     sendBuyMessageWithAddress,
 } from "./messages/buy";
-import {
-    editSniperSell,
-    getSniperSell,
-    sendSniperBuyWithAddress,
-    sendSniperSellMessage,
-} from "./messages/sniper/sniper_token";
+// import {
+//     editSniperSell,
+//     getSniperSell,
+//     sendSniperBuyWithAddress,
+//     sendSniperSellMessage,
+// } from "./messages/sniper/sniper_token";
 import {
     sendSellMessageWithAddress,
     sendSellMessage,
@@ -143,14 +143,18 @@ interface CurrentOpenedDictionary {
 
 export const userCurrentOpened: CurrentOpenedDictionary = {};
 
-const SUBSCRIPTION_REQUIRED_MESSAGE =
-    "❌ You need an active subscription to use this feature.\n\n💳 Press the *Subscribe* button in the main menu to activate your subscription.";
+// SUBSCRIPTION_REQUIRED_MESSAGE and SUBSCRIPTION_REQUIRED_MARKUP will be created dynamically with translations
+const getSubscriptionRequiredMessage = async (userId: number) => {
+    return `❌ ${await t('subscribe.subscriptionRequired', userId)}\n\n💳 ${await t('subscribe.pressSubscribe', userId)}`;
+};
 
-const SUBSCRIPTION_REQUIRED_MARKUP: TelegramBot.InlineKeyboardMarkup = {
-    inline_keyboard: [
-        [{ text: "💳 Subscribe", callback_data: "subscribe" }],
-        [{ text: "⬅️ Back to Menu", callback_data: "menu_back" }],
-    ],
+const getSubscriptionRequiredMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
+    return {
+        inline_keyboard: [
+            [{ text: await t('subscribe.subscribeButton', userId), callback_data: "subscribe" }],
+            [{ text: await t('subscribe.backToMenu', userId), callback_data: "menu_back" }],
+        ],
+    };
 };
 
 const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
@@ -1635,7 +1639,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 return;
             }
 
-            await sendSniperBuyWithAddress(
+            await sendBuyMessageWithAddress(
                 bot,
                 chatId,
                 userId,
@@ -1644,7 +1648,12 @@ bot.on("callback_query", async (callbackQuery) => {
                 sniperBuyAmount,
             ); 
 
-            await sendSniperSellMessage(bot, chatId, userId, messageId, targetTokenAddress)
+            // const { caption, markup } = await getSell(userId, targetTokenAddress);
+            // bot.sendMessage(chatId, caption, {
+            //     parse_mode: "HTML",
+            //     reply_markup: markup,
+            // });
+
             return;
         }
 
@@ -1863,15 +1872,15 @@ bot.on("callback_query", async (callbackQuery) => {
             return;
         }
 
-        // Bundle Buy handlers
-        if ((sel_action ?? "").startsWith("bundle_buy_")) {
-            await bundleBuySell.handleBundleBuy(User, callbackQuery, tokenAddress, sel_action || "");
+        // Bundle Buy handler
+        if (sel_action === "bundle_buy") {
+            await bundleBuySell.handleBundleBuy(User, callbackQuery, tokenAddress);
             return;
         }
 
-        // Bundle Sell handlers
-        if ((sel_action ?? "").startsWith("bundle_sell_")) {
-            await bundleBuySell.handleBundleSell(User, callbackQuery, tokenAddress, sel_action || "");
+        // Bundle Sell handler
+        if (sel_action === "bundle_sell") {
+            await bundleBuySell.handleBundleSell(User, callbackQuery, tokenAddress);
             return;
         }
 
@@ -3448,7 +3457,7 @@ ${await t('privateKey.p7', userId)}`,
             await user.save();
             await editSniperMessage(bot, chatId, userId, messageId);
             if (user.sniper.is_snipping) {
-                const message = bot.sendMessage(chatId, `${await t('🚀 SNIPER ACTIVE — ready to snipe new listings. Stay sharp!', userId)}`);
+                const message = bot.sendMessage(chatId, await t('sniper.active', userId));
                 setTimeout(async () => {
                     await bot.deleteMessage(chatId, (await message).message_id).catch(() => { });
                 }, 10000);
@@ -3456,7 +3465,7 @@ ${await t('privateKey.p7', userId)}`,
                 // Stop the sniper when user disables it
                 const { stopSniper } = await import("./services/sniper");
                 stopSniper(userId);
-                const message1 = bot.sendMessage(chatId, `${await t('🛑 Sniper stopped — monitoring paused', userId)}`);
+                const message1 = bot.sendMessage(chatId, await t('sniper.stopped', userId));
                 setTimeout(async () => {
                     await bot.deleteMessage(chatId, (await message1).message_id).catch(() => { });
                 }, 10000);
@@ -4574,7 +4583,7 @@ async function setBotCommands() {
         { command: "/settings", description: `${await t('commands.setting')}` },
         { command: "/wallets", description: `${await t('commands.wallet')}` },
         { command: "/positions", description: `${await t('commands.position')}` },
-        { command: "/sniper", description: "Launch the Foxy sniper." },
+        { command: "/sniper", description: `${await t('commands.sniper')}` },
         // { command: "/copytrade", description: "Foxy Copy-Trading." },
         // { command: "/orders", description: "View limit orders." },
     ])
@@ -4588,29 +4597,30 @@ async function setBotCommands() {
 
 setBotCommands();
 
-// Register fund bundle wallet message handler and bundle buy/sell input handler
+// Register fund bundle wallet message handler
 bot.on('message', async (msg) => {
     if (msg.text && msg.from?.id) {
-        const userId = msg.from.id;
-        
-        // Check if it's a bundle buy/sell input
-        const bundleState = bundleBuySell.bundleBuySellState?.[userId];
-        if (bundleState) {
-            await bundleBuySell.handleBundleBuySellInput(User, userId, msg.text);
-            return;
-        }
-        
-        // Otherwise handle fund wallet reply
         await fundBundleWalletModule.handleUserReply(msg);
     }
 });
 
 // Auto sell manin
 
-export async function checkAndAutoSell() {
-    console.log("🔍 Running auto-sell check...");
+// Flag to prevent overlapping executions
+let isCheckingAutoSell = false;
 
-    const orders = await limitOrderData.find({ status: "Pending" });
+export async function checkAndAutoSell() {
+    // Prevent overlapping executions
+    if (isCheckingAutoSell) {
+        console.log("⏳ Auto-sell check already in progress, skipping...");
+        return;
+    }
+    
+    isCheckingAutoSell = true;
+    try {
+        console.log("🔍 Running auto-sell check...");
+
+        const orders = await limitOrderData.find({ status: "Pending" });
 
     for (const order of orders) {
         try {
@@ -4746,6 +4756,10 @@ ${await t('messages.autoSell8', order.user_id)}`
             console.error("⚠️ Error in auto-sell loop:", err);
         }
     }
+    } finally {
+        // Always reset the flag, even if there was an error
+        isCheckingAutoSell = false;
+    }
 }
 
 const updateSolanaPrice = async () => {
@@ -4765,9 +4779,15 @@ const main = async () => {
         updateSolanaPrice();
         // updatedTokenPrice();
     }, 18000);
+    
+    // Auto-sell check interval (in milliseconds)
+    // Lower values = more frequent checks, but may hit API rate limits
+    // Recommended: 5000-10000ms (5-10 seconds) for balance between responsiveness and API limits
+    const AUTO_SELL_CHECK_INTERVAL = 5000; // 5 seconds - checks all the time, more frequently
+    
     setInterval(() => {
         checkAndAutoSell();
-    }, 10000);
+    }, AUTO_SELL_CHECK_INTERVAL);
 
     // Run the sniper script continuously - but only start new ones, existing ones are managed
     setInterval(async () => {

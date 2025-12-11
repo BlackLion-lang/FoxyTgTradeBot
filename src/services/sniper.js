@@ -10,6 +10,7 @@ import dotenv from 'dotenv';
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "../config/security";
 console.log('Pump Sniper service starting...');
 import AxiomService from './axiomService';
+import PumpFunService from './pumpFunService';
 import { sendMessageToUser } from "../bot"; // Import the sendMessageToUser function
 import {
   getBalance,
@@ -39,11 +40,22 @@ const offlineSdk = new PumpSdk();
 // Sniper manager to track running instances
 const activeSnipers = new Map(); // user_id -> { ws, intervals, axiom, cleanup }
 
-// Shared AxiomService instance
+// Shared AxiomService instance (optional fallback)
 let sharedAxiomService = null;
 let axiomRefreshInterval = null;
 
-// Initialize shared AxiomService
+// Shared PumpFunService instance (no cookies required)
+let sharedPumpFunService = null;
+
+// Initialize shared PumpFunService (preferred - no cookies)
+const initSharedPumpFunService = () => {
+  if (!sharedPumpFunService) {
+    sharedPumpFunService = new PumpFunService();
+  }
+  return sharedPumpFunService;
+};
+
+// Initialize shared AxiomService (fallback only)
 const initSharedAxiomService = async () => {
   if (!sharedAxiomService) {
     sharedAxiomService = new AxiomService();
@@ -423,78 +435,176 @@ export async function runSniper(user_id) {
     }
   }
 
-  const initAxiomService = async () => {
-    // Use shared AxiomService instance
-    const axiom = await initSharedAxiomService();
-    
-    // Check if user still wants sniper to run before each pulse
-    const pulseInterval = setInterval(async () => {
-      // Check if sniper should still run
-      const currentUser = await User.findOne({ userId: user_id });
-      if (!currentUser || !currentUser.sniper.is_snipping) {
-        console.log(`🛑 User ${user_id} disabled sniper, stopping...`);
+  // Token detection using WebSocket events (no cookies required)
+  const pumpFunService = initSharedPumpFunService();
+  const detectedTokens = new Map(); // tokenAddress -> { data, timestamp }
+  const TOKEN_BUFFER_TIME = 10000; // Wait 10 seconds after token creation to fetch details
+  
+  // Process detected tokens periodically
+  const processDetectedTokensInterval = setInterval(async () => {
+    const currentUser = await User.findOne({ userId: user_id });
+    if (!currentUser || !currentUser.sniper.is_snipping) {
+      stopSniper(user_id);
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      const tokensToProcess = [];
+
+      // Collect tokens that are ready to process (older than buffer time)
+      for (const [tokenAddress, tokenInfo] of detectedTokens.entries()) {
+        if (now - tokenInfo.timestamp >= TOKEN_BUFFER_TIME) {
+          tokensToProcess.push(tokenAddress);
+        }
+      }
+
+      if (tokensToProcess.length === 0) {
+        return;
+      }
+
+      console.log(`[${new Date().toLocaleString()}] 🔍 Processing ${tokensToProcess.length} detected tokens:`, tokensToProcess);
+
+      // Fetch token details from pump.fun API
+      const tokenDataList = await pumpFunService.getTokensData(tokensToProcess);
+      console.log(`[${new Date().toLocaleString()}] 📊 Fetched ${tokenDataList.length} token details from API`);
+      
+      // Log token data for debugging
+      if (tokenDataList.length > 0) {
+        tokenDataList.forEach((token, idx) => {
+          console.log(`[${new Date().toLocaleString()}] 📋 Token ${idx + 1}: ${token.tokenAddress}`);
+          console.log(`  - Name: ${token.name || 'N/A'}, Symbol: ${token.symbol || 'N/A'}`);
+          console.log(`  - MarketCap: ${token.marketCap || 0}, Liquidity: ${token.liquidity || 0}`);
+          console.log(`  - Holders: ${token.holders || 0}, Volume24h: ${token.volume24h || 0}`);
+          console.log(`  - BondingCurve: ${token.bondingCurve || 0}%, Age: ${token.createdAt ? Math.floor((Date.now() - token.createdAt) / 1000) : 'N/A'}s`);
+          console.log(`  - Social: Twitter=${!!token.twitter}, Telegram=${!!token.telegram}, Website=${!!token.website}`);
+        });
+      }
+
+      if (tokenDataList.length === 0) {
+        console.log(`[${new Date().toLocaleString()}] ⚠️ No token data retrieved from API for tokens:`, tokensToProcess);
+        console.log(`[${new Date().toLocaleString()}] 💡 This might mean the tokens are too new or the API is unavailable`);
+        // Still save the token addresses even if API failed
+        const freshUser = await User.findOne({ userId: user_id });
+        if (freshUser && freshUser.sniper.is_snipping) {
+          const existingTokenlist = freshUser.sniper.tokenlist || [];
+          const combinedTokenlist = [...new Set([...existingTokenlist, ...tokensToProcess])].slice(-5);
+          freshUser.sniper.tokenlist = combinedTokenlist;
+          await freshUser.save();
+          console.log(`[${new Date().toLocaleString()}] 💾 Saved ${combinedTokenlist.length} token addresses to database (without API data)`);
+        }
+        // Remove processed tokens
+        for (const tokenAddress of tokensToProcess) {
+          detectedTokens.delete(tokenAddress);
+        }
+        return;
+      }
+
+      // Filter tokens based on user criteria (make social filters optional for new tokens)
+      const filteredTokens = pumpFunService.filterTokens(tokenDataList, {
+        volume: { min: VOLUME_MIN, max: VOLUME_MAX },
+        age: { min: AGE_MIN, max: AGE_MAX },
+        holders: { min: HOLDER_MIN, max: HOLDER_MAX },
+        liquidity: { min: LIQ_MIN, max: LIQ_MAX },
+        marketCap: { min: MC_MIN, max: MC_MAX },
+        bondingCurve: { min: BONDING_CURVE_MIN, max: BONDING_CURVE_MAX },
+        numBuys: { min: 0, max: NUM_BUYS_MAX },
+        twitter: { min: null, max: 1 },
+        // Make social filters optional - new tokens might not have social links yet
+        telegram: false, // Changed to false - don't require telegram
+        atLeastOneSocial: false, // Changed to false - don't require social links
+      });
+
+      console.log(`[${new Date().toLocaleString()}] ✅ Filtered ${filteredTokens.length} tokens matching criteria (out of ${tokenDataList.length} total)`);
+      
+      // Log why tokens were filtered out (for debugging)
+      if (filteredTokens.length < tokenDataList.length) {
+        const filteredOut = tokenDataList.filter(t => !filteredTokens.includes(t));
+        console.log(`[${new Date().toLocaleString()}] ⚠️ ${filteredOut.length} tokens filtered out. Reasons:`);
+        filteredOut.forEach(token => {
+          const reasons = [];
+          if (VOLUME_MIN && (token.volume24h || 0) < VOLUME_MIN) reasons.push(`volume < ${VOLUME_MIN}`);
+          if (VOLUME_MAX && (token.volume24h || 0) > VOLUME_MAX) reasons.push(`volume > ${VOLUME_MAX}`);
+          if (LIQ_MIN && (token.liquidity || 0) < LIQ_MIN) reasons.push(`liquidity < ${LIQ_MIN}`);
+          if (LIQ_MAX && (token.liquidity || 0) > LIQ_MAX) reasons.push(`liquidity > ${LIQ_MAX}`);
+          if (MC_MIN && (token.marketCap || 0) < MC_MIN) reasons.push(`marketCap < ${MC_MIN}`);
+          if (MC_MAX && (token.marketCap || 0) > MC_MAX) reasons.push(`marketCap > ${MC_MAX}`);
+          if (AGE_MIN && token.createdAt && (Date.now() - token.createdAt) / 1000 < AGE_MIN) reasons.push(`age < ${AGE_MIN}s`);
+          if (AGE_MAX && token.createdAt && (Date.now() - token.createdAt) / 1000 > AGE_MAX) reasons.push(`age > ${AGE_MAX}s`);
+          if (HOLDER_MIN && (token.holders || 0) < HOLDER_MIN) reasons.push(`holders < ${HOLDER_MIN}`);
+          if (HOLDER_MAX && (token.holders || 0) > HOLDER_MAX) reasons.push(`holders > ${HOLDER_MAX}`);
+          if (BONDING_CURVE_MIN && (token.bondingCurve || 0) < BONDING_CURVE_MIN) reasons.push(`bondingCurve < ${BONDING_CURVE_MIN}%`);
+          if (BONDING_CURVE_MAX && (token.bondingCurve || 0) > BONDING_CURVE_MAX) reasons.push(`bondingCurve > ${BONDING_CURVE_MAX}%`);
+          console.log(`  - ${token.tokenAddress}: ${reasons.join(', ') || 'unknown reason'}`);
+        });
+      }
+
+      // Convert to Axiom-like format for compatibility
+      const data = pumpFunService.toAxiomFormat(filteredTokens);
+
+      // Refresh user data
+      const freshUser = await User.findOne({ userId: user_id });
+      if (!freshUser || !freshUser.sniper.is_snipping) {
         stopSniper(user_id);
         return;
       }
 
-      try {
-        const data = await axiom.pulse({
-          volume: { min: VOLUME_MIN, max: VOLUME_MAX },
-          age: { min: AGE_MIN, max: AGE_MAX },
-          holders: { min: HOLDER_MIN, max: HOLDER_MAX },
-          liquidity: { min: LIQ_MIN, max: LIQ_MAX },
-          marketCap: { min: MC_MIN, max: MC_MAX },
-          txns: { min: TXNS_MIN, max: TXNS_MAX },
-          bondingCurve: { min: BONDING_CURVE_MIN, max: BONDING_CURVE_MAX },
-          numBuys: { min: 0, max: NUM_BUYS_MAX },
-          twitter: { min: null, max: 1 },
-        });
-
-        if (data.length > 0) {
-          const now = Date.now();
-          const token = data.pop();
-          console.log("data length", data.length);
-          
-          // Refresh user data
-          const freshUser = await User.findOne({ userId: user_id });
-          if (!freshUser || !freshUser.sniper.is_snipping) {
-            stopSniper(user_id);
+      // Update tokenlist with ALL detected tokens (even if they don't match filters)
+      // This allows users to see what tokens were detected
+      const existingTokenlist = freshUser.sniper.tokenlist || [];
+      const allDetectedAddresses = tokenDataList.map(t => t.tokenAddress || t.address || t.id).filter(Boolean);
+      const filteredAddresses = data.map(t => t.tokenAddress || t.address || t.id).filter(Boolean);
+      
+      // Combine existing and all detected tokens, remove duplicates, keep last 5
+      const combinedTokenlist = [...new Set([...existingTokenlist, ...allDetectedAddresses])].slice(-5);
+      
+      freshUser.sniper.tokenlist = combinedTokenlist;
+      await freshUser.save();
+      
+      console.log(`[${new Date().toLocaleString()}] 💾 Saved ${combinedTokenlist.length} tokens to database (${allDetectedAddresses.length} detected, ${filteredAddresses.length} match filters)`);
+      
+      // Only auto-buy tokens that match all filters
+      if (data.length > 0) {
+        const token = data[data.length - 1]; // Get last token
+        console.log(`[${new Date().toLocaleString()}] ✅ Detected ${data.length} tokens matching criteria`);
+        
+        const freshActiveWallet = freshUser.wallets.find(w => w.is_active_wallet);
+        const currentBuyCnt = freshActiveWallet?.positions?.length || 0;
+        
+        if (currentBuyCnt >= BUY_LIMIT) {
+          console.log(`⚠️ Buy limit reached (${currentBuyCnt}/${BUY_LIMIT})`);
+          return;
+        }
+        
+        console.log('User.sniper function', freshUser.sniper.allowAutoBuy);
+        if (freshUser.sniper.allowAutoBuy == true) {
+          const freshBalance = await getBalance(new PublicKey(freshActiveWallet.publicKey));
+          if (freshBalance / LAMPORTS_PER_SOL > BUY_AMOUNT) {
+            buy(token.tokenAddress);
+          } else {
+            console.log("Not enough Balance");
+            await sendMessageToUser(user_id, `⚠️ Insufficient SOL balance to buy tokens. Current balance: ${(freshBalance / LAMPORTS_PER_SOL).toFixed(2)} SOL`, { parse_mode: "Markdown" });
             return;
           }
-          
-          const freshActiveWallet = freshUser.wallets.find(w => w.is_active_wallet);
-          const currentBuyCnt = freshActiveWallet?.positions?.length || 0;
-          
-          if (currentBuyCnt >= BUY_LIMIT) return;
-          
-          console.log('User.sniper function', freshUser.sniper.allowAutoBuy);
-          if (freshUser.sniper.allowAutoBuy == true) {
-            const freshBalance = await getBalance(new PublicKey(freshActiveWallet.publicKey));
-            if (freshBalance / LAMPORTS_PER_SOL > BUY_AMOUNT) {
-              buy(token.tokenAddress);
-            } else {
-              console.log("Not enough Balance");
-              await sendMessageToUser(user_id, `⚠️ Insufficient SOL balance to buy tokens. Current balance: ${(freshBalance / LAMPORTS_PER_SOL).toFixed(2)} SOL`, { parse_mode: "Markdown" });
-              return;
-            }
-          }
-
-          const tokenlist = data.map(t => t.tokenAddress).slice(-5);
-          freshUser.sniper.tokenlist = tokenlist;
-          await freshUser.save();
-          const msg = `Detected ${data.length} tokens matching criteria: https://pump.fun/\n\n` + tokenlist.join('\n');
-          console.log("token list", msg);
         }
-      } catch (error) {
-        console.error(`❌ Pulse error for user ${user_id}:`, error);
-        // Don't refresh token on every error, let the shared refresh handle it
+
+        const msg = `Detected ${data.length} tokens matching criteria: https://pump.fun/\n\n` + filteredAddresses.join('\n');
+        console.log("token list", msg);
+      } else {
+        console.log(`[${new Date().toLocaleString()}] ℹ️ No tokens matched all filters, but ${allDetectedAddresses.length} tokens were detected and saved to list`);
       }
-    }, 40000);
-    
-    intervals.push(pulseInterval);
-  }
+
+      // Remove processed tokens from buffer
+      for (const tokenAddress of tokensToProcess) {
+        detectedTokens.delete(tokenAddress);
+      }
+    } catch (error) {
+      console.error(`[${new Date().toLocaleString()}] ❌ Token processing error for user ${user_id}:`, error);
+      console.error('Error stack:', error.stack);
+    }
+  }, 15000); // Check every 15 seconds
   
-  initAxiomService();
+  intervals.push(processDetectedTokensInterval);
 
   ws.on('open', async function open() {
     console.log(`WebSocket connection established for user: ${user_id}`);
@@ -567,6 +677,12 @@ export async function runSniper(user_id) {
     const txData = JSON.parse(data);
     if (txData && txData.mint) {
       if (txData.txType == "create") {
+        // Store new token for processing (no cookies required!)
+        detectedTokens.set(txData.mint, {
+          data: txData,
+          timestamp: Date.now(),
+        });
+        console.log(`[${new Date().toLocaleString()}] 🆕 New token detected: ${txData.mint}`);
         // if (!CHECK_NAME || txData.mint.endsWith("pump"))
         // buy(txData.mint);
       } else if (txData.txType == "buy" || txData.txType == "sell") {

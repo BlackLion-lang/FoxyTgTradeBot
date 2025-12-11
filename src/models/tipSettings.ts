@@ -9,6 +9,10 @@ const tippingSettingsSchema = new mongoose.Schema({
   feePercentage: { type: Number, default: 1.5 },
   wallets: { type: Number, default: 5 },
   referralSettings: { type: Number, default: 10},
+  subscriptionPriceWeek: { type: Number, default: 0.3 }, // Subscription price for 1 week in SOL
+  subscriptionPriceMonth: { type: Number, default: 0.5 }, // Subscription price for 1 month in SOL
+  subscriptionPriceYear: { type: Number, default: 5 }, // Subscription price for 1 year in SOL
+  sniperSubscriptionRequired: { type: Boolean, default: true }, // Whether subscription is required for sniper access
   adminSolAddress: {
     type: {
       publicKey: { type: String, default: "" },

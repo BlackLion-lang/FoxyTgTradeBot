@@ -5,8 +5,9 @@ import bs58 from "bs58";
 import { connection } from "../config/connection";
 import { getBalance, getSolPrice, walletCreate, getSolanaPrice } from "../services/solana";
 import { getWalletMessage } from "../utils/config";
-import { getAdminPanelMarkup, getMenuMarkup } from "../utils/markup";
+import { getAdminPanelMarkup, getMenuMarkup, getSnippingSettingsMarkup } from "../utils/markup";
 import { WhiteListUser } from "../models/whitelist";
+import { SniperWhitelist } from "../models/sniperWhitelist";
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "../config/security";
 import { t } from "../locales";
 import { error } from "console";
@@ -266,6 +267,77 @@ export const editAdminPanelMessage = async (
     }
 };
 
+export const getSnippingSettingsMenu = async (userId: number) => {
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    const subscriptionStatus = settings.sniperSubscriptionRequired 
+        ? `🟢 ${await t('snippingSettings.subscriptionRequired', userId)}` 
+        : `🔴 ${await t('snippingSettings.subscriptionNotRequired', userId)}`;
+    
+    const caption = `<strong>🔫 ${await t('snippingSettings.title', userId)}</strong>\n\n` +
+        `<strong>${await t('snippingSettings.subscriptionRequirement', userId)}:</strong> ${subscriptionStatus}\n\n` +
+        `${await t('snippingSettings.manageDescription', userId)}`;
+    
+    return { caption, markup: await getSnippingSettingsMarkup(userId) };
+};
+
+export const sendSnippingSettingsMessage = async (
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+) => {
+    try {
+        const { caption, markup } = await getSnippingSettingsMenu(userId);
+        
+        await bot.sendMessage(chatId, caption, {
+            parse_mode: "HTML",
+            reply_markup: markup,
+        });
+    } catch (error) {
+        console.error("Error sending snipping settings message:", error);
+    }
+};
+
+export const editSnippingSettingsMessage = async (
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    messageId?: number,
+) => {
+    try {
+        const { caption, markup } = await getSnippingSettingsMenu(userId);
+
+        // Try to edit as text message first
+        try {
+            await bot.editMessageText(caption, {
+                chat_id: chatId,
+                parse_mode: "HTML",
+                message_id: messageId,
+                disable_web_page_preview: true,
+                reply_markup: markup,
+            });
+        } catch (textError: any) {
+            // If it fails because there's no text to edit, try editing as caption (for photo messages)
+            if (textError.message && textError.message.includes('there is no text in the message to edit')) {
+                await bot.editMessageCaption(caption, {
+                    chat_id: chatId,
+                    parse_mode: "HTML",
+                    message_id: messageId,
+                    reply_markup: markup,
+                });
+            } else {
+                throw textError;
+            }
+        }
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error.message && error.message.includes('message is not modified')) {
+            console.log('Snipping settings message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing snipping settings message:', error);
+    }
+};
+
 export const sendWelcomeMessage = async (
     bot: TelegramBot,
     chatId: number,
@@ -353,6 +425,76 @@ export const sendAddUserMessage = async (
             }
         } catch (err) {
             console.error("Error adding user to whitelist:", err);
+        }
+    }
+};
+
+// Helper function to resolve username or user ID to numeric user ID
+const resolveSniperUserId = async (input: string): Promise<number | null> => {
+    // Check if input is numeric (user ID)
+    const userIdNum = parseInt(input);
+    if (!isNaN(userIdNum)) {
+        return userIdNum;
+    }
+
+    // If not numeric, treat as username (with or without @)
+    const username = input.startsWith('@') ? input.slice(1) : input;
+    const user = await User.findOne({ username: username });
+    if (user && user.userId) {
+        return user.userId;
+    }
+
+    return null;
+};
+
+export const sendAddSniperUserMessage = async (
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    inputUserId: string,
+    messageId?: number,
+) => {
+    console.log('debug inputUserId (sniper)', inputUserId, 'userId', userId, 'chatId', chatId);
+    if (inputUserId !== null && inputUserId !== undefined) {
+        try {
+            const resolvedUserId = await resolveSniperUserId(inputUserId);
+            
+            if (resolvedUserId === null) {
+                const error = await bot.sendMessage(chatId, `${await t('errors.userNotFound', userId)}`);
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, error.message_id).catch(() => { });
+                }, 5000);
+                return;
+            }
+
+            // Check if user is already whitelisted
+            let existing = await SniperWhitelist.findOne({ userId: resolvedUserId });
+
+            if (!existing) {
+                // Get username from User model
+                const user = await User.findOne({ userId: resolvedUserId });
+                const username = user?.username || "";
+
+                const newSniperWhitelistUser = new SniperWhitelist();
+                newSniperWhitelistUser.userId = resolvedUserId;
+                newSniperWhitelistUser.username = username;
+                await newSniperWhitelistUser.save();
+                const sent = await bot.sendMessage(chatId, `${await t('messages.sniperUseradd', userId)}`);
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, sent.message_id).catch(() => { });
+                }, 5000);
+            } else {
+                const error = await bot.sendMessage(chatId, `${await t('errors.alreadySniperWhitelist', userId)}`);
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, error.message_id).catch(() => { });
+                }, 5000);
+            }
+        } catch (err) {
+            console.error("Error adding user to sniper whitelist:", err);
+            const error = await bot.sendMessage(chatId, `${await t('errors.removederror', userId)}`);
+            setTimeout(() => {
+                bot.deleteMessage(chatId, error.message_id).catch(() => { });
+            }, 5000);
         }
     }
     // try {

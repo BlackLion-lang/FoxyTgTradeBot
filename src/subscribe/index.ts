@@ -6,25 +6,34 @@ import { decryptSecretKey } from "../config/security";
 import { SubscribeModel } from "../models/subscribe";
 import { User } from "../models/user";
 import { TippingSettings } from "../models/tipSettings";
+import { t } from "../locales";
 
-type PlanKey = "week" | "month" | "lifetime";
+type PlanKey = "week" | "month" | "year";
 
-const SUBSCRIPTION_OPTIONS: Record<PlanKey, { priceSol: number; label: string; durationMs: number | null }> = {
-    week: {
-        priceSol: 0.3,
-        label: "📅 1 Week (0.3 SOL)",
-        durationMs: 7 * 24 * 60 * 60 * 1000,
-    },
-    month: {
-        priceSol: 0.5,
-        label: "⏱️ 1 Month (0.5 SOL)",
-        durationMs: 30 * 24 * 60 * 60 * 1000,
-    },
-    lifetime: {
-        priceSol: 5,
-        label: "♾️ Year (5 SOL)",
-        durationMs: null,
-    },
+const getSubscriptionOptions = async (): Promise<Record<PlanKey, { priceSol: number; label: string; durationMs: number | null }>> => {
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    
+    const weekPrice = settings.subscriptionPriceWeek ?? 0.3;
+    const monthPrice = settings.subscriptionPriceMonth ?? 0.5;
+    const yearPrice = settings.subscriptionPriceYear ?? 5;
+
+    return {
+        week: {
+            priceSol: weekPrice,
+            label: `📅 1 Week (${weekPrice} SOL)`,
+            durationMs: 7 * 24 * 60 * 60 * 1000,
+        },
+        month: {
+            priceSol: monthPrice,
+            label: `⏱️ 1 Month (${monthPrice} SOL)`,
+            durationMs: 30 * 24 * 60 * 60 * 1000,
+        },
+        year: {
+            priceSol: yearPrice,
+            label: `📅 1 Year (${yearPrice} SOL)`,
+            durationMs: 365 * 24 * 60 * 60 * 1000,
+        },
+    };
 };
 
 interface SubscriptionActionParams {
@@ -67,10 +76,10 @@ export const handleSubscriptionAction = async ({
 };
 
 const isPlanKey = (value: string): value is PlanKey => {
-    return value === "week" || value === "month" || value === "lifetime";
+    return value === "week" || value === "month" || value === "year";
 };
 
-const sendSubscriptionOptions = async (bot: TelegramBot, chatId: number, telegramId: number) => {
+export const sendSubscriptionOptions = async (bot: TelegramBot, chatId: number, telegramId: number) => {
     const now = Date.now();
     const activeSubscription = await findActiveSubscription(telegramId, now);
 
@@ -80,30 +89,35 @@ const sendSubscriptionOptions = async (bot: TelegramBot, chatId: number, telegra
             const { days, hours, minutes } = formatRemaining(remaining);
             await bot.sendMessage(
                 chatId,
-                `✅ You are already subscribed!\n\n📦 Plan: *${formatPlanLabel(activeSubscription.plan)}*\n🗓️ Started: *${formatDate(activeSubscription.startDate)}*\n⏳ Expires in: *${days}d ${hours}h ${minutes}m*`,
+                `✅ ${await t('subscribe.alreadySubscribed', telegramId)}\n\n📦 ${await t('subscribe.plan', telegramId)}: *${await formatPlanLabel(activeSubscription.plan, telegramId)}*\n🗓️ ${await t('subscribe.started', telegramId)}: *${formatDate(activeSubscription.startDate)}*\n⏳ ${await t('subscribe.expiresIn', telegramId)}: *${days}d ${hours}h ${minutes}m*`,
                 { parse_mode: "Markdown" },
             );
         } else {
+            // Legacy subscription without expiration (should not happen for new subscriptions)
             await bot.sendMessage(
                 chatId,
-                `✅ You have a *Lifetime* subscription!\n\n🗓️ Started: *${formatDate(activeSubscription.startDate)}*\n♾️ Never expires!`,
+                `✅ ${await t('subscribe.alreadySubscribed', telegramId)}\n\n📦 ${await t('subscribe.plan', telegramId)}: *${await formatPlanLabel(activeSubscription.plan, telegramId)}*\n🗓️ ${await t('subscribe.started', telegramId)}: *${formatDate(activeSubscription.startDate)}*`,
                 { parse_mode: "Markdown" },
             );
         }
         return;
     }
 
-    await bot.sendMessage(
+    const subscriptionOptions = await getSubscriptionOptions();
+
+    const imagePath = "./src/assets/Subscribe.jpg";
+    await bot.sendPhoto(
         chatId,
-        `💸 *Subscription Options:*\n\nUnlock premium features:\n✨ Sniping\n\nChoose the plan that fits you best:`,
+        imagePath,
         {
+            caption: `💸 *${await t('subscribe.options', telegramId)}:*\n\n${await t('subscribe.unlockFeatures', telegramId)}\n✨ ${await t('subscribe.sniping', telegramId)}\n\n${await t('subscribe.choosePlan', telegramId)}`,
             parse_mode: "Markdown",
             reply_markup: {
                 inline_keyboard: [
-                    [{ text: SUBSCRIPTION_OPTIONS.week.label, callback_data: "subscribe_week" }],
-                    [{ text: SUBSCRIPTION_OPTIONS.month.label, callback_data: "subscribe_month" }],
-                    [{ text: SUBSCRIPTION_OPTIONS.lifetime.label, callback_data: "subscribe_lifetime" }],
-                    [{ text: "⬅️ Back to Menu", callback_data: "menu_back" }],
+                    [{ text: `${await formatPlanLabel('week', telegramId)} (${subscriptionOptions.week.priceSol} ${await t('bundleWallets.sol', telegramId)})`, callback_data: "subscribe_week" }],
+                    [{ text: `${await formatPlanLabel('month', telegramId)} (${subscriptionOptions.month.priceSol} ${await t('bundleWallets.sol', telegramId)})`, callback_data: "subscribe_month" }],
+                    [{ text: `${await formatPlanLabel('year', telegramId)} (${subscriptionOptions.year.priceSol} ${await t('bundleWallets.sol', telegramId)})`, callback_data: "subscribe_year" }],
+                    [{ text: await t('subscribe.backToMenu', telegramId), callback_data: "menu_back" }],
                 ],
             },
         },
@@ -131,23 +145,24 @@ const getSubscriptionWallet = (() => {
 const processSubscription = async (bot: TelegramBot, chatId: number, telegramId: number, planKey: PlanKey) => {
     const subscriptionWallet = await getSubscriptionWallet();
     if (!subscriptionWallet) {
-        await bot.sendMessage(chatId, "⚠️ Subscription wallet is not configured. Please contact support.");
+        await bot.sendMessage(chatId, `⚠️ ${await t('subscribe.walletNotConfigured', telegramId)}`);
         return;
     }
 
     const user = await User.findOne({ userId: telegramId });
     if (!user) {
-        await bot.sendMessage(chatId, "❌ Unable to find your user record. Please try /start again.");
+        await bot.sendMessage(chatId, `❌ ${await t('subscribe.userNotFound', telegramId)}`);
         return;
     }
 
     const wallet = user.wallets.find((w: any) => w.is_active_wallet);
     if (!wallet || !wallet.secretKey) {
-        await bot.sendMessage(chatId, "❌ Please add and activate a wallet before subscribing.");
+        await bot.sendMessage(chatId, `❌ ${await t('subscribe.addWalletFirst', telegramId)}`);
         return;
     }
 
-    const option = SUBSCRIPTION_OPTIONS[planKey];
+    const subscriptionOptions = await getSubscriptionOptions();
+    const option = subscriptionOptions[planKey];
     const lamports = Math.floor(option.priceSol * LAMPORTS_PER_SOL);
 
     try {
@@ -158,7 +173,7 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
         if (balance <= lamports) {
             await bot.sendMessage(
                 chatId,
-                `❌ Insufficient SOL.\nNeeded: ${option.priceSol} SOL\nAvailable: ${(balance / LAMPORTS_PER_SOL).toFixed(3)} SOL`,
+                `❌ ${await t('subscribe.insufficientSol', telegramId)}\n${await t('subscribe.needed', telegramId)}: ${option.priceSol} ${await t('bundleWallets.sol', telegramId)}\n${await t('subscribe.available', telegramId)}: ${(balance / LAMPORTS_PER_SOL).toFixed(3)} ${await t('bundleWallets.sol', telegramId)}`,
             );
             return;
         }
@@ -192,6 +207,7 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
         await SubscribeModel.updateMany({ telegramId, active: true }, { active: false });
         await SubscribeModel.create({
             telegramId,
+            username: user.username || "",
             plan: planKey,
             amountSol: option.priceSol,
             txid: signature,
@@ -200,10 +216,7 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
             active: true,
         });
 
-        const successMessage =
-            planKey === "lifetime"
-                ? `✅ *Lifetime Subscription Activated!*\n\n📦 Plan: *${option.label}*\n🧾 TXID: \`${signature}\`\n\nEnjoy unlimited premium access!`
-                : `✅ Subscription successful!\n\n📦 Plan: *${option.label}*\n🧾 TXID: \`${signature}\`\n⏳ Active until: *${formatDate(expiresAt)}*`;
+        const successMessage = `✅ ${await t('subscribe.subscriptionSuccessful', telegramId)}\n\n📦 ${await t('subscribe.plan', telegramId)}: *${await formatPlanLabel(planKey, telegramId)} (${option.priceSol} ${await t('bundleWallets.sol', telegramId)})*\n🧾 ${await t('subscribe.txid', telegramId)}: \`${signature}\`\n⏳ ${await t('subscribe.activeUntil', telegramId)}: *${formatDate(expiresAt)}*`;
 
         await bot.sendMessage(chatId, successMessage, {
             parse_mode: "Markdown",
@@ -211,7 +224,7 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
         });
     } catch (error) {
         console.error("Subscription failed:", error);
-        await bot.sendMessage(chatId, "❌ Subscription failed. Please try again later.");
+        await bot.sendMessage(chatId, `❌ ${await t('subscribe.subscriptionFailed', telegramId)}`);
     }
 };
 
@@ -236,14 +249,14 @@ const formatRemaining = (ms: number) => {
     return { days, hours, minutes };
 };
 
-const formatPlanLabel = (plan: string) => {
+const formatPlanLabel = async (plan: string, userId: number) => {
     switch (plan) {
         case "week":
-            return "📅 1 Week";
+            return await t('subscribe.week', userId);
         case "month":
-            return "⏱️ 1 Month";
-        case "lifetime":
-            return "♾️ Lifetime";
+            return await t('subscribe.month', userId);
+        case "year":
+            return await t('subscribe.year', userId);
         default:
             return plan;
     }

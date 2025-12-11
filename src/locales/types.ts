@@ -19,6 +19,7 @@ export interface Translations {
         setting: string;
         wallet: string;
         position: string;
+        sniper: string;
     };
 
     //Admin
@@ -30,6 +31,8 @@ export interface Translations {
         tipPercentage: string;
         adminWallet: string;
         solanaPrice: string;
+        addSniperUser: string;
+        removeSniperUser: string
         adminWalletName: string;
         wallet: string;
         p3: string;
@@ -209,6 +212,7 @@ export interface Translations {
         p4: string;
         p5: string;
         documentation: string;
+        changelogs: string;
         contactSupport: string;
     };
 
@@ -436,6 +440,100 @@ export interface Translations {
         p9: string;
         next: string;
         previous: string;
+    };
+
+    // Subscribe
+    subscribe: {
+        title: string;
+        options: string;
+        unlockFeatures: string;
+        sniping: string;
+        choosePlan: string;
+        alreadySubscribed: string;
+        plan: string;
+        started: string;
+        expiresIn: string;
+        subscriptionRequired: string;
+        pressSubscribe: string;
+        walletNotConfigured: string;
+        userNotFound: string;
+        addWalletFirst: string;
+        insufficientSol: string;
+        needed: string;
+        available: string;
+        subscriptionSuccessful: string;
+        txid: string;
+        activeUntil: string;
+        subscriptionFailed: string;
+        subscribeButton: string;
+        backToMenu: string;
+        week: string;
+        month: string;
+        year: string;
+    };
+
+    // Sniper
+    sniper: {
+        active: string;
+        stopped: string;
+        detectedActiveTokens: string;
+        noDetectedTokens: string;
+        panelDescription: string;
+        panelDescription2: string;
+        important: string;
+        importantNote: string;
+        tokenDetection: string;
+        startSnipping: string;
+        stopSnipping: string;
+        slippage: string;
+        buy: string;
+        buyLimit: string;
+        takeProfit: string;
+        stopLoss: string;
+        timeLimit: string;
+        allowAutoBuy: string;
+        allowAutoSell: string;
+        advance: string;
+        advanceDown: string;
+        enableTwitterChannel: string;
+        disableTwitterChannel: string;
+        bondingCurveMin: string;
+        bondingCurveMax: string;
+        minMC: string;
+        maxMC: string;
+        minTokenAge: string;
+        maxTokenAge: string;
+        minHolders: string;
+        maxHolders: string;
+        minVolume: string;
+        maxVolume: string;
+        minLiquidity: string;
+        maxLiquidity: string;
+        minTXNS: string;
+        maxTXNS: string;
+        sniperButton: string;
+        sniperButtonLocked: string;
+        tokenDetectionList: string;
+        tokenInfoInstruction: string;
+        unknownToken: string;
+        detailsUnavailable: string;
+        buyToken1: string;
+        buyToken2: string;
+        buyToken3: string;
+        buyToken4: string;
+        buyToken5: string;
+    };
+
+    // Snipping Settings (Admin)
+    snippingSettings: {
+        title: string;
+        subscriptionRequired: string;
+        subscriptionNotRequired: string;
+        week: string;
+        month: string;
+        year: string;
+        subscriptionRequirement: string;
+        manageDescription: string;
     }
 
     //Messages
@@ -446,6 +544,10 @@ export interface Translations {
         removed2: string;
         successLog: string;
         buy: string;
+        addRemoveSniperUser: string;
+        removedSniperUser1: string;
+        removedSniperUser2: string;
+        sniperUseradd: string;
         sell: string;
         buy_x: string;
         sell_x: string;
@@ -514,11 +616,14 @@ export interface Translations {
         invalidUser: string;
         invalidselection: string;
         invalidsecretkey: string;
+        alreadySniperWhitelist: string;
+        targetSniperUser: string;
         invalidCopy1: string;
         invalidCopy2: string;
         invalidFee: string;
         invalidSlippage: string;
         invalidyoung: string;
+        userNotFound: string;
         invalidBuy: string;
         invalidSell: string;
         invalidAutoWallet: string;
@@ -532,5 +637,203 @@ export interface Translations {
         walletLimit: string;
         invalidwallets: string;
         invalidsettings: string;
+    };
+
+    // Bundle Wallets
+    bundleWallets: {
+        // Menu
+        menuTitle: string;
+        menuDescription: string;
+        safeBundler: string;
+        maxWallets: string;
+        fasterExecution: string;
+        bestForOperations: string;
+        currentWallets: string;
+        chooseOption: string;
+        viewWallets: string;
+        createWallets: string;
+        fundWallets: string;
+        cleanFundBundles: string;
+        withdrawFromBundles: string;
+        resetBundledWallets: string;
+        backToBundleWallets: string;
+        
+        // View
+        bundleWalletsTitle: string;
+        noBundleWallets: string;
+        noBundleWalletsDesc: string;
+        totalWallets: string;
+        walletNumber: string;
+        address: string;
+        sol: string;
+        tokens: string;
+        noTokens: string;
+        errorLoading: string;
+        
+        // Create
+        createTitle: string;
+        howManyWallets: string;
+        maxWalletsNote: string;
+        invalidCount: string;
+        invalidCountDesc: string;
+        selectedWallets: string;
+        youSelectedCount: string;
+        pleaseSelectMaxOrFewer: string;
+        youSelectedForBundler: string;
+        creatingWallets: string;
+        congratulations: string;
+        walletsCreated: string;
+        savePrivateKeys: string;
+        invalidWalletCount: string;
+        pleaseEnterValidNumber: string;
+        
+        // Fund
+        fundTitle: string;
+        activeWallet: string;
+        balance: string;
+        bundles: string;
+        enterAmount: string;
+        fundingInProgress: string;
+        userNotFound: string;
+        activeWalletNotConfigured: string;
+        noBundleWalletsFound: string;
+        invalidAmount: string;
+        fundingAlreadyInProgress: string;
+        startingDistribution: string;
+        amount: string;
+        wallets: string;
+        status: string;
+        insufficientAmount: string;
+        provided: string;
+        required: string;
+        breakdown: string;
+        distribution: string;
+        feesReserves: string;
+        addMore: string;
+        insufficientBalance: string;
+        available: string;
+        pleaseAdd: string;
+        
+        // Clean Fund
+        cleanFundTitle: string;
+        cleanFundDesc: string;
+        mayTakeMoment: string;
+        cleanFundComplete: string;
+        tempWalletsCleaned: string;
+        
+        // Withdraw
+        withdrawTitle: string;
+        activeBalance: string;
+        totalWithdrawable: string;
+        fromWallets: string;
+        willWithdrawAll: string;
+        typeConfirm: string;
+        withdrawalCancelled: string;
+        withdrawingFunds: string;
+        processing: string;
+        processed: string;
+        totalWithdrawn: string;
+        withdrawalComplete: string;
+        successfullyWithdrew: string;
+        fundsInActiveWallet: string;
+        noWithdrawableFunds: string;
+        allWalletsInsufficient: string;
+        needRentExempt: string;
+        
+        // Reset
+        resetTitle: string;
+        resetWarning: string;
+        willDeleteAll: string;
+        cannotBeUndone: string;
+        savePrivateKeysIfNeeded: string;
+        typeReset: string;
+        resetCancelled: string;
+        resetComplete: string;
+        allWalletsDeleted: string;
+        noBundleWalletsToReset: string;
+        
+        // Buy/Sell
+        noBundleWalletsForBuy: string;
+        needCreateFirst: string;
+        goToCreate: string;
+        bundleBuyStarted: string;
+        token: string;
+        usingAllBalance: string;
+        walletsWithBalance: string;
+        bundleBuy: string;
+        success: string;
+        failed: string;
+        bundleBuyComplete: string;
+        successful: string;
+        totalBought: string;
+        successfulTransactions: string;
+        failedWallets: string;
+        insufficientBalanceForBuy: string;
+        needAtLeast: string;
+        bundleSellStarted: string;
+        selling: string;
+        percentOfBalance: string;
+        checkingBalances: string;
+        noTokenBalance: string;
+        noneHaveToken: string;
+        foundTokensIn: string;
+        bundleSell: string;
+        bundleSellComplete: string;
+        sold: string;
+        activeWalletNotConfiguredBuy: string;
+        
+        // Funding process messages
+        recoveryKeysTitle: string;
+        recoveryKeysCaption: string;
+        recoveryKeysWarning: string;
+        recoveryKeysDownload: string;
+        recoveryKeysRecover: string;
+        recoveryKeysStart: string;
+        criticalError: string;
+        failedToSendRecovery: string;
+        operationAborted: string;
+        checkInternetConnection: string;
+        cleanDistribution: string;
+        validated: string;
+        distributable: string;
+        creatingTempWallets: string;
+        phase: string;
+        fundingTemps: string;
+        tempWallets: string;
+        funded: string;
+        fundingFailed: string;
+        couldNotFundTempWallets: string;
+        phaseComplete: string;
+        tempsFunded: string;
+        breakingHeuristics: string;
+        heuristics: string;
+        fundingBundles: string;
+        allTempWalletsExhausted: string;
+        distributionIncomplete: string;
+        someBundlesNotFunded: string;
+        checkRecoveryKeys: string;
+        bundleNumber: string;
+        fundingComplete: string;
+        fundingSuccess: string;
+        perWallet: string;
+        accountsClosed: string;
+        recovered: string;
+        transactionExplorer: string;
+        tempFunding: string;
+        wsolOperations: string;
+        bundleDistribution: string;
+        accountClosure: string;
+        allTempAccountsClosed: string;
+        bundleWalletsReady: string;
+        viewOnSolscan: string;
+        distributingToBundles: string;
+        confirmingTransactions: string;
+        closingAccounts: string;
+        bundleFunded: string;
+        insufficient: string;
+        
+        // Button labels
+        bundleBuyButton: string;
+        bundleSellButton: string;
     };
 }
