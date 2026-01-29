@@ -34,7 +34,18 @@
     "path": "^0.12.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.2",
-    "yarn": "^1.22.22"
+    "yarn": "^1.22.22",
+    "ethers": "^6.13.4",
+    "@ethersproject/address": "^5.7.0",
+    "@ethersproject/contracts": "^5.7.0",
+    "@ethersproject/providers": "^5.7.2",
+    "@ethersproject/solidity": "^5.7.0",
+    "@uniswap/sdk": "^3.0.3",
+    "@uniswap/v2-core": "^1.0.1",
+    "@uniswap/v2-periphery": "^1.1.0-beta.0",
+    "@uniswap/v3-core": "^1.0.1",
+    "axios-retry": "^4.5.0",
+    "web3": "^4.16.0"
   },
   "devDependencies": {
     "prettier": "^3.5.3"

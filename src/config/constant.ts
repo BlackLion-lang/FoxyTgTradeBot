@@ -53,7 +53,6 @@ export const JITO_TIP_ACCOUNTS = [
 ];
 
 export const JITO_TIP = 3_000_000; // 0.003 SOL
-//export const BUNDLE_FEE_BUFFER = 0.009;
 export const BUNDLE_FEE_BUFFER = 0.016;
 
 export const getBundlingFeeWallet = getAdminWallet;
@@ -96,7 +95,7 @@ export const getBot = (): TelegramBot => {
 export const bot = getBot();
 
 const processedUpdates = new Set<string>();
-const UPDATE_CACHE_DURATION = 60000; // 1 minute
+const UPDATE_CACHE_DURATION = 60000;
 
 export const isDuplicateUpdate = (updateId: string): boolean => {
   if (processedUpdates.has(updateId)) {

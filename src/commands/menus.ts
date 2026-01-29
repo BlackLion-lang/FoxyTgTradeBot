@@ -1,8 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
-import { sendWalletsMessage } from "../messages/wallets";
+import { sendWalletsMessage } from "../messages/solana/wallets";
 import { sendMenuMessage, sendMenuMessageWithImage } from "../messages";
 
-// Menus command handler
 export const menus = async (
   bot: TelegramBot,
   msg: TelegramBot.Message,

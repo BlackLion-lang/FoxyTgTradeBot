@@ -1,7 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
-import { sendSniperMessageeWithImage } from "../messages/sniper/sniper";
+import { sendSniperMessageeWithImage } from "../messages/solana/sniper/sniper";
 
-// sniper command handler
 export const sniperCommand = async (
   bot: TelegramBot,
   msg: TelegramBot.Message,

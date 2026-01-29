@@ -216,11 +216,11 @@ export async function swapToken(
 
         console.log("buy5");
 
-        // get encrypted secret from user wallets (make sure your decrypt function takes a key not hardcoded "password")
+        // get encrypted secret from user wallets (decrypt function uses ENCRYPTION_KEY from environment)
         const encrypted = user.wallets.find((w) => w.is_active_wallet)?.secretKey;
         if (!encrypted) throw new Error("No active wallet secret found for user.");
 
-        const privateKeyBase64 = decryptSecretKey(encrypted, "password");
+        const privateKeyBase64 = decryptSecretKey(encrypted);
         if (!privateKeyBase64) {
             throw new Error("Failed to decrypt private key. Check password/secret.");
         }

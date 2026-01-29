@@ -12,8 +12,6 @@ import {
     isMEVProtect,
 } from "../../services/other";
 import { User } from "../../models/user";
-import { connection } from "../../config/connection";
-import { PublicKey } from "@solana/web3.js";
 import { t } from "../../locales";
 
 export const getHelp = async (
@@ -25,7 +23,6 @@ export const getHelp = async (
     const caption = [
         `<strong>${await t('help.p1', userId)}</strong>\n`,
         `${await t('help.p2', userId)}\n`,
-        // '🐦 For the latest updates and news, follow us on <strong>Twitter</strong>.',
         `${await t('help.p4', userId)}\n`,
         `<em>${await t('help.p5', userId)}</em>`
     ].join('\n');
@@ -85,7 +82,6 @@ export const sendHelpMessageWithImage = async (
 ) => {
     try {
         const { caption, reply_markup } = await getHelp(userId);
-        // Use absolute path for the image
         const imagePath = "./src/assets/help.jpg";
         await bot.sendPhoto(chatId, imagePath, {
             caption,
@@ -94,7 +90,6 @@ export const sendHelpMessageWithImage = async (
         });
     } catch (error) {
         console.log("Could not send help image, falling back to text:", error);
-        // Fallback to text-only message if image fails
         try {
             const { caption, reply_markup } = await getHelp(userId);
             bot.sendMessage(chatId, caption, {
@@ -116,7 +111,6 @@ export const editHelpMessage = async (
     try {
         const { caption, reply_markup } = await getHelp(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -125,7 +119,6 @@ export const editHelpMessage = async (
                 reply_markup,
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -138,10 +131,9 @@ export const editHelpMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Help message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing help message:', error);
     }

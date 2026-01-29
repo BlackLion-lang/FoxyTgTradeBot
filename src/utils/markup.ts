@@ -4,12 +4,12 @@ import { TippingSettings } from "../models/tipSettings";
 import { settings } from "../commands/settings";
 import { SniperWhitelist } from "../models/sniperWhitelist";
 import { SubscribeModel } from "../models/subscribe";
+import { getUserChain } from "./chain";
 
 
 const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
     const tippingSettings = await TippingSettings.findOne() || new TippingSettings();
-    
-    // If subscription is not required, always return true (access granted)
+
     if (!tippingSettings.sniperSubscriptionRequired) {
         return true;
     }
@@ -30,7 +30,7 @@ const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
 };
 
 export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
     const status = settings.WhiteListUser ? "🟢" : "🔴";
     const text = settings.WhiteListUser ? `${await t('admin.whitelistActive', userId)}` : `${await t('admin.whitelistInactive', userId)}`
@@ -75,45 +75,64 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
 
     let buttons: TelegramBot.InlineKeyboardButton[][];
     const isAdmin = userId === 7994989802 || userId === 2024002049;
-    
-    // Check if user has access: whitelisted or has active subscription
+
+    const userChain = await getUserChain(userId);
+    const isEthereum = userChain === "ethereum";
+
     const isWhitelisted = await SniperWhitelist.findOne({ userId });
     const hasAccess = !!isWhitelisted || await hasActiveSubscription(userId);
-    const sniperButtonText = hasAccess 
-        ? `🔫 ${await t('sniper.sniperButton', userId)} 🔫` 
+    const sniperButtonText = hasAccess
+        ? `🔫 ${await t('sniper.sniperButton', userId)} 🔫`
         : `🔒 ${await t('sniper.sniperButtonLocked', userId)} 🔒`;
 
-    if (isAdmin) {
-        // Admin user: show admin panel button
+    if (isAdmin && process.env.ADMIN_BUTTON_SHOW === "1") {
         buttons = [
+            [
+                { text: `🔗 Chain`, callback_data: "select_chain" },
+            ],
             [
                 { text: `${await t('menu.buy', userId)}`, callback_data: "buy" },
                 { text: `${await t('menu.sell', userId)}`, callback_data: "sell" },
             ],
-            [
-                { text: `${await t('menu.wallet', userId)}`, callback_data: "wallets" },
-                { text: `${await t('menu.position', userId)}`, callback_data: "positions" }
+        ];
 
-            ],
-            [
-                { text: `${await t('menu.settings', userId)}`, callback_data: "settings" },
-                { text: `${await t('menu.help', userId)}`, callback_data: "help" },
-            ],
-            [
+        buttons.push([
+            { text: `${await t('menu.wallet', userId)}`, callback_data: "wallets" },
+            { text: `${await t('menu.position', userId)}`, callback_data: "positions" }
+        ]);
+
+        buttons.push([
+            { text: `${await t('menu.settings', userId)}`, callback_data: "settings" },
+            { text: `${await t('menu.help', userId)}`, callback_data: "help" },
+        ]);
+
+        if (!isEthereum) {
+            buttons.push([
                 { text: sniperButtonText, callback_data: "sniper" },
-            ],
-            [
+            ]);
+        }
+
+        if (!isEthereum) {
+            buttons.push([
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
                 { text: `${await t('menu.trendingCoin', userId)}`, callback_data: "trending_coin" },
-            ],
-            [
-                { text: `${await t('menu.adminPanel', userId)}`, callback_data: "admin_panel" },
-                { text: `${await t('close', userId)}`, callback_data: "menu_close" }
-            ]
-        ];
+            ]);
+        } else {
+            buttons.push([
+                { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
+            ]);
+        }
+
+        buttons.push([
+            { text: `${await t('menu.adminPanel', userId)}`, callback_data: "admin_panel" },
+            { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+        ]);
     } else {
         buttons = [
             [
+                { text: `🔗 Chain`, callback_data: "select_chain" },
+            ],
+            [
                 { text: `${await t('menu.buy', userId)}`, callback_data: "buy" },
                 { text: `${await t('menu.sell', userId)}`, callback_data: "sell" },
             ],
@@ -125,53 +144,69 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
             [
                 { text: `${await t('menu.settings', userId)}`, callback_data: "settings" },
                 { text: `${await t('menu.help', userId)}`, callback_data: "help" },
-            ],
-            [
+            ]
+        ];
+
+        if (!isEthereum) {
+            buttons.push([
                 { text: sniperButtonText, callback_data: "sniper" },
-            ],
+            ]);
+        }
+
+        buttons.push(
             [
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
                 { text: `${await t('menu.trendingCoin', userId)}`, callback_data: "trending_coin" },
             ],
             [
-                // { text: `${await t('menu.adminPanel', userId)}`, callback_data: "admin_panel" },
                 { text: `${await t('close', userId)}`, callback_data: "menu_close" }
             ],
-        ];
+        );
     }
 
     return { inline_keyboard: buttons };
 }
 
 export const getWalletsMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
-    return {
-        inline_keyboard: [
-            [
-                { text: `${await t('wallets.createWallet', userId)}`, callback_data: "wallets_create" },
-                { text: `${await t('wallets.importWallet', userId)}`, callback_data: "wallets_import" },
-            ],
-            [
-                { text: `${await t('wallets.switch', userId)}`, callback_data: "wallets_default" },
-            ],
-            [
-                { text: `${await t('wallets.renameWallet', userId)}`, callback_data: "wallets_rename" },
-                { text: `${await t('wallets.deleteWallet', userId)}`, callback_data: "wallets_delete" },
-            ],
-            [
-                { text: `${await t('wallets.withdraw', userId)}`, callback_data: "wallets_withdraw" },
-                { text: `${await t('wallets.exportPrivateKey', userId)}`, callback_data: "wallets_export" },
-            ],
-            [
-                { text: `👜 ${await t('bundleWallets.bundleWalletsTitle', userId)}`, callback_data: "bundled_wallets" },
-            ],
-            [
-                { text: `${await t('wallets.settings', userId)}`, callback_data: "settings" },
-            ],
-            [
-                { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
-                { text: `${await t('refresh', userId)}`, callback_data: "wallets_refresh" },
-            ]
+    const userChain = await getUserChain(userId);
+    const isEthereum = userChain === "ethereum";
+
+    const buttons: TelegramBot.InlineKeyboardButton[][] = [
+        [
+            { text: `${await t('wallets.createWallet', userId)}`, callback_data: "wallets_create" },
+            { text: `${await t('wallets.importWallet', userId)}`, callback_data: "wallets_import" },
         ],
+        [
+            { text: `${await t('wallets.switch', userId)}`, callback_data: "wallets_default" },
+        ],
+        [
+            { text: `${await t('wallets.renameWallet', userId)}`, callback_data: "wallets_rename" },
+            { text: `${await t('wallets.deleteWallet', userId)}`, callback_data: "wallets_delete" },
+        ],
+        [
+            { text: `${await t('wallets.withdraw', userId)}`, callback_data: "wallets_withdraw" },
+            { text: `${await t('wallets.exportPrivateKey', userId)}`, callback_data: "wallets_export" },
+        ],
+    ];
+
+    if (!isEthereum) {
+        buttons.push([
+            { text: `👜 ${await t('bundleWallets.bundleWalletsTitle', userId)}`, callback_data: "bundled_wallets" },
+        ]);
+    }
+
+    buttons.push(
+        [
+            { text: `${await t('wallets.settings', userId)}`, callback_data: "settings" },
+        ],
+        [
+            { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
+            { text: `${await t('refresh', userId)}`, callback_data: "wallets_refresh" },
+        ]
+    );
+
+    return {
+        inline_keyboard: buttons,
     };
 };
 
@@ -219,10 +254,10 @@ export const walletsBackMarkup = async (userId: number): Promise<TelegramBot.Inl
 export const getSnippingSettingsMarkup = async (userId: number): Promise<TelegramBot.InlineKeyboardMarkup> => {
     const settings = await TippingSettings.findOne() || new TippingSettings();
     const subscriptionStatus = settings.sniperSubscriptionRequired ? "🟢" : "🔴";
-    const subscriptionText = settings.sniperSubscriptionRequired 
+    const subscriptionText = settings.sniperSubscriptionRequired
         ? await t('snippingSettings.subscriptionRequired', userId)
         : await t('snippingSettings.subscriptionNotRequired', userId);
-    
+
     return {
         inline_keyboard: [
             [

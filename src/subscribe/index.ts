@@ -166,7 +166,7 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
     const lamports = Math.floor(option.priceSol * LAMPORTS_PER_SOL);
 
     try {
-        const decrypted = decryptSecretKey(wallet.secretKey, "password");
+        const decrypted = decryptSecretKey(wallet.secretKey);
         const keypair = Keypair.fromSecretKey(bs58.decode(decrypted));
 
         const balance = await connection.getBalance(keypair.publicKey);

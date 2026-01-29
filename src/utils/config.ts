@@ -1,6 +1,9 @@
 import { LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import { connection } from "../config/connection";
 import { getBalance, getSolPrice } from "../services/solana";
+import { getBalance as getEthereumBalance, getEtherPrice } from "../services/ethereum/etherscan";
+import { getEthereumBalanceContract } from "../services/ethereum/contract"
+import { getUserChain } from "./chain";
 import { Types } from "mongoose";
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../models/user";
@@ -9,22 +12,57 @@ interface Wallet {
     label: string;
     publicKey: string;
     secretKey: string;
+    is_active_wallet?: boolean;
 }
 
-export const getWalletMessage = async (userId: number) => {
+export const getWalletMessage = async (userId: number, chain?: "solana" | "ethereum") => {
     const user = (await User.findOne({ userId })) || new User();
-    const wallets = user.wallets;
-    const sol_price = getSolPrice();
+    
+    // If chain not provided, get from user's chain preference
+    if (!chain) {
+        chain = await getUserChain(userId);
+    }
+    
+    let walletsToDisplay: any[] = [];
+    let balanceFetcher: (publicKey: string) => Promise<number>;
+    let pricePromise: Promise<number>;
+    let currencySymbol: string;
+
+    if (chain === "ethereum") {
+        walletsToDisplay = user.ethereumWallets || [];
+        balanceFetcher = async (pk) => await getEthereumBalanceContract(pk);
+        pricePromise = getEtherPrice();
+        currencySymbol = "ETH";
+    } else { // solana
+        walletsToDisplay = user.wallets || [];
+        balanceFetcher = async (pk) => await getBalance(pk);
+        pricePromise = Promise.resolve(getSolPrice());
+        currencySymbol = "SOL";
+    }
+
     let caption = "";
-    const default_wallet = user.get("default_wallet") ?? 0;
-    for (let i = 0; i < wallets.length; i++) {
-        const balance = await getBalance(wallets[i].publicKey);
-        const solAmount = balance.toFixed(5);
-        const usdAmount = (balance * (await sol_price)).toFixed(2);
-        if (i === default_wallet) {
-            caption += `<b>→ ${wallets[i].label} (Default)</b> - <b>${solAmount} SOL</b> (<b>$${usdAmount} USD</b>)\n<code>${wallets[i].publicKey}</code>\n\n`;
+    const activeWallet = walletsToDisplay.find(wallet => wallet.is_active_wallet);
+    const activeWalletIndex = activeWallet ? walletsToDisplay.indexOf(activeWallet) : -1;
+
+    // Get price once for all wallets
+    let price = await pricePromise;
+    
+    // Ensure price is a valid number
+    if (typeof price !== 'number' || isNaN(price) || price <= 0) {
+        price = chain === "ethereum" ? 3000 : 150; // Default fallback prices
+    }
+
+    for (let i = 0; i < walletsToDisplay.length; i++) {
+        const wallet = walletsToDisplay[i];
+        const balance = await balanceFetcher(wallet.publicKey);
+        const amount = balance.toFixed(chain === "ethereum" ? 4 : 5);
+        const usdAmount = (balance * price).toFixed(2);
+        console.log("withdraw wallet balance", amount, usdAmount);
+        
+        if (i === activeWalletIndex) {
+            caption += `<b>→ ${wallet.label} (Default)</b> - <b>${amount} ${currencySymbol}</b> (<b>$${usdAmount} USD</b>)\n<code>${wallet.publicKey}</code>\n\n`;
         } else {
-            caption += `<b>• ${wallets[i].label}</b> - <b>${solAmount} SOL</b> (<b>$${usdAmount} USD</b>)\n<code>${wallets[i].publicKey}</code>\n\n`;
+            caption += `<b>• ${wallet.label}</b> - <b>${amount} ${currencySymbol}</b> (<b>$${usdAmount} USD</b>)\n<code>${wallet.publicKey}</code>\n\n`;
         }
     }
     return caption;

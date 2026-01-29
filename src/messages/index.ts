@@ -4,8 +4,11 @@ import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
 import bs58 from "bs58";
 import { connection } from "../config/connection";
 import { getBalance, getSolPrice, walletCreate, getSolanaPrice } from "../services/solana";
+import { walletCreate as ethereumWalletCreate } from "../services/ethereum/wallet";
+import { getBalance as getEthereumBalance, getEtherPrice } from "../services/ethereum/etherscan";
 import { getWalletMessage } from "../utils/config";
 import { getAdminPanelMarkup, getMenuMarkup, getSnippingSettingsMarkup } from "../utils/markup";
+import { getUserChain } from "../utils/chain";
 import { WhiteListUser } from "../models/whitelist";
 import { SniperWhitelist } from "../models/sniperWhitelist";
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "../config/security";
@@ -122,74 +125,153 @@ export const getMenu = async (
     first_name: string = "",
 ): Promise<{ caption: string; markup: any }> => {
     let user = await User.findOne({ userId });
+    const userChain = await getUserChain(userId);
+    
     // console.log('user', user)
     if (!user) {
-
         const newUser = new User();
         newUser.userId = userId;
         newUser.username = username;
         newUser.first_name = first_name;
+        
+        // Create wallet based on chain preference
+        if (userChain === "ethereum") {
+            const { publicKey, secretKey } = ethereumWalletCreate();
+                    const balance = await getEthereumBalance(publicKey);
+            newUser.ethereumWallets.push({
+                publicKey,
+                secretKey,
+                is_active_wallet: true,
+                balance: balance.toString(),
+                label: "Start Wallet"
+            });
+        } else {
         const { publicKey, secretKey } = walletCreate();
         const balance = await getBalance(publicKey);
-        // console.log('publicKey', publicKey, 'secretKey', secretKey)
         newUser.wallets.push({
             publicKey,
             secretKey,
             is_active_wallet: true,
-            balance
+                balance: balance.toString()
         });
+        }
 
-        // newUser.wallet.publicKey = publicKey
-        // newUser.wallet.secretKey = secretKey
         await newUser.save();
         user = newUser;
     }
 
-    const publicKey = user.wallets.find(
+    // Get active wallet based on chain
+    let publicKey: string | undefined;
+    let balance: number;
+    let currencySymbol: string;
+    let price: number;
+    
+    if (userChain === "ethereum") {
+        // Ensure ethereumWallets array exists and has wallets
+        // Check if array is empty or doesn't exist
+        const hasEthereumWallets = user.ethereumWallets && user.ethereumWallets.length > 0;
+        
+        if (!hasEthereumWallets) {
+            // No Ethereum wallets exist, create one
+            const { publicKey: newPublicKey, secretKey: newSecretKey } = ethereumWalletCreate();
+            balance = await getEthereumBalance(newPublicKey);
+            user.ethereumWallets.push({
+                publicKey: newPublicKey,
+                secretKey: newSecretKey,
+                is_active_wallet: true,
+                balance: balance.toString(),
+                label: "Start Wallet"
+            });
+            await user.save();
+            return await getMenu(userId, username, first_name); // Re-run to use the new wallet
+        }
+        
+        const activeWallet = user.ethereumWallets.find(
+            (wallet) => wallet.is_active_wallet,
+        );
+        
+        if (!activeWallet) {
+            const { publicKey: newPublicKey, secretKey: newSecretKey } = ethereumWalletCreate();
+            balance = await getEthereumBalance(newPublicKey);
+            user.ethereumWallets.push({
+                publicKey: newPublicKey,
+                secretKey: newSecretKey,
+                is_active_wallet: true,
+                balance: balance.toString(),
+                label: "Start Wallet"
+            });
+            await user.save();
+            return await getMenu(userId, username, first_name); // Re-run to use the new wallet
+        }
+        
+        publicKey = activeWallet.publicKey;
+        balance = await getEthereumBalance(publicKey);
+        price = await getEtherPrice();
+        currencySymbol = "ETH";
+        
+        // Update balance in database
+        const wallet = user.ethereumWallets.find(w => w.publicKey === publicKey);
+        if (wallet) {
+            wallet.balance = balance.toString();
+            await user.save();
+        }
+    } else {
+        const activeWallet = user.wallets?.find(
         (wallet) => wallet.is_active_wallet,
-    )?.publicKey;
+        );
 
-    if (!publicKey) {
-        // Create a new wallet if no active wallet is found
+        if (!activeWallet) {
         const { publicKey: newPublicKey, secretKey: newSecretKey } = walletCreate();
-        const balance = await getBalance(newPublicKey);
+            balance = await getBalance(newPublicKey);
         user.wallets.push({
             publicKey: newPublicKey,
             secretKey: newSecretKey,
             is_active_wallet: true,
-            balance
+                balance: balance.toString()
         });
         await user.save();
-        // Use the new publicKey for further operations
-        // (re-assign for use below)
-        // Note: This assumes only one active wallet at a time
         return await getMenu(userId, username, first_name); // Re-run to use the new wallet
     }
 
-    const balance = await getBalance(publicKey);
+        publicKey = activeWallet.publicKey;
+        balance = await getBalance(publicKey);
+        price = getSolPrice();
+        currencySymbol = "SOL";
 
-    const wallet = user.wallets.find(wallet => wallet.publicKey === publicKey);
+        // Update balance in database
+        const wallet = user.wallets.find(w => w.publicKey === publicKey);
     if (wallet) {
         wallet.balance = balance.toString();
         await user.save();
-    } else {
-        console.error('Wallet not found');
+        }
+    }
+
+    if (!publicKey) {
+        throw new Error("Unable to determine active wallet");
     }
 
     const res = await fetch("https://the-cryptofox-learning.com/_bot/_TrackerWalleTCFL/tokenisation/bot-eth/config/version-bot.php?json=1");
     const versionData = await res.json();
 
-
-    const sol_price = getSolPrice();
+    const menuP2 = userChain === "ethereum" 
+        ? await t('wallets.p2_ethereum', userId)
+        : await t('wallets.p2_solana', userId);
+    const menuP3 = userChain === "ethereum" 
+        ? await t('menu.p3_ethereum', userId)
+        : await t('menu.p3', userId);
+    const menuP5 = userChain === "ethereum"
+        ? await t('menu.p5_ethereum', userId)
+        : await t('menu.p5', userId);
 
     let caption =
         `<strong>${await t('menu.p1', userId)}, ${user.username} !</strong>\n\n` +
         // `${await t('menu.p2', userId)}\n` +
-        `${await t('menu.p3', userId)}\n\n` +
-        `<strong>${await t('menu.p4', userId)}</strong>\n` +
-        `<strong>${user.username} (Default)</strong> : <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
+        `${menuP3}\n\n` +
+        `<strong>${await t('menu.chain', userId)} ${userChain === "ethereum" ? "🟠 Ethereum" : "🟠 Solana"}</strong>\n\n` +
+        `<strong>${menuP2}</strong>\n` +
+        `<strong>${user.username} (Default)</strong> : <strong>${balance.toFixed(userChain === "ethereum" ? 4 : 2)} ${await t(userChain === "ethereum" ? 'currencySymbol_ethereum' : 'currencySymbol_solana', userId)}</strong> ($${(balance * price).toFixed(2)})\n` +
         `<code>${publicKey}</code>\n\n` +
-        `${await t('menu.p5', userId)}\n\n` +
+        `${menuP5}\n\n` +
         `🤖 Bot Telegram Version : <strong>${versionData.bot_telegram_version}</strong>\n` ;
 
     // `${await t('menu.p6', userId)}\n\n`;
@@ -206,7 +288,6 @@ export const sendAdminPanelMessage = async (
     first_name: string = "",
 ) => {
     try {
-        // console.log('debug->')
         const { caption, markup } = await getAdminMenu(
             userId,
             username,
@@ -215,7 +296,6 @@ export const sendAdminPanelMessage = async (
 
         const imagePath = "./src/assets/Admin-panel.jpg"; // Ensure the image is in this path
 
-        // Send the image first
         await bot.sendPhoto(chatId, imagePath, {
             caption: caption,
             parse_mode: "HTML",
@@ -235,7 +315,6 @@ export const editAdminPanelMessage = async (
     try {
         const { caption, markup } = await getAdminMenu(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -245,7 +324,6 @@ export const editAdminPanelMessage = async (
                 reply_markup: await getAdminPanelMarkup(userId),
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -258,10 +336,9 @@ export const editAdminPanelMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Settings message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing settings message:', error);
     }
@@ -306,7 +383,6 @@ export const editSnippingSettingsMessage = async (
     try {
         const { caption, markup } = await getSnippingSettingsMenu(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -316,7 +392,6 @@ export const editSnippingSettingsMessage = async (
                 reply_markup: markup,
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -329,10 +404,9 @@ export const editSnippingSettingsMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Snipping settings message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing snipping settings message:', error);
     }
@@ -346,7 +420,7 @@ export const sendWelcomeMessage = async (
     userName: string = "",
     first_name: string = "",
 ) => {
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
     if (!settings.WhiteListUser) {
         sendMenuMessageWithImage(
@@ -358,17 +432,14 @@ export const sendWelcomeMessage = async (
         );
     }
     else {
-        // Check if user is whitelisted by username or userId
         const whiteListUsers = await WhiteListUser.find({});
         const isWhitelisted = whiteListUsers.some((u) => {
-            // Handle username comparison (with and without @ prefix)
             const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
             const currentUsername = userName.startsWith('@') ? userName.slice(1) : userName;
 
             return whitelistUsername === currentUsername;
         });
         if (isWhitelisted) {
-            // If the user is whitelisted, send the menu messa
             sendMenuMessageWithImage(
                 bot,
                 chatId,
@@ -384,8 +455,7 @@ export const sendWelcomeMessage = async (
                 first_name,
             );
 
-            // Send the image first
-            const imagePath = "./src/assets/welcome.jpg"; // Path to the image
+            const imagePath = "./src/assets/welcome.jpg";
 
             bot.sendPhoto(chatId, imagePath, {
                 caption: caption,
@@ -406,7 +476,6 @@ export const sendAddUserMessage = async (
     console.log('debug inputUserId', inputUserId, 'userId', userId, 'chatId', chatId);
     if (inputUserId !== null && inputUserId !== undefined) {
         try {
-            // Check if user is already whitelisted
             let existing = await WhiteListUser.findOne({ telegramId: inputUserId });
 
             if (!existing) {
@@ -429,15 +498,12 @@ export const sendAddUserMessage = async (
     }
 };
 
-// Helper function to resolve username or user ID to numeric user ID
 const resolveSniperUserId = async (input: string): Promise<number | null> => {
-    // Check if input is numeric (user ID)
     const userIdNum = parseInt(input);
     if (!isNaN(userIdNum)) {
         return userIdNum;
     }
 
-    // If not numeric, treat as username (with or without @)
     const username = input.startsWith('@') ? input.slice(1) : input;
     const user = await User.findOne({ username: username });
     if (user && user.userId) {
@@ -467,11 +533,9 @@ export const sendAddSniperUserMessage = async (
                 return;
             }
 
-            // Check if user is already whitelisted
             let existing = await SniperWhitelist.findOne({ userId: resolvedUserId });
 
             if (!existing) {
-                // Get username from User model
                 const user = await User.findOne({ userId: resolvedUserId });
                 const username = user?.username || "";
 
@@ -497,20 +561,6 @@ export const sendAddSniperUserMessage = async (
             }, 5000);
         }
     }
-    // try {
-    //     const { caption, markup } = await getMenu(
-    //         userId,
-    //     );
-
-    //     // Send the image first
-    //     const imagePath = "./src/assets/dashboard.jpg"; // Path to the image
-
-    //     bot.sendPhoto(chatId, imagePath, {
-    //         caption: caption,
-    //         parse_mode: "HTML",
-    //         reply_markup: markup,
-    //     });
-    // } catch (error) { }
 };
 
 export const sendMenuMessage = async (
@@ -524,8 +574,7 @@ export const sendMenuMessage = async (
     try {
         const { caption, markup } = await getMenu(userId, username, first_name);
 
-        // Send the image first
-        const imagePath = "./src/assets/dashboard.jpg"; // Path to the image
+        const imagePath = "./src/assets/dashboard.jpg";
         return bot.sendPhoto(chatId, imagePath, {
             caption: caption,
             parse_mode: "HTML",
@@ -548,8 +597,7 @@ export const sendMenu = async (
     try {
         const { caption, markup } = await getMenu(userId, username, first_name);
 
-        // Send the image first
-        const imagePath = "./src/assets/dashboard.jpg"; // Path to the image
+        const imagePath = "./src/assets/dashboard.jpg";
         return bot.sendPhoto(chatId, imagePath, {
             caption: caption,
             parse_mode: "HTML",
@@ -570,59 +618,78 @@ export const sendMenuMessageWithImage = async (
 ) => {
     try {
         const { caption, markup } = await getMenu(userId, username);
-        const pending = await PendingUser.findOne({ userId })
+        const pending = await PendingUser.findOne({ userId: String(userId) });
         const user = await User.findOne({ userId });
         if (!user) throw "No User";
-        console.log("User found:");
-        if (pending) {
-            if (pending.pendingReferrer && (!user.referredIdBy || user.referredIdBy === "None")) {
-                // Prevent overwriting referral if already set
+        console.log("User found, checking for pending referral:", pending);
+        if (pending && pending.pendingReferrer) {
+            try {
                 if (!user.referredIdBy || user.referredIdBy === "None") {
+                    // Set the referrer for the user
                     user.referredIdBy = pending.pendingReferrer;
                     await user.save();
+                    console.log("Set referredIdBy for user:", userId, "to:", pending.pendingReferrer);
                 }
 
-                const referuser = await User.findOne({ userId: user.referredIdBy });
-                if (!referuser) throw "No Referrer User";
-                if (user.userId === referuser.userId) throw "Self-referral not allowed";
+                const referrerUserId = Number(pending.pendingReferrer);
+                const referuser = await User.findOne({ userId: referrerUserId });
+                if (!referuser) {
+                    console.error("Referrer user not found:", pending.pendingReferrer);
+                    await PendingUser.deleteOne({ userId: String(userId) });
+                    return;
+                }
+                
+                if (user.userId === referuser.userId) {
+                    console.log("Self-referral not allowed");
+                    await PendingUser.deleteOne({ userId: String(userId) });
+                    return;
+                }
 
                 // Check if referral already exists
                 const alreadyReferred = referuser.referrals.some(
                     (r) => r.referredId === String(user.userId)
                 );
 
-                const existingUser = await User.findOne({ userId: user.userId });
-                if (existingUser && existingUser.referredIdBy && existingUser.referredIdBy !== "None") {
-                    console.log("Referral skipped: user already registered");
-                    await PendingUser.deleteOne({ userId });
-                    return;
-                }
-
                 if (!alreadyReferred) {
-                    bot.sendMessage(
-                        pending.pendingReferrer,
-                        `${await t('messages.referral1')} ${user.username} ${await t('messages.referral2')}`
-                    );
+                    const referredName = user.username || pending.username || "Unknown";
+                    console.log("Adding referral:", {
+                        referrerId: referuser.userId,
+                        referredId: String(user.userId),
+                        referredName: referredName
+                    });
+                    
                     referuser.referrals.push({
-                        referredId: user.userId,
-                        referredName: pending.username || "Unknown",
-                        date: new Date().toISOString(),
+                        referredId: String(user.userId),
+                        referredName: referredName,
+                        date: new Date(),
                     });
                     user.referredNameBy = referuser.username || "Unknown";
+                    
+                    await referuser.save();
+                    await user.save();
+                    
+                    // Notify referrer
+                    try {
+                        await bot.sendMessage(
+                            referrerUserId,
+                            `${await t('messages.referral1', referrerUserId)} ${referredName} ${await t('messages.referral2', referrerUserId)}`
+                        );
+                    } catch (error) {
+                        console.error("Error sending referral notification:", error);
+                    }
+                    
+                    console.log("Referral saved successfully");
+                } else {
+                    console.log("Referral already exists, skipping");
                 }
-
-                await referuser.save();
+            } catch (error) {
+                console.error("Error processing referral:", error);
+            } finally {
+                // cleanup pending
+                await PendingUser.deleteOne({ userId: String(userId) });
             }
-            // cleanup pending
-            await PendingUser.deleteOne({ userId });
         }
-        else {
-            console.log("Referral skipped due to whitelist restriction");
-        }
-        // Path to the image
-        const imagePath = "./src/assets/dashboard.jpg"; // Ensure the image is in this path
-
-        // Send the image first
+        const imagePath = "./src/assets/dashboard.jpg";
         await bot.sendPhoto(chatId, imagePath, {
             caption: caption,
             parse_mode: "HTML",
@@ -642,7 +709,6 @@ export const editMenuMessage = async (
     try {
         const { caption, markup } = await getMenu(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -651,7 +717,6 @@ export const editMenuMessage = async (
                 reply_markup: markup,
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -664,10 +729,9 @@ export const editMenuMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Menu message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing menu message:', error);
     }

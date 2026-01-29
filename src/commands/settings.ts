@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { sendSettingsMessage, sendSettingsMessageWithImage } from "../messages/settings";
+import { sendSettingsMessage, sendSettingsMessageWithImage } from "../messages/solana/settings";
 
 export const settings = async (
     bot: TelegramBot,

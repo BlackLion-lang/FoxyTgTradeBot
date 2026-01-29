@@ -3,6 +3,8 @@ import { StringExpression } from "mongoose";
 export interface Translations {
     // Common
     back: string;
+    currencySymbol_solana: string;
+    currencySymbol_ethereum: string;
     refresh: string;
     cancel: string;
     confirm: string;
@@ -132,6 +134,16 @@ export interface Translations {
         p10: string;
         wallet: string;
         share: string;
+        openLink: string;
+        viewList: string;
+        listTitle: string;
+        totalReferrals: string;
+        noReferrals: string;
+        listHeader: string;
+        date: string;
+        pageInfo: string;
+        prev: string;
+        next: string;
         message1: string;
         message2: string;
         message3: string;
@@ -146,8 +158,10 @@ export interface Translations {
         p1: string;
         p2: string;
         p3: string;
+        p3_ethereum: string;
         p4: string;
         p5: string;
+        p5_ethereum: string;
         p6: string;
         buy: string;
         sell: string;
@@ -158,16 +172,21 @@ export interface Translations {
         referral: string;
         adminPanel: string;
         trendingCoin: string;
+        chain: string;
     };
 
     // Wallets
     wallets: {
         p1: string;
         p2: string;
+        p2_solana: string;
+        p2_ethereum: string;
         p3: string;
         p4: string;
         p5: string;
         p6: string;
+        p6_solana: string;
+        p6_ethereum: string;
         p7: string;
         p8: string;
         p9: string;
@@ -294,7 +313,9 @@ export interface Translations {
         p2: string;
         p3: string;
         p4: string;
+        p4_ethereum: string;
         p5: string;
+        p5_ethereum: string;
         p6: string;
         p7: string;
         p8: string;
@@ -346,6 +367,7 @@ export interface Translations {
         p13: string;
         p14: string;
         p15: string;
+        p16: string;
         viewToken: string;
         positions: string;
         sell: string;
@@ -371,6 +393,7 @@ export interface Translations {
         p16: string;
         p17: string;
         p18: string;
+        p19: string;
         viewToken: string;
         positions: string;
         buy: string;
@@ -459,6 +482,7 @@ export interface Translations {
         userNotFound: string;
         addWalletFirst: string;
         insufficientSol: string;
+        insufficientEth: string;
         needed: string;
         available: string;
         subscriptionSuccessful: string;
@@ -550,8 +574,10 @@ export interface Translations {
         sniperUseradd: string;
         sell: string;
         buy_x: string;
+        buy_x_ethereum: string;
         sell_x: string;
         withdraw1: string;
+        withdraw1_ethereum: string;
         withdraw2: string;
         createName: string;
         createSuccess1: string;
@@ -591,6 +617,7 @@ export interface Translations {
         referral2: string;
         referral3: string;
         enterreferral: string;
+        enterreferral_ethereum: string;
         enterreferralSettings: string;
         refreshLimit: string;
         refreshwarning: string;
@@ -666,6 +693,7 @@ export interface Translations {
         walletNumber: string;
         address: string;
         sol: string;
+        eth: string;
         tokens: string;
         noTokens: string;
         errorLoading: string;
@@ -693,6 +721,7 @@ export interface Translations {
         balance: string;
         bundles: string;
         enterAmount: string;
+        enterAmount_ethereum: string;
         fundingInProgress: string;
         userNotFound: string;
         activeWalletNotConfigured: string;
@@ -717,6 +746,7 @@ export interface Translations {
         // Clean Fund
         cleanFundTitle: string;
         cleanFundDesc: string;
+        cleanFundDesc_ethereum: string;
         mayTakeMoment: string;
         cleanFundComplete: string;
         tempWalletsCleaned: string;
@@ -770,6 +800,7 @@ export interface Translations {
         failedWallets: string;
         insufficientBalanceForBuy: string;
         needAtLeast: string;
+        needAtLeast_ethereum: string;
         bundleSellStarted: string;
         selling: string;
         percentOfBalance: string;
@@ -796,6 +827,7 @@ export interface Translations {
         cleanDistribution: string;
         validated: string;
         distributable: string;
+        distributable_ethereum: string;
         creatingTempWallets: string;
         phase: string;
         fundingTemps: string;

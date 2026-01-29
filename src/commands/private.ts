@@ -1,5 +1,5 @@
 import TelegramBot from "node-telegram-bot-api";
-import { sendPrivateKeyWalletMessageWithImage } from "../messages/wallets/private_key";
+import { sendPrivateKeyWalletMessageWithImage } from "../messages/solana/wallets/private_key";
 
 export const privateKeyWallet = async (
     bot: TelegramBot,

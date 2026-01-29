@@ -5,14 +5,63 @@ import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, } from "../config/security";
 
 let sol_price = 0;
+let lastPriceFetchTime = 0;
+let priceCacheDuration = 60000; // Cache for 60 seconds to avoid rate limits
 
 export async function getSolanaPrice() {
+    // Check if we have a cached price that's still fresh
+    const now = Date.now();
+    if (sol_price > 0 && (now - lastPriceFetchTime) < priceCacheDuration) {
+        console.log(`Using cached SOL price: $${sol_price} (cached ${Math.floor((now - lastPriceFetchTime) / 1000)}s ago)`);
+        return sol_price;
+    }
+
+    try {
     const response = await fetch(
         "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
     );
+        
+        if (!response.ok) {
+            // Handle rate limit errors
+            if (response.status === 429) {
+                console.warn(`⚠️ CoinGecko rate limit hit. Using cached price: $${sol_price}`);
+                // Return cached price if available, otherwise return last known price
+                return sol_price > 0 ? sol_price : 150; // Fallback to default SOL price
+            }
+            throw new Error(`CoinGecko API error: ${response.status} ${response.statusText}`);
+        }
+        
     const sol_data = await response.json();
-    console.log("Solana Price:", sol_data);
-    return sol_data?.solana?.usd ?? 0;
+        
+        // Check for API error response
+        if (sol_data?.status?.error_code === 429) {
+            console.warn(`⚠️ CoinGecko rate limit exceeded. Using cached price: $${sol_price}`);
+            return sol_price > 0 ? sol_price : 150;
+        }
+        
+        const price = sol_data?.solana?.usd ?? 0;
+        
+        if (price > 0) {
+            sol_price = price;
+            lastPriceFetchTime = now;
+            console.log(`✅ Updated SOL price: $${price}`);
+        } else {
+            console.warn(`⚠️ Invalid price from CoinGecko. Using cached price: $${sol_price}`);
+            return sol_price > 0 ? sol_price : 150;
+        }
+        
+        return price;
+    } catch (error) {
+        console.error("❌ Error fetching SOL price from CoinGecko:", error);
+        // Return cached price if available
+        if (sol_price > 0) {
+            console.log(`Using cached SOL price: $${sol_price}`);
+            return sol_price;
+        }
+        // Last resort fallback
+        console.warn("⚠️ No cached price available, using default: $150");
+        return 150;
+    }
 }
 
 export async function getTokenPriceInSOL(tokenAddress: string): Promise<number> {
@@ -36,7 +85,7 @@ export const walletCreate = () => {
     const newWallet = Keypair.generate();
 
     const secretKeyBase58 = bs58.encode(newWallet.secretKey);
-    const secretKey = encryptSecretKey(secretKeyBase58, "password");
+    const secretKey = encryptSecretKey(secretKeyBase58);
 
     // const secretKey = bs58.encode(newWallet.secretKey);
     return { publicKey: newWallet.publicKey.toBase58(), secretKey };

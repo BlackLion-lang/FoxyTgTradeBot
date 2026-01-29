@@ -1,9 +1,5 @@
 import mongoose from "mongoose";
 import { mongoConnection } from "../config/connection";
-import { time, timeStamp } from "console";
-import { approveInstructionData } from "@solana/spl-token";
-import { am } from "@raydium-io/raydium-sdk-v2/lib/api-80d620f3";
-
 
 const userSchema = new mongoose.Schema(
     {
@@ -18,7 +14,12 @@ const userSchema = new mongoose.Schema(
         },
         language: {
             type: String,
-            default: "fr"
+            default: "en"
+        },
+        chain: {
+            type: String,
+            default: "solana",
+            enum: ["solana", "ethereum"]
         },
         hasSeenIntro: {
             type: Boolean,
@@ -34,6 +35,7 @@ const userSchema = new mongoose.Schema(
             default: [],
         },
         
+        // Solana wallets (keeping 'wallets' for backward compatibility)
         wallets: {
             type: [
                 {
@@ -56,6 +58,47 @@ const userSchema = new mongoose.Schema(
                             amount: Number,         //swap amount of usd on buy precent of sell
                             token_price: Number,      //price in SOL/USDC
                             token_amount: Number,       //amont token in buy, amount sol in sell
+                            token_balance: Number,
+                            mc: Number,
+                            date: String,
+                            name: String,
+                            tip: Number,
+                            pnl: { type: Boolean, default: true },
+                        }],
+                    positions: [
+                        {
+                            amount: { type: Number, default: 0 },
+                            solAmount: { type: Number, default: 0 },
+                            mint: { type: String, default: "" },
+                            price: { type: Number, default: 0 },
+                            timestamp: { type: Number, default: Date.now() },
+                        }],
+                },
+            ],
+            default: [],
+        },
+        // Ethereum wallets
+        ethereumWallets: {
+            type: [
+                {
+                    publicKey: { type: String, default: "" },
+                    secretKey: { type: String, default: "" },
+                    balance: { type: String, default: "0" },
+                    is_active_wallet: {
+                        type: Boolean,
+                        default: false,
+                    },
+                    label: {
+                        type: String,
+                        default: "Start Wallet",
+                    },
+                    tradeHistory: [
+                        {
+                            token_address: String,
+                            transaction_type: String,
+                            amount: Number,
+                            token_price: Number,
+                            token_amount: Number,
                             token_balance: Number,
                             mc: Number,
                             date: String,
@@ -191,14 +234,59 @@ const userSchema = new mongoose.Schema(
                         "fr"
                     ],
                 },
+                // Ethereum gas settings
+                gas_values_eth: {
+                    type: [Number],
+                    default: [10, 50, 100]
+                },
+                option_gas_eth: {
+                    type: Number,
+                    default: 10
+                },
+                auto_gas_eth: {
+                    type: String,
+                    default: "medium",
+                    enum: ["low", "medium", "high", "veryHigh"]
+                },
+                slippage_eth: {
+                    type: {
+                        buy_slippage_eth: { type: Number, default: 0.5 },
+                        sell_slippage_eth: { type: Number, default: 0.5 },
+                    },
+                    default: {},
+                },
+                // Ethereum quick buy settings
+                quick_buy_eth: {
+                    type: {
+                        buy_amount_eth: {
+                            type: [Number],
+                            default: [0.1, 0.2, 0.5, 1, 2]
+                        },
+                    },
+                    default: {},
+                },
+                // Ethereum quick sell settings
+                quick_sell_eth: {
+                    type: {
+                        sell_percent_eth: {
+                            type: [Number],
+                            default: [10, 20, 50, 75, 100]
+                        },
+                    },
+                    default: {},
+                },
             },
             default: {},
+        },
+        manual_message_id: {
+            type: Number,
+            default: 0
         },
         sniper: {
             type: {
                 is_snipping: { type: Boolean, default: false },
-                allowAutoSell: { type: Boolean, default: true },
-                allowAutoBuy: { type: Boolean, default: true },
+                allowAutoSell: { type: Boolean, default: false },
+                allowAutoBuy: { type: Boolean, default: false },
                 advance_mode: { type: Boolean, default: false },
                 min_mc: { type: Number, default: 1 },
                 max_mc: { type: Number, default: 10 },
@@ -217,11 +305,11 @@ const userSchema = new mongoose.Schema(
                 time_limit: { type: Number, default: 30 }, //minutes
                 social_check: { type: Boolean, default: false },
                 twitter_check: { type: Boolean, default: false },
-                buy_amount: { type: Number, default: 0.1 },
+                buy_amount: { type: Number, default: 0.01 },
                 buy_limit: { type: Number, default: 1 },
                 buy_tip: { type: Number, default: null },
                 sell_tip: { type: Number, default: null },
-                slippage: { type: Number, default: 10 },
+                slippage: { type: Number, default: 0.5 },
                 mev: { type: Boolean, default: true },
                 auto_sell: { type: Boolean, default: false },
                 take_profit: { type: Number, default: 20 },
@@ -233,6 +321,38 @@ const userSchema = new mongoose.Schema(
             },
             default: {},
         },
+        limit_orders: {
+            type: [
+                {
+                    limit_id: { type: String, default: '' },
+                    buysell_mode: { type: String, default: 'buy', enum: ['buy', 'sell', 'sell_exact'] },
+                    secret_keys: [{ type: String }],
+                    limit_mode: { type: Number, default: 0 },
+                    token_address: { type: String, default: '' },
+                    value: { type: Number, default: 0 },
+                    initial_marketcap: { type: Number, default: 0 },
+                    gas_amount: { type: Number, default: 0 },
+                    slippage: { type: Number, default: 0.5 },
+                    start_time: { type: Number, default: 0 },
+                    expiration_time: { type: Number, default: 0 },
+                    is_take_profit: { type: Boolean, default: true },
+                    message_id: { type: Number, default: 0 },
+                    is_cancelled: { type: Boolean, default: false },
+                }
+            ],
+            default: []
+        },
+        // pending removed - no longer used
+        // pending: {
+        //     type: {
+        //         from_eth_wallet: { type: Number, default: 0 },
+        //         to_eth_wallet: { type: String, default: '' },
+        //         token_address: { type: String, default: '' },
+        //         from_token_wallet: { type: Number, default: 0 },
+        //         to_token_wallet: { type: String, default: '' }
+        //     },
+        //     default: {}
+        // },
     },
     {
         timestamps: true,

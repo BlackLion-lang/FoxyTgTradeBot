@@ -28,7 +28,11 @@ import {
     walletCreate,
     walletFromPrvKey,
 } from "./services/solana";
-import { editWalletsMessage, sendWalletsMessageWithImage, sendWalletsMessage } from "./messages/wallets";
+import { editWalletsMessage, sendWalletsMessageWithImage, sendWalletsMessage } from "./messages/solana/wallets";
+import { editWalletsMessage as editEthereumWalletsMessage } from "./messages/ethereum/wallets";
+import { isEvmAddress } from "./utils/ethereum";
+import { getBalance as getEthereumBalance } from "./services/ethereum/etherscan";
+import { transferETH } from "./services/ethereum/transfer";
 import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendAddSniperUserMessage, sendMenuMessage, sendMenuMessageWithImage, editAdminPanelMessage, sendMenu, sendSnippingSettingsMessage, editSnippingSettingsMessage } from "./messages";
 import {
     extractTokenAddress,
@@ -37,6 +41,7 @@ import {
     isMEVProtect,
 } from "./services/other";
 import { walletBackButton, walletsBackMarkup } from "./utils/markup";
+import { getUserChain } from "./utils/chain";
 import { User } from "./models/user";
 import { PendingUser } from "./models/pendingUser";
 import { limitOrderData } from "./models/limitOrder";
@@ -44,8 +49,8 @@ import bs58 from "bs58";
 import {
     editWithdrawWalletsMessage,
     sendWithdrawWalletsMessage,
-} from "./messages/wallets/withdraw";
-import { editSwitchWalletsMessage, sendSwitchWalletsMessage } from "./messages/wallets/switch";
+} from "./messages/solana/wallets/withdraw";
+import { editSwitchWalletsMessage, sendSwitchWalletsMessage } from "./messages/solana/wallets/switch";
 import { editHelpMessage, sendHelpMessageWithImage } from "./messages/help";
 import { getPairByAddress, getTokenInfo, getTokenPrice, setTokenPrice } from "./services/dexscreener";
 import {
@@ -53,7 +58,7 @@ import {
     getBuy,
     sendBuyMessage,
     sendBuyMessageWithAddress,
-} from "./messages/buy";
+} from "./messages/solana/buy";
 // import {
 //     editSniperSell,
 //     getSniperSell,
@@ -65,55 +70,71 @@ import {
     sendSellMessage,
     editSellMessageWithAddress,
     getSell
-} from "./messages/sell";
+} from "./messages/solana/sell";
 import {
     sendAutoSellMessage,
     editAutoSellMessage,
     editMessageReplyMarkup
-} from './messages/settings/auto_sell';
+} from './messages/solana/settings/auto_sell';
 import { swapToken } from "./services/jupiter";
 import { runSniper } from "./services/sniper";
-import { editPositionsMessage, sendPositionsMessageWithImage, getPositions } from './messages/positions';
-import { editSettingsMessage, sendSettingsMessage, sendSettingsMessageWithImage } from "./messages/settings";
-import { buyToken } from "./messages/buy/buy";
+import { editPositionsMessage, sendPositionsMessageWithImage, getPositions } from './messages/solana/positions';
+import { editSettingsMessage, sendSettingsMessage, sendSettingsMessageWithImage } from "./messages/solana/settings";
 import { TokenAmount } from "@raydium-io/raydium-sdk-v2";
-import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './messages/settings/profitLevel';
-import { editFeeAutoMessage, editFeeMessage, sendFeeAutoMessage, sendFeeMessage } from './messages/settings/fee';
+import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './messages/solana/settings/profitLevel';
+import { editFeeAutoMessage, editFeeAutoMessageEth, editFeeMessage, sendFeeAutoMessage, sendFeeMessage } from './messages/solana/settings/fee';
 import { WhiteListUser } from "./models/whitelist";
 import { SniperWhitelist } from "./models/sniperWhitelist";
 import { SubscribeModel } from "./models/subscribe";
-import { editRenameWalletMessage, sendRenameWalletMessage } from "./messages/wallets/rename";
-import { editSlippageMessage, sendSlippageMessage } from './messages/settings/slippage';
-import { editQuickBuyMessage, sendQuickBuyMessage } from './messages/settings/quick_buy';
-import { editQuickSellMessage, sendQuickSellMessage } from './messages/settings/quick_sell';
-// import { editPresetsMessage } from './messages/settings/presets';
-import { getCreateWallet } from './messages/wallets/create';
-// import { editDefaultWalletMessage } from './messages/wallets/default';
-import { getImportWallet } from './messages/wallets/import';
+import { editRenameWalletMessage, sendRenameWalletMessage } from "./messages/solana/wallets/rename";
+import { editRenameWalletMessage as editRenameEthereumWalletMessage, sendRenameWalletMessage as sendRenameEthereumWalletMessage } from "./messages/ethereum/wallets/rename";
+import { editSlippageMessage, sendSlippageMessage } from './messages/solana/settings/slippage';
+import { editQuickBuyMessage, sendQuickBuyMessage } from './messages/solana/settings/quick_buy';
+import { editQuickSellMessage, sendQuickSellMessage } from './messages/solana/settings/quick_sell';
+// import { editPresetsMessage } from './messages/solana/settings/presets';
+import { getCreateWallet } from './messages/solana/wallets/create';
+import { getCreateWallet as getCreateEthereumWallet } from './messages/ethereum/wallets/create';
+// import { editDefaultWalletMessage } from './messages/solana/wallets/default';
+import { getImportWallet } from './messages/solana/wallets/import';
+import { getImportWallet as getImportEthereumWallet } from './messages/ethereum/wallets/import';
 import { isExistWallet, isExistWalletWithName, txnMethod } from './utils/config';
-import { editDeleteWalletMessage, sendDeleteWalletMessage } from './messages/wallets/delete';
-import { getWithdrawWallet } from './messages/wallets/withdraw';
-import { editPrivateKeyWalletMessage, sendPrivateKeyWalletMessage, sendPrivateKeyWalletMessageWithImage } from './messages/wallets/private_key';
-import * as bundleWalletMenu from './messages/bundlewallet/bundleWalletMenu';
-import fundBundleWalletModule from './messages/bundlewallet/fundBundledWallets';
-import * as bundleBuySell from './messages/bundlewallet/bundleBuySell';
+import { editDeleteWalletMessage, sendDeleteWalletMessage } from './messages/solana/wallets/delete';
+import { editDeleteWalletMessage as editDeleteEthereumWalletMessage, sendDeleteWalletMessage as sendDeleteEthereumWalletMessage } from './messages/ethereum/wallets/delete';
+import { getWithdrawWallet } from './messages/solana/wallets/withdraw';
+import { editPrivateKeyWalletMessage, sendPrivateKeyWalletMessage, sendPrivateKeyWalletMessageWithImage } from './messages/solana/wallets/private_key';
+import { editPrivateKeyWalletMessage as editPrivateKeyEthereumWalletMessage, sendPrivateKeyWalletMessage as sendPrivateKeyEthereumWalletMessage, sendPrivateKeyWalletMessageWithImage as sendPrivateKeyEthereumWalletMessageWithImage } from './messages/ethereum/wallets/private_key';
+import { editSwitchWalletsMessage as editSwitchEthereumWalletsMessage, sendSwitchWalletsMessage as sendSwitchEthereumWalletsMessage } from './messages/ethereum/wallets/switch';
+import { editWithdrawWalletsMessage as editWithdrawEthereumWalletsMessage, sendWithdrawWalletsMessage as sendWithdrawEthereumWalletsMessage } from './messages/ethereum/wallets/withdraw';
+import { editDefaultWalletMessage as editDefaultEthereumWalletMessage, sendDefaultWalletMessage as sendDefaultEthereumWalletMessage } from './messages/ethereum/wallets/default';
+import { editDefaultWalletMessage, sendDefaultWalletMessage } from './messages/solana/wallets/default';
+import { sendWalletsMessageWithImage as sendEthereumWalletsMessageWithImage } from './messages/ethereum/wallets';
+import * as bundleWalletMenu from './messages/solana/bundlewallet/bundleWalletMenu';
+import fundBundleWalletModule from './messages/solana/bundlewallet/fundBundledWallets';
+import * as bundleBuySell from './messages/solana/bundlewallet/bundleBuySell';
 import { send } from "process";
-import { editLanguageMessage, sendLanguageMessage } from "./messages/settings/language";
+import { editLanguageMessage, sendLanguageMessage } from "./messages/solana/settings/language";
 import { resourceLimits } from "worker_threads";
 import { isNamedTupleMember } from "typescript";
 import { settings } from "./commands/settings";
-import { sendProfitLevelMessage } from "./messages/settings/profitLevel";
+import { sendProfitLevelMessage } from "./messages/solana/settings/profitLevel";
 import { updateTransferHookInstructionData } from "@solana/spl-token";
 import { setUserLanguage, t } from "./locales";
 import { error } from "console";
 import { TippingSettings } from "./models/tipSettings";
-import { editReferralMessage, sendReferralMessage } from "./messages/referral";
-import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/trendingCoins";
-import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/sniper/sniper";
-import { sendTokenListMessage, editTokenListMessage } from "./messages/sniper/tokenDetection";
+import { editReferralMessage, sendReferralMessage, sendReferralsListMessage, editReferralsListMessage } from "./messages/referral";
+import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/solana/trendingCoins";
+import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/solana/sniper/sniper";
+import { sendTokenListMessage, editTokenListMessage } from "./messages/solana/sniper/tokenDetection";
 import { handleSubscriptionAction, sendSubscriptionOptions } from "./subscribe";
-// import { sendWelcomeVideo } from "./utils/welcomevideo";
-// import { editMultiMessageWithAddress } from './messages/buy/multi';
+import { sendEthereumBuyMessageWithAddress } from "./messages/ethereum/buy";
+import { swapExactTokenForETHUsingUniswapV2_ } from "./services/ethereum/swap";
+import { getPairInfoWithTokenAddress } from "./services/ethereum/dexscreener";
+import { getEtherPrice } from "./services/ethereum/etherscan";
+import { getTokenBalancWithContract } from "./services/ethereum/contract";
+import { editEthereumPositionsMessage, sendEthereumPositionsMessageWithImage, getEthereumPositions } from "./messages/ethereum/positions";
+import { Token } from "./models/token";
+import { ethers } from "ethers";
+
 
 const userRefreshCounts = new Map(); // key: userId, value: { count: number, lastReset: timestamp }
 
@@ -124,26 +145,22 @@ interface UserLocalDataDictionary {
         withdraw: {
             address: string;
             amount: number;
-            // is_processor: boolean;
         };
     };
 }
 export const userLocalData: UserLocalDataDictionary = {};
 
-// MPH6K8DMRG74IPCIF61M8KIQKZZ6TIBQN5
-// GS12G6WCEV1ANZH4AFZGHCAP8PX13NM8JH
 interface NumericDictionary {
-    [key: number]: number; // or [key: string]: number;
+    [key: number]: number;
 }
 export const userCurrentShow: NumericDictionary = {};
 
 interface CurrentOpenedDictionary {
-    [key: number]: number; // or [key: string]: number;
+    [key: number]: number;
 }
 
 export const userCurrentOpened: CurrentOpenedDictionary = {};
 
-// SUBSCRIPTION_REQUIRED_MESSAGE and SUBSCRIPTION_REQUIRED_MARKUP will be created dynamically with translations
 const getSubscriptionRequiredMessage = async (userId: number) => {
     return `❌ ${await t('subscribe.subscriptionRequired', userId)}\n\n💳 ${await t('subscribe.pressSubscribe', userId)}`;
 };
@@ -183,22 +200,15 @@ const ensureSubscriptionForSniper = async (
     chatId: number,
     telegramId: number,
 ): Promise<boolean> => {
-    // Check if subscription is required for sniper access
     const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings.sniperSubscriptionRequired) {
-        // Subscription not required, allow access
         return true;
     }
-
     const active = await hasActiveSubscription(telegramId);
-
     if (active) {
         return true;
     }
-
-    // Show subscription menu directly instead of just a message
     await sendSubscriptionOptions(botInstance, chatId, telegramId);
-
     return false;
 };
 
@@ -208,29 +218,6 @@ type WalletType = {
     secretKey: string;
 };
 
-// async function saveReferral(referrerId: string, referredId: string) {
-//     // Add referred user to referrer's referrals array
-//     await User.updateOne(
-//         // { userId: referrerId },
-//         {
-//             $push: {
-//                 referrals: { referred: referredId, date: new Date(), publicKey: "" }
-//             }
-//         },
-//         { upsert: true }
-//     );
-
-//     // Mark who referred the new user
-//     await User.updateOne(
-//         // { userId: referredId },
-//         { $set: { referredBy: referrerId } },
-//         { upsert: true }
-//     );
-// }
-
-// Bot instance is imported from config/constant.ts to ensure singleton pattern
-
-// Exported function to send messages from other modules
 export const sendMessageToUser = async (userId: number, message: string, options: any = {}) => {
     try {
         await bot.sendMessage(userId, message, options);
@@ -238,11 +225,6 @@ export const sendMessageToUser = async (userId: number, message: string, options
         console.error(`Failed to send message to user ${userId}:`, error);
     }
 };
-
-// bot.onText(/\/start/, async (msg, match) => {
-//     // await sendWelcomeVideo(bot, msg.chat.id, msg.from?.id || 0);
-//     CommandHandler.start(bot, msg, match)
-// });
 
 bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
     const fromId = msg.from?.id?.toString();
@@ -266,17 +248,23 @@ bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
                 pendingUser = new PendingUser();
                 pendingUser.userId = fromId;
             }
-            if (user) {
-                console.log("User already exists, not setting referral");
+            // Only set pending referral if user doesn't already have a referral set
+            if (user && user.referredIdBy && user.referredIdBy !== "None") {
+                console.log("User already has a referral set, not overwriting");
+            } else {
+                pendingUser.username = msg.from?.username || "";
+                pendingUser.firstName = msg.from?.first_name || "";
+                pendingUser.pendingReferrer = pendingReferrer;
+                pendingUser.date = String(Date.now());
+                await pendingUser.save();
+                console.log("Saved pending referral:", {
+                    userId: fromId,
+                    pendingReferrer: pendingReferrer,
+                    username: pendingUser.username
+                });
             }
-            pendingUser.username = msg.from?.username || "";
-            pendingUser.firstName = msg.from?.first_name || "";
-            pendingUser.pendingReferrer = pendingReferrer;
-            pendingUser.date = String(Date.now());
-            await pendingUser.save();
         }
     } else {
-        // If no referral
         let pendingUser = await PendingUser.findOne({ userId: fromId });
         if (!pendingUser) {
             pendingUser = new PendingUser({
@@ -292,18 +280,10 @@ bot.onText(/\/start(?: (.+))?/, async (msg, match) => {
     CommandHandler.start(bot, msg, match);
 });
 
-
-// bot.onText(/\/referral/, async (msg) => {
-//     const userId = msg.from?.id.toString() || "";
-//     const link = `https://t.me/${process.env.BOT_USERNAME}?start=ref_${userId}`;
-//     await bot.sendMessage(msg.chat.id, `Your referral link:\n${link}`);
-// });
-
 bot.onText(/\/wallets/, async (msg, match) => {
-    // Fetch the whitelist from your database
     const whiteListUsers = await WhiteListUser.find({});
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
 
     const fromId = msg.from?.id?.toString();
@@ -311,7 +291,6 @@ bot.onText(/\/wallets/, async (msg, match) => {
 
     const userId = Number(fromId);
 
-    // Check if the user is whitelisted by username
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
             ? u.telegramId.slice(1)
@@ -332,10 +311,9 @@ bot.onText(/\/wallets/, async (msg, match) => {
     }
 });
 bot.onText(/\/settings/, async (msg, match) => {
-    // Fetch the whitelist from your database
     const whiteListUsers = await WhiteListUser.find({});
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
 
     const fromId = msg.from?.id?.toString();
@@ -343,7 +321,6 @@ bot.onText(/\/settings/, async (msg, match) => {
 
     const userId = Number(fromId);
 
-    // Check if the user is whitelisted by username
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
             ? u.telegramId.slice(1)
@@ -365,10 +342,9 @@ bot.onText(/\/settings/, async (msg, match) => {
 });
 
 bot.onText(/\/menu/, async (msg, match) => {
-    // Fetch the whitelist from your database
     const whiteListUsers = await WhiteListUser.find({});
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
 
     const fromId = msg.from?.id?.toString();
@@ -376,7 +352,6 @@ bot.onText(/\/menu/, async (msg, match) => {
 
     const userId = Number(fromId);
 
-    // Check if the user is whitelisted by username
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
             ? u.telegramId.slice(1)
@@ -398,10 +373,9 @@ bot.onText(/\/menu/, async (msg, match) => {
 });
 
 bot.onText(/\/positions/, async (msg, match) => {
-    // Fetch the whitelist from your database
     const whiteListUsers = await WhiteListUser.find({});
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
 
     const fromId = msg.from?.id?.toString();
@@ -409,7 +383,6 @@ bot.onText(/\/positions/, async (msg, match) => {
 
     const userId = Number(fromId);
 
-    // Check if the user is whitelisted by username
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
             ? u.telegramId.slice(1)
@@ -431,10 +404,9 @@ bot.onText(/\/positions/, async (msg, match) => {
 });
 
 bot.onText(/\/help/, async (msg, match) => {
-    // Fetch the whitelist from your database
     const whiteListUsers = await WhiteListUser.find({});
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
 
     const fromId = msg.from?.id?.toString();
@@ -442,7 +414,6 @@ bot.onText(/\/help/, async (msg, match) => {
 
     const userId = Number(fromId);
 
-    // Check if the user is whitelisted by username
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
             ? u.telegramId.slice(1)
@@ -463,11 +434,41 @@ bot.onText(/\/help/, async (msg, match) => {
     }
 });
 
-bot.onText(/\/sniper/, async (msg, match) => {
-    // Fetch the whitelist from your database
+bot.onText(/\/chains/, async (msg, match) => {
     const whiteListUsers = await WhiteListUser.find({});
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    if (!settings) throw new Error("Tipping settings not found!");
+
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+
+    const userId = Number(fromId);
+
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith('@')
+            ? u.telegramId.slice(1)
+            : u.telegramId;
+
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser) {
+        CommandHandler.chain(bot, msg, match);
+    }
+    else {
+        if (isWhitelisted) {
+            CommandHandler.chain(bot, msg, match);
+        } else {
+            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
+        }
+    }
+});
+
+bot.onText(/\/sniper/, async (msg, match) => {
+    const whiteListUsers = await WhiteListUser.find({});
+
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
 
     const fromId = msg.from?.id?.toString();
@@ -487,13 +488,10 @@ bot.onText(/\/sniper/, async (msg, match) => {
         allowed = await ensureSubscriptionForSniper(bot, msg.chat.id, userId);
     }
 
-    // const allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
-    
     if (!allowed) {
         return;
     }
 
-    // Check if the user is whitelisted by username
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
             ? u.telegramId.slice(1)
@@ -517,27 +515,22 @@ bot.onText(/\/sniper/, async (msg, match) => {
 
 bot.on("polling_error", (error: any) => {
     console.error("Polling error:", error);
-    
-    // Handle the specific conflict error
+
     if (error.code === "ETELEGRAM" && error.message?.includes("409 Conflict")) {
         console.error("⚠️ Multiple bot instances detected! Make sure only one instance is running.");
         console.error("💡 Solution: Stop all bot processes and restart only one instance.");
     }
 });
 
-const userLastMessage = new Map(); // user_id -> message_id
-const userLastTokens = new Map(); // user_id -> token_address
+const userLastMessage = new Map();
+const userLastTokens = new Map();
 
-// Track active text handlers per user to allow cleanup
 const activeTextHandlers = new Map<number, NodeJS.Timeout>(); // user_id -> timeout
 
-// Helper function to create a user-filtered text handler with cleanup
 const createUserTextHandler = (targetUserId: number, handler: (reply: TelegramBot.Message) => void | Promise<void>, timeoutMs: number = 300000) => {
-    // Clear any existing handler for this user
     cleanupUserTextHandler(targetUserId);
-    
+
     const wrappedHandler = (msg: TelegramBot.Message) => {
-        // Only process messages from the target user
         if (msg.from?.id === targetUserId) {
             cleanupUserTextHandler(targetUserId);
             handler(msg);
@@ -545,18 +538,16 @@ const createUserTextHandler = (targetUserId: number, handler: (reply: TelegramBo
         }
         return false;
     };
-    
-    // Set timeout to auto-cleanup after 5 minutes
+
     const timeout = setTimeout(() => {
         cleanupUserTextHandler(targetUserId);
     }, timeoutMs);
-    
+
     activeTextHandlers.set(targetUserId, timeout);
-    
+
     return wrappedHandler;
 };
 
-// Cleanup function to remove active text handlers
 const cleanupUserTextHandler = (userId: number) => {
     const timeout = activeTextHandlers.get(userId);
     if (timeout) {
@@ -565,36 +556,28 @@ const cleanupUserTextHandler = (userId: number) => {
     }
 };
 
-// Safe delete message helper
 const safeDeleteMessage = async (bot: TelegramBot, chatId: number, messageId: number) => {
     try {
         await bot.deleteMessage(chatId, messageId);
     } catch (error: any) {
-        // Ignore "message not found" errors
         if (error.response?.body?.description?.includes('message to delete not found') ||
             error.message?.includes('message to delete not found')) {
-            // Silently ignore
             return;
         }
-        // Log other errors but don't throw
         console.error('Error deleting message:', error.message);
     }
 };
 
-// Safe edit message helper
 const safeEditMessage = async (bot: TelegramBot, chatId: number, messageId: number, editFn: () => Promise<any>) => {
     try {
         await editFn();
     } catch (error: any) {
-        // Ignore "message not found" and "message not modified" errors
         if (error.response?.body?.description?.includes('message to edit not found') ||
             error.response?.body?.description?.includes('message is not modified') ||
             error.message?.includes('message to edit not found') ||
             error.message?.includes('message is not modified')) {
-            // Silently ignore
             return;
         }
-        // Log other errors but don't throw
         console.error('Error editing message:', error.message);
     }
 };
@@ -609,7 +592,9 @@ bot.on("callback_query", async (callbackQuery) => {
         const from = callbackQuery.from;
         const channelType = ctx?.chat.type;
         const caption = callbackQuery.message?.caption || "";
-        const tokenAddress = text.match(/([A-Za-z0-9]{32,44})/)?.[1] || "";
+        const solanaAddress = text.match(/([A-Za-z0-9]{32,44})/)?.[1] || "";
+        const ethAddress = text.match(/(0x[a-fA-F0-9]{40})/)?.[1] || "";
+        const tokenAddress = ethAddress || solanaAddress;
 
         const SPAM_LIMIT = 10;
         const SPAM_WINDOW_MS = 30 * 1000; // 
@@ -621,19 +606,14 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         const userId = from.id;
-        
-        // Clean up any active text handlers when user interacts with callback (navigation away from input)
-        // Only cleanup if it's a navigation action (not an input trigger)
-        const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back", 
-            "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions", 
+
+        const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back",
+            "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions",
             "help", "sniper", "trending_coin", "referral_system"];
         if (navigationActions.includes(sel_action || "")) {
             cleanupUserTextHandler(userId);
         }
         const users = (await User.findOne({ userId })) || new User();
-        // Regular expression to extract the token balance
-        // const message = `${await t('sell.p13', userId)} <tg-token>${balance} ${symbol}</tg-token>`;
-        // const tokenBalance = message.match(/<tg-token>([\d.]+) [A-Za-z0-9]+<\/tg-token>/)?.[1];
         let tokenBalance: any;
         if (users.language === "en") {
             tokenBalance = text.match(
@@ -648,7 +628,6 @@ bot.on("callback_query", async (callbackQuery) => {
         const callbackQueryId = callbackQuery.id;
         const currentKeyboard = callbackQuery.message?.reply_markup;
         const chatId = ctx?.chat.id || 0;
-        // const chatId = ctx.callbackQuery?.message?.chat.id;
         const messageId = ctx?.message_id || 0;
 
         const subscriptionHandled = await handleSubscriptionAction({
@@ -662,12 +641,8 @@ bot.on("callback_query", async (callbackQuery) => {
             return;
         }
 
-        const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+        const settings = await TippingSettings.findOne() || new TippingSettings();
         if (!settings) throw new Error("Tipping settings not found!");
-
-        // if (!settings.WhiteListUser) {
-        //     sendMenu(bot, chatId, userId, messageId);
-        // }
 
         if (sel_action === "admin_panel") {
             console.log('debug-> admin panel messsage');
@@ -694,7 +669,6 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidId', userId)}`,
                             );
                         } else {
-                            // You can add logic here to save or process the user ID or username
                             sendAddUserMessage(
                                 bot,
                                 chatId,
@@ -743,7 +717,6 @@ bot.on("callback_query", async (callbackQuery) => {
                                     bot.deleteMessage(chatId, (await errorMessage).message_id);
                                 }, 5000);
                             } else {
-                                // Proceed with removal logic here
                                 await WhiteListUser.deleteOne({ telegramId: inputUserId });
                                 const sentMessage = await bot.sendMessage(chatId, `${await t('messages.removed1', userId)} ${inputUserId} ${await t('messages.removed2', userId)}`);
                                 setTimeout(async () => {
@@ -755,7 +728,6 @@ bot.on("callback_query", async (callbackQuery) => {
                             bot.sendMessage(chatId, `${await t('errors.removederror', userId)}`);
                         }
 
-                        // Clean up messages
                         await safeDeleteMessage(bot, chatId, sentMessage.message_id);
                         await safeDeleteMessage(bot, chatId, reply.message_id);
                     }),
@@ -799,10 +771,9 @@ bot.on("callback_query", async (callbackQuery) => {
                                 userId,
                                 inputUserId
                             );
-                            // Refresh snipping settings menu if we're in that context
                             if (messageId) {
                                 setTimeout(() => {
-                                    editSnippingSettingsMessage(bot, chatId, userId, messageId).catch(() => {});
+                                    editSnippingSettingsMessage(bot, chatId, userId, messageId).catch(() => { });
                                 }, 2000);
                             }
                         }
@@ -833,7 +804,6 @@ bot.on("callback_query", async (callbackQuery) => {
                         }
 
                         try {
-                            // Helper function to resolve username or user ID
                             const resolveUserId = async (input: string): Promise<number | null> => {
                                 const userIdNum = parseInt(input);
                                 if (!isNaN(userIdNum)) {
@@ -848,11 +818,11 @@ bot.on("callback_query", async (callbackQuery) => {
                             };
 
                             const resolvedUserId = await resolveUserId(inputUserId);
-                            
+
                             if (resolvedUserId === null) {
                                 const errorMessage = await bot.sendMessage(chatId, `${await t('errors.userNotFound', userId)}`);
                                 setTimeout(async () => {
-                                    bot.deleteMessage(chatId, errorMessage.message_id).catch(() => {});
+                                    bot.deleteMessage(chatId, errorMessage.message_id).catch(() => { });
                                 }, 5000);
                             } else {
                                 const targetUser = await SniperWhitelist.findOne({ userId: resolvedUserId });
@@ -860,18 +830,17 @@ bot.on("callback_query", async (callbackQuery) => {
                                 if (!targetUser) {
                                     const errorMessage = await bot.sendMessage(chatId, `${await t('errors.targetSniperUser', userId)}`);
                                     setTimeout(async () => {
-                                        bot.deleteMessage(chatId, errorMessage.message_id).catch(() => {});
+                                        bot.deleteMessage(chatId, errorMessage.message_id).catch(() => { });
                                     }, 5000);
                                 } else {
                                     await SniperWhitelist.deleteOne({ userId: resolvedUserId });
                                     const sentMessage = await bot.sendMessage(chatId, `${await t('messages.removedSniperUser1', userId)} ${inputUserId} ${await t('messages.removedSniperUser2', userId)}`);
                                     setTimeout(async () => {
-                                        bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                                        bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
                                     }, 5000);
-                                    // Refresh snipping settings menu if we're in that context
                                     if (messageId) {
                                         setTimeout(() => {
-                                            editSnippingSettingsMessage(bot, chatId, userId, messageId).catch(() => {});
+                                            editSnippingSettingsMessage(bot, chatId, userId, messageId).catch(() => { });
                                         }, 2000);
                                     }
                                 }
@@ -890,9 +859,13 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "admin_referral") {
+            const userChain = await getUserChain(userId);
+            const referralMessage = userChain === "ethereum"
+                ? await t('messages.enterreferral_ethereum', userId)
+                : await t('messages.enterreferral', userId);
             const sent = bot.sendMessage(
                 chatId,
-                `${await t('messages.enterreferral', userId)}`,
+                referralMessage,
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -903,7 +876,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidsettings', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -928,10 +901,10 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 2000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 2000);
                     }),
                 );
             });
@@ -951,7 +924,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidsettings', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -976,10 +949,10 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 2000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 2000);
                     }),
                 );
             });
@@ -999,7 +972,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.iinvalidtip', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -1024,10 +997,10 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 2000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 2000);
                     }),
                 );
             });
@@ -1047,7 +1020,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidwallets', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -1072,10 +1045,10 @@ bot.on("callback_query", async (callbackQuery) => {
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 2000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 2000);
                     }),
                 );
             });
@@ -1095,7 +1068,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `❌ Invalid price. Please enter a valid number (e.g., 0.3)`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -1120,8 +1093,8 @@ bot.on("callback_query", async (callbackQuery) => {
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
-                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                         }, 2000);
                     }),
                 );
@@ -1142,7 +1115,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `❌ Invalid price. Please enter a valid number (e.g., 0.5)`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -1167,8 +1140,8 @@ bot.on("callback_query", async (callbackQuery) => {
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
-                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                         }, 2000);
                     }),
                 );
@@ -1189,7 +1162,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `❌ Invalid price. Please enter a valid number (e.g., 5)`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -1214,8 +1187,8 @@ bot.on("callback_query", async (callbackQuery) => {
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
-                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                         }, 2000);
                     }),
                 );
@@ -1240,7 +1213,6 @@ bot.on("callback_query", async (callbackQuery) => {
                 bot.once("text", createUserTextHandler(userId, async (reply) => {
                     const label = reply.text || "";
 
-                    // Clean up the message first
                     await safeDeleteMessage(bot, chatId, reply.message_id);
                     await safeDeleteMessage(bot, chatId, sentMessage.message_id);
 
@@ -1255,7 +1227,6 @@ bot.on("callback_query", async (callbackQuery) => {
                             `${await t('messages.importwallet2', userId)}`,
                         );
                     } else {
-                        // Just update the label, keep everything else the same
                         settings.adminSolAddress.label = label;
                         await settings.save();
 
@@ -1303,7 +1274,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                             bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => { });
                                         }, 5000);
                                     } else {
-                                        const secretKey = encryptSecretKey(input, "password")
+                                        const secretKey = encryptSecretKey(input)
                                         settings.adminSolAddress.label = label;
                                         settings.adminSolAddress.balance = balance;
                                         settings.adminSolAddress.publicKey = publicKey;
@@ -1328,8 +1299,52 @@ bot.on("callback_query", async (callbackQuery) => {
 
         const user = await User.findOne({ userId });
         if (!user) throw "No User";
-        const wallets = user?.wallets;
-        const active_wallet = wallets.find((wallet) => wallet.is_active_wallet);
+        const userChain = await getUserChain(userId);
+        let wallets = userChain === "ethereum" ? (user?.ethereumWallets || []) : (user?.wallets || []);
+
+        if (!wallets || wallets.length === 0) {
+            if (userChain === "ethereum") {
+                const { walletCreate: ethereumWalletCreate } = await import("./services/ethereum/wallet");
+                const { getBalance: getEthereumBalance } = await import("./services/ethereum/etherscan");
+                const { publicKey, secretKey } = ethereumWalletCreate();
+                const balance = await getEthereumBalance(publicKey);
+                user.ethereumWallets.push({
+                    publicKey,
+                    secretKey,
+                    is_active_wallet: true,
+                    balance: balance.toString(),
+                    label: "Start Wallet"
+                });
+                await user.save();
+                wallets = user.ethereumWallets;
+            } else {
+                const { walletCreate } = await import("./services/solana");
+                const { getBalance } = await import("./services/solana");
+                const { publicKey, secretKey } = walletCreate();
+                const balance = await getBalance(publicKey);
+                user.wallets.push({
+                    publicKey,
+                    secretKey,
+                    is_active_wallet: true,
+                    balance: balance.toString()
+                });
+                await user.save();
+                wallets = user.wallets;
+            }
+        }
+
+        let active_wallet = wallets.find((wallet) => wallet.is_active_wallet);
+
+        if (!active_wallet && wallets.length > 0) {
+            if (userChain === "ethereum") {
+                user.ethereumWallets[0].is_active_wallet = true;
+            } else {
+                user.wallets[0].is_active_wallet = true;
+            }
+            await user.save();
+            active_wallet = wallets[0];
+        }
+
         if (!active_wallet) throw "No active Wallet";
         const publicKey = active_wallet?.publicKey;
         if (!publicKey) throw "No publicKey";
@@ -1337,9 +1352,7 @@ bot.on("callback_query", async (callbackQuery) => {
         const userTelegramId = callbackQuery.from.username || "";
         const whiteListUsers = await WhiteListUser.find({});
 
-        // Check if user is whitelisted by username (with or without @) or by userId
         const isWhitelisted = whiteListUsers.some((u) => {
-            // Handle username comparison (with and without @ prefix)
             const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
             const currentUsername = userTelegramId.startsWith('@') ? userTelegramId.slice(1) : userTelegramId;
 
@@ -1353,7 +1366,6 @@ bot.on("callback_query", async (callbackQuery) => {
                     withdraw: {
                         address: "",
                         amount: 0,
-                        // is_processor: false,
                     },
                 };
                 sendWelcomeMessage(bot, chatId, userId, messageId, userTelegramId);
@@ -1365,16 +1377,9 @@ bot.on("callback_query", async (callbackQuery) => {
             }
         }
 
-        // console.log("callbackquerydate",callbackQueryDate)
         const currentTime = Math.floor(Date.now() / 1000);
-        // if(currentTime - callbackQueryDate > 600) {
-        //     bot.answerCallbackQuery(callbackQueryId, )
-        //     return
-        // }
-
-        // Welcome
         if (sel_action === "welcome") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             sendWelcomeMessage(bot, chatId, userId, messageId, userTelegramId);
         }
@@ -1385,7 +1390,6 @@ bot.on("callback_query", async (callbackQuery) => {
                     chatId,
                     `${await t('messages.successLog', userId)} ${user.username}!`,
                 );
-                // Navigate to main menu after successful login
                 editMenuMessage(bot, chatId, userId, messageId);
 
                 return;
@@ -1398,7 +1402,6 @@ bot.on("callback_query", async (callbackQuery) => {
             }
         }
 
-        //Referral system
         if (sel_action === "referral_system") {
             await safeDeleteMessage(bot, chatId, messageId);
             sendReferralMessage(bot, chatId, userId);
@@ -1418,7 +1421,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('referral.message2', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 6000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -1442,10 +1445,10 @@ bot.on("callback_query", async (callbackQuery) => {
                             await user.save();
                             editReferralMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -1470,43 +1473,80 @@ bot.on("callback_query", async (callbackQuery) => {
             };
             bot.sendMessage(chatId, message, {
                 parse_mode: "HTML",
-                reply_markup: markup,
+                reply_markup: markup
             });
         }
 
-        // Menu
+        if (sel_action === "referral_view_list") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            sendReferralsListMessage(bot, chatId, userId, 0);
+        }
+
+        if (sel_action === "referral_back") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            sendReferralMessage(bot, chatId, userId);
+        }
+
+        if (sel_action && sel_action.startsWith("referral_list_page_")) {
+            const pageMatch = sel_action.match(/referral_list_page_(\d+)/);
+            if (pageMatch) {
+                const page = parseInt(pageMatch[1], 10);
+                editReferralsListMessage(bot, chatId, userId, messageId, page);
+            }
+        }
+
         if (sel_action === "menu_back") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             sendMenu(bot, chatId, userId, messageId);
         }
         if (sel_action === "menu_close") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
         }
-        // Buy
-        if (sel_action === "buy") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
-            sendBuyMessage(bot, chatId, userId, messageId);
+        if (sel_action === "select_chain") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            CommandHandler.chain(bot, { chat: { id: chatId }, from: { id: userId } } as TelegramBot.Message, null);
         }
-
-        // if (sel_action === "refresh") {
-        //     // const { caption, markup } = await getBuy(userId, tokenAddress);
-        //     // bot.sendMessage(chatId, caption, {
-        //     //     parse_mode: "HTML",
-        //     //     reply_markup: markup,
-        //     // });
-        // }
+        if (sel_action === "select_chain_solana" || sel_action === "select_chain_ethereum") {
+            const user = await User.findOne({ userId });
+            if (!user) {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "User not found" });
+                return;
+            }
+            const newChain = sel_action === "select_chain_solana" ? "solana" : "ethereum";
+            user.chain = newChain;
+            await user.save();
+            await bot.answerCallbackQuery(callbackQueryId, { text: `Switched to ${newChain === "solana" ? "Solana" : "Ethereum"}` });
+            await safeDeleteMessage(bot, chatId, messageId);
+            CommandHandler.chain(bot, { chat: { id: chatId }, from: { id: userId } } as TelegramBot.Message, null);
+        }
+        if (sel_action === "back_to_menu") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            sendMenu(bot, chatId, userId, messageId);
+        }
+        if (sel_action === "buy") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const { sendEthereumBuyMessage } = await import("./messages/ethereum/buy");
+                sendEthereumBuyMessage(bot, chatId, userId, messageId);
+            } else {
+                sendBuyMessage(bot, chatId, userId, messageId);
+            }
+        }
 
         if (sel_action === "buy_refresh" || sel_action === "buy_back") {
             if (sel_action === "buy_back") {
-                cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+                cleanupUserTextHandler(userId);
             }
 
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
 
-            // Reset count if time window has passed
             if (!spamData) {
                 console.log("New user, initializing...");
                 spamData = { count: 1, lastReset: now };
@@ -1535,36 +1575,17 @@ bot.on("callback_query", async (callbackQuery) => {
             }
             console.log('debug buy_refresh', sel_action);
 
-            // Call the function to edit the "Buy" message
             await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
-
-            // Handle refreshing the "Buy" action
-            // if (sel_action === "buy_refresh") {
-            //     console.log('debug refresh', sel_action);
-
-            //     // Send a "refreshed" notification to the user
-            //     const sent = await bot.sendMessage(chatId, "✅ Successfully refreshed.");
-
-            //     // Delete the "refreshed" notification after 3 seconds
-            //     setTimeout(async () => {
-            //         try {
-            //             await bot.deleteMessage(chatId, sent.message_id);
-            //         } catch (err) {
-            //             console.error("Failed to delete message:", err);
-            //         }
-            //     }, 3000);
-            // }
             return;
         }
 
         if (sel_action === "sell_refresh" || sel_action === "sell_back") {
             if (sel_action === "sell_back") {
-                cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+                cleanupUserTextHandler(userId);
             }
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
 
-            // Reset count if time window has passed
             if (!spamData) {
                 console.log("New user, initializing...");
                 spamData = { count: 1, lastReset: now };
@@ -1593,25 +1614,23 @@ bot.on("callback_query", async (callbackQuery) => {
             }
             console.log('debug sell_refresh', sel_action);
 
-            // Call the function to edit the "Sell" message
-            await editSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const messageText = text || caption || "";
+                const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
+                const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
 
-            // Handle refreshing the "Sell" action
-            // if (sel_action === "sell_refresh") {
-            //     console.log('debug refresh', sel_action);
-
-            //     // Send a "refreshed" notification to the user
-            //     const sent = await bot.sendMessage(chatId, "✅ Successfully refreshed.");
-
-            //     // Delete the "refreshed" notification after 3 seconds
-            //     setTimeout(async () => {
-            //         try {
-            //             await bot.deleteMessage(chatId, sent.message_id);
-            //         } catch (err) {
-            //             console.error("Failed to delete message:", err);
-            //         }
-            //     }, 3000);
-            // }
+                if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
+                    const { SellEdit: EthereumSellEdit } = await import("./commands/ethereum/sell");
+                    await EthereumSellEdit(bot, chatId, userId, messageId, ethTokenAddress);
+                } else {
+                    await bot.answerCallbackQuery(callbackQuery.id, {
+                        text: "❌ Could not find Ethereum token address in message",
+                    });
+                }
+            } else {
+                await editSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
+            }
             return;
         }
 
@@ -1646,14 +1665,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 messageId,
                 targetTokenAddress,
                 sniperBuyAmount,
-            ); 
-
-            // const { caption, markup } = await getSell(userId, targetTokenAddress);
-            // bot.sendMessage(chatId, caption, {
-            //     parse_mode: "HTML",
-            //     reply_markup: markup,
-            // });
-
+            );
             return;
         }
 
@@ -1673,7 +1685,6 @@ bot.on("callback_query", async (callbackQuery) => {
             messageId: number,
             tokenAddress: string,
         ): void {
-            // Extract SOL amount from action
             const getTokenPercent = (
                 action: BuyAction,
             ): number | "custom" | null => {
@@ -1683,10 +1694,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     case "buy_1": return Number(user?.settings.quick_buy.buy_amount[2]);
                     case "buy_2": return Number(user?.settings.quick_buy.buy_amount[3]);
                     case "buy_5": return Number(user?.settings.quick_buy.buy_amount[4]);
-                    // case "buy_x":
-                    //     return "custom"; // Special case for custom amount
-                    default:
-                        return null;
+                    default: return null;
                 }
             };
 
@@ -1701,8 +1709,51 @@ bot.on("callback_query", async (callbackQuery) => {
             );
         }
 
-        // Usage - replace your multiple if statements with:
-        if ((sel_action ?? "").startsWith("buy_") && sel_action !== "buy_x") {
+        if (sel_action && sel_action.startsWith("buy_amount_")) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const amountIndex = sel_action.split("buy_amount_")[1];
+                let ethAmount: number;
+
+                if (amountIndex === "x") {
+                    const buyXMessage = await t('messages.buy_x_ethereum', userId);
+                    bot.sendMessage(chatId, buyXMessage).then((sentMessage) => {
+                        bot.once('text',
+                            createUserTextHandler(userId, async (reply) => {
+                                const tradeAmount = Number(reply.text || "");
+                                if (isNaN(tradeAmount) || tradeAmount <= 0) {
+                                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
+                                    return;
+                                } else {
+                                    await sendEthereumBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tradeAmount);
+                                }
+                                await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                                await safeDeleteMessage(bot, chatId, reply.message_id);
+                            }),
+                        );
+                    });
+                    return;
+                } else if (amountIndex === "max") {
+                    const active_wallet = user.ethereumWallets.find(w => w.is_active_wallet);
+                    if (!active_wallet) {
+                        await bot.sendMessage(chatId, `❌ No active wallet found.`);
+                        return;
+                    }
+                    const { getBalance } = await import("./services/ethereum/etherscan");
+                    const balance = await getBalance(active_wallet.publicKey || "");
+                    ethAmount = balance * 0.95;
+                } else {
+                    const index = Number(amountIndex);
+                    const buy_amount = user.settings.quick_buy_eth?.buy_amount_eth || [0.1, 0.2, 0.5, 1, 2];
+                    ethAmount = buy_amount[index] || buy_amount[0];
+                }
+                await sendEthereumBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, ethAmount);
+                return;
+            }
+        }
+
+        if (sel_action && sel_action.startsWith("buy_") && sel_action !== "buy_x" && sel_action !== "buy_amount_x" && !sel_action.startsWith("buy_amount_") && !sel_action.startsWith("buy_gas_eth_")) {
             handleBuyAction(
                 sel_action as BuyAction,
                 bot,
@@ -1714,9 +1765,13 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "buy_x") {
+            const userChain = await getUserChain(userId);
+            const buyXMessage = userChain === "ethereum"
+                ? await t('messages.buy_x_ethereum', userId)
+                : await t('messages.buy_x', userId);
             bot.sendMessage(
                 chatId,
-                `${await t('messages.buy_x', userId)}`,
+                buyXMessage,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -1731,18 +1786,22 @@ bot.on("callback_query", async (callbackQuery) => {
                             bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidAmount', userId)}`,
-                                // `❌ Validation error: Invalid trade amount. Try again!`,
                             );
                             return;
                         } else {
-                            sendBuyMessageWithAddress(
-                                bot,
-                                chatId,
-                                userId,
-                                messageId,
-                                tokenAddress,
-                                tradeAmount,
-                            );
+                            const userChain = await getUserChain(userId);
+                            if (userChain === "ethereum") {
+                                await sendEthereumBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tradeAmount);
+                            } else {
+                                sendEthereumBuyMessageWithAddress(
+                                    bot,
+                                    chatId,
+                                    userId,
+                                    messageId,
+                                    tokenAddress,
+                                    tradeAmount,
+                                );
+                            }
                         }
                         await safeDeleteMessage(bot, chatId, sentMessage.message_id);
                         await safeDeleteMessage(bot, chatId, reply.message_id);
@@ -1758,10 +1817,16 @@ bot.on("callback_query", async (callbackQuery) => {
             `<strong>${await t('dangerZoneMessage.p5', userId)}</strong>\n` +
             `${await t('dangerZoneMessage.p6', userId)}`;
 
-        // Sell Assets
         if (sel_action === "sell") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
-            sendSellMessage(bot, chatId, userId, messageId);
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const { sendEthereumSellMessage } = await import("./messages/ethereum/sell");
+                sendEthereumSellMessage(bot, chatId, userId, messageId);
+            } else {
+                sendSellMessage(bot, chatId, userId, messageId);
+            }
         }
 
         type SellAction =
@@ -1780,7 +1845,6 @@ bot.on("callback_query", async (callbackQuery) => {
             messageId: number,
             tokenAddress: string,
         ): void {
-            // Extract SOL amount from action
             const getTokenPercent = (
                 action: SellAction,
             ): number | "custom" | null => {
@@ -1796,21 +1860,13 @@ bot.on("callback_query", async (callbackQuery) => {
                     case "sell_100":
                         return Number(user?.settings.quick_sell.sell_percent[4]);
                     case "sell_x":
-                        return "custom"; // Special case for custom amount
+                        return "custom";
                     default:
                         return null;
                 }
             };
 
             const sellPercent = getTokenPercent(sel_action);
-            // if (sellPercent === null) {
-            //     bot.sendMessage(
-            //         chatId,
-            //         `❌ Invalid sell action: ${sel_action}`,
-            //     );
-            //     return;
-            // }
-
             sendSellMessageWithAddress(
                 bot,
                 chatId,
@@ -1822,8 +1878,64 @@ bot.on("callback_query", async (callbackQuery) => {
             );
         }
 
-        // Usage - replace your multiple if statements with:
-        if ((sel_action ?? "").startsWith("sell_") && sel_action !== "sell_x") {
+        if ((sel_action === "sell_10" || sel_action === "sell_20" || sel_action === "sell_50" || sel_action === "sell_75" || sel_action === "sell_100" || sel_action === "sell_x")) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                let sellPercent: number;
+
+                if (sel_action === "sell_x") {
+                    bot.sendMessage(chatId, `${await t('messages.sell_x', userId)}`).then((sentMessage) => {
+                        bot.once('text',
+                            createUserTextHandler(userId, async (reply) => {
+                                const tokenSellPercent = Number(reply.text || "");
+                                if (isNaN(tokenSellPercent) || tokenSellPercent < 0 || tokenSellPercent > 100) {
+                                    bot.sendMessage(chatId, `${await t('errors.invalidSellPercent', userId)}`);
+                                    return;
+                                } else {
+                                    const active_wallet = user.ethereumWallets.find(w => w.is_active_wallet);
+                                    if (!active_wallet) {
+                                        await bot.sendMessage(chatId, `❌ No active wallet found.`);
+                                        return;
+                                    }
+                                    const { getTokenBalancWithContract } = await import("./services/ethereum/contract");
+                                    const tokenBalance = await getTokenBalancWithContract(tokenAddress, active_wallet.publicKey || '');
+                                    const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
+                                    await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tokenSellPercent, tokenBalance);
+                                }
+                                await safeDeleteMessage(bot, chatId, sentMessage.message_id);
+                                await safeDeleteMessage(bot, chatId, reply.message_id);
+                            }),
+                        );
+                    });
+                    return;
+                } else {
+                    const sell_percent = user.settings.quick_sell_eth?.sell_percent_eth || [10, 20, 50, 75, 100];
+                    switch (sel_action) {
+                        case "sell_10": sellPercent = sell_percent[0] || 10; break;
+                        case "sell_20": sellPercent = sell_percent[1] || 20; break;
+                        case "sell_50": sellPercent = sell_percent[2] || 50; break;
+                        case "sell_75": sellPercent = sell_percent[3] || 75; break;
+                        case "sell_100": sellPercent = sell_percent[4] || 100; break;
+                        default: sellPercent = 10;
+                    }
+                }
+
+                const active_wallet = user.ethereumWallets.find(w => w.is_active_wallet);
+                if (!active_wallet) {
+                    await bot.sendMessage(chatId, `❌ No active wallet found.`);
+                    return;
+                }
+                const { getTokenBalancWithContract } = await import("./services/ethereum/contract");
+                const tokenBalance = await getTokenBalancWithContract(tokenAddress, active_wallet.publicKey || '');
+
+                const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
+                await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, sellPercent, tokenBalance);
+                return;
+            }
+        }
+
+        if (sel_action && sel_action.startsWith("sell_") && sel_action !== "sell_x" && sel_action !== "sell_10" && sel_action !== "sell_20" && sel_action !== "sell_50" && sel_action !== "sell_75" && sel_action !== "sell_100" && !sel_action?.startsWith("sell_gas_eth_")) {
             handleSellAction(
                 sel_action as SellAction,
                 bot,
@@ -1834,8 +1946,8 @@ bot.on("callback_query", async (callbackQuery) => {
             );
         }
 
-        // Sell custom percent
         if (sel_action === "sell_x") {
+            const userChain = await getUserChain(userId);
             bot.sendMessage(
                 chatId,
                 `${await t('messages.sell_x', userId)}`,
@@ -1854,15 +1966,28 @@ bot.on("callback_query", async (callbackQuery) => {
                                 `${await t('errors.invalidSellAmount', userId)}`,
                             );
                         } else {
-                            sendSellMessageWithAddress(
-                                bot,
-                                chatId,
-                                userId,
-                                messageId,
-                                tokenAddress,
-                                tokenSellPercent,
-                                Number(tokenBalance),
-                            );
+                            if (userChain === "ethereum") {
+                                const active_wallet = user.ethereumWallets.find(w => w.is_active_wallet);
+                                if (!active_wallet) {
+                                    await bot.sendMessage(chatId, `❌ No active wallet found.`);
+                                    return;
+                                }
+                                const { getTokenBalancWithContract } = await import("./services/ethereum/contract");
+                                const tokenBalance = await getTokenBalancWithContract(tokenAddress, active_wallet.publicKey || '');
+                                const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
+                                await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tokenSellPercent, tokenBalance);
+                            } else {
+                                const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
+                                await sendEthereumSellMessageWithAddress(
+                                    bot,
+                                    chatId,
+                                    userId,
+                                    messageId,
+                                    tokenAddress,
+                                    tokenSellPercent,
+                                    Number(tokenBalance),
+                                );
+                            }
                         }
                         await safeDeleteMessage(bot, chatId, sentMessage.message_id);
                         await safeDeleteMessage(bot, chatId, reply.message_id);
@@ -1872,33 +1997,43 @@ bot.on("callback_query", async (callbackQuery) => {
             return;
         }
 
-        // Bundle Buy handler
         if (sel_action === "bundle_buy") {
+            const user = await User.findOne({ userId });
+            if (user && user.chain === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Bundle functions are only available for Solana" });
+                return;
+            }
             await bundleBuySell.handleBundleBuy(User, callbackQuery, tokenAddress);
             return;
         }
 
-        // Bundle Sell handler
         if (sel_action === "bundle_sell") {
+            const user = await User.findOne({ userId });
+            if (user && user.chain === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Bundle functions are only available for Solana" });
+                return;
+            }
             await bundleBuySell.handleBundleSell(User, callbackQuery, tokenAddress);
             return;
         }
 
-        // wallets
         if (sel_action === "wallets") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
-            sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            if (userChain === "ethereum") {
+                sendEthereumWalletsMessageWithImage(bot, chatId, userId, messageId);
+            } else {
+                sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            }
         }
-        // Wallets main actions
         if (sel_action === "wallets_refresh" || sel_action === "wallets_back") {
             if (sel_action === "wallets_back") {
-                cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+                cleanupUserTextHandler(userId);
             }
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
 
-            // Reset count if time window has passed
             if (!spamData) {
                 console.log("New user, initializing...");
                 spamData = { count: 1, lastReset: now };
@@ -1926,25 +2061,31 @@ bot.on("callback_query", async (callbackQuery) => {
                 return;
             }
 
-            // console.log('debug wallets_back', sel_action)
-            editWalletsMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                editEthereumWalletsMessage(bot, chatId, userId, messageId);
+            } else {
+                editWalletsMessage(bot, chatId, userId, messageId);
+            }
             if (sel_action === "wallets_back") {
                 await safeDeleteMessage(bot, chatId, messageId);
-                sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+                if (userChain === "ethereum") {
+                    sendEthereumWalletsMessageWithImage(bot, chatId, userId, messageId);
+                } else {
+                    sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+                }
             }
             if (sel_action === "wallets_refresh") {
                 console.log('debug wallets_refresh', sel_action);
-                editWalletsMessage(bot, chatId, userId, messageId);
-                // Show a temporary "refreshed" notification and delete it after a few seconds
-                // const sent = await bot.sendMessage(chatId, "✅ Successfully refreshed.");
-                // setTimeout(() => {
-                //     bot.deleteMessage(chatId, sent.message_id).catch(() => { });
-                // }, 500);
+                if (userChain === "ethereum") {
+                    editEthereumWalletsMessage(bot, chatId, userId, messageId);
+                } else {
+                    editWalletsMessage(bot, chatId, userId, messageId);
+                }
             }
             return;
         }
 
-        // Wallet -> Deposit
         if (sel_action === "wallets_deposit") {
             bot.sendMessage(
                 chatId,
@@ -1954,30 +2095,78 @@ bot.on("callback_query", async (callbackQuery) => {
             return;
         }
 
-        // Wallet -> Withdraw
         if (sel_action === "wallets_withdraw") {
             await safeDeleteMessage(bot, chatId, messageId);
-            sendWithdrawWalletsMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendWithdrawEthereumWalletsMessage(bot, chatId, userId);
+            } else {
+                sendWithdrawWalletsMessage(bot, chatId, userId, messageId);
+            }
         }
 
         if (sel_action?.startsWith('wallets_withdraw_confirm_')) {
-            const index = Number(sel_action.split('wallets_withdraw_confirm_')[1])
+            const parts = sel_action.split('wallets_withdraw_confirm_')[1].split('_');
+            const index = Number(parts[0]);
+            const ethToAddress = parts[1] || null;
+            const ethAmount = parts[2] ? Number(parts[2]) : null;
+
+            const userChain = await getUserChain(userId);
+
+            if (userChain === "ethereum") {
+                const wallet = user.ethereumWallets[index];
+                if (!wallet) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+
+                let finalAmount = ethAmount;
+                let finalAddress = ethToAddress;
+
+                if (!finalAmount) {
+                    const amountMatch = text.match(/([\d.]+)\s*(ETH|eth)/i);
+                    finalAmount = amountMatch ? Number(amountMatch[1]) : null;
+                }
+
+                if (!finalAddress) {
+                    const addressMatch = text.match(/(0x[a-fA-F0-9]{40})/);
+                    finalAddress = addressMatch ? addressMatch[1] : null;
+                }
+
+                if (!finalAmount || isNaN(finalAmount) || finalAmount <= 0) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
+                    return;
+                }
+
+                if (!finalAddress || !isEvmAddress(finalAddress)) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`);
+                    return;
+                }
+
+                try {
+                    await transferETH(bot, chatId, userId, finalAmount, index, finalAddress);
+                    editEthereumWalletsMessage(bot, chatId, userId, messageId);
+                } catch (error) {
+                    console.error('Ethereum withdraw error:', error);
+                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
+                }
+                return;
+            }
 
             const toAddressMatch = text.match(/([1-9A-HJ-NP-Za-km-z]{32,44})/);
             const amountMatch = text.match(/([\d.]+)\s*SOL/i);
 
-            const toAddress = toAddressMatch ? toAddressMatch[1] : null;
+            const solToAddress = toAddressMatch ? toAddressMatch[1] : null;
             const amountStr = amountMatch ? amountMatch[1] : null;
-            console.log(toAddress, amountStr)
+            console.log(solToAddress, amountStr)
             const wallet = user.wallets[index]
             if (amountStr !== null) {
                 const amount = Number(amountStr)
-                // <a href="https://solscan.io/tx/${signature}"></a>
                 bot.sendMessage(chatId, `<strong>${await t('withdrawal.p1', userId)}</strong>
 <code>${wallet.publicKey}</code>
 
 <strong><em>🟡 ${await t('withdrawal.p2', userId)}</em></strong>
-${amount} SOL ⇄ <code>${toAddress}  </code>
+${amount} SOL ⇄ <code>${solToAddress}  </code>
 
 <strong><em>🟡 ${await t('withdrawal.p3', userId)}</em> — ${await t('withdrawal.p4', userId)}</strong>`, {
                     parse_mode: 'HTML',
@@ -1990,22 +2179,19 @@ ${amount} SOL ⇄ <code>${toAddress}  </code>
                         ]
                     }
                 })
-                // const balance = await getBalance(wallet.publicKey);
 
-                const decrypted = decryptSecretKey(wallet.secretKey, "password");
+                const decrypted = decryptSecretKey(wallet.secretKey);
                 const senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted))
 
-                const receiverPublicKey = new PublicKey(toAddress || '')
+                const receiverPublicKey = new PublicKey(solToAddress || '')
 
-                // get balance and rent exempt minimum
                 const balance = await connection.getBalance(senderKeypair.publicKey);
                 const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
                 const maxSendable = Math.max(balance - rentExempt - 10000, 0);
 
-                // compute amount safely
                 let amountInLamports = Math.floor((amount || 0) * LAMPORTS_PER_SOL);
                 if (amountInLamports > maxSendable) {
-                    amountInLamports = maxSendable; // auto-adjust instead of failing
+                    amountInLamports = maxSendable;
                 }
 
                 if (amountInLamports <= 0) {
@@ -2017,11 +2203,8 @@ ${amount} SOL ⇄ <code>${toAddress}  </code>
                 const latestBlockhash = await connection.getLatestBlockhash("finalized");
 
                 const instructions = [
-                    // priority fee (adjust if network busy)
                     ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 2000 }),
-                    // safe CU limit for transfer
                     ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 }),
-                    // actual transfer
                     SystemProgram.transfer({
                         fromPubkey: senderKeypair.publicKey,
                         toPubkey: receiverPublicKey,
@@ -2038,7 +2221,6 @@ ${amount} SOL ⇄ <code>${toAddress}  </code>
                 const tx = new VersionedTransaction(message);
                 tx.sign([senderKeypair]);
 
-                // simulate before sending
                 const sim = await connection.simulateTransaction(tx, {
                     sigVerify: false,
                     replaceRecentBlockhash: true,
@@ -2069,7 +2251,7 @@ ${amount} SOL ⇄ <code>${toAddress}  </code>
 <code>${wallet.publicKey}</code>
 
 <strong><em>🔴 ${await t('withdrawal.p2', userId)}</em></strong>
-${amount} SOL ⇄ <code>${toAddress}</code>
+${amount} SOL ⇄ <code>${solToAddress}</code>
 
 <strong><em>🔴 ${await t('withdrawal.p5', userId)}</em> — <a href="https://solscan.io/tx/${signature}">${await t('withdrawal.p4', userId)}</a></strong>`, {
                         parse_mode: 'HTML',
@@ -2084,12 +2266,11 @@ ${amount} SOL ⇄ <code>${toAddress}</code>
                     })
                     sendWalletsMessageWithImage(bot, chatId, userId, messageId);
                 } else {
-                    console.log("All settings is success")
                     bot.sendMessage(chatId, `<strong>${await t('withdrawal.p1', userId)}</strong>
 <code>${wallet.publicKey}</code>
 
 <strong><em>🟢 ${await t('withdrawal.p2', userId)}</em></strong>
-${amount} SOL ⇄ <code>${toAddress}</code>
+${amount} SOL ⇄ <code>${solToAddress}</code>
 
 <strong><em>🟢 ${await t('withdrawal.p6', userId)}</em> — <a href="https://solscan.io/tx/${signature}">${await t('withdrawal.p4', userId)}</a></strong>`, {
                         parse_mode: 'HTML',
@@ -2111,153 +2292,173 @@ ${amount} SOL ⇄ <code>${toAddress}</code>
         } else if (sel_action?.startsWith('wallets_withdraw_')) {
             const index = Number(sel_action.split('wallets_withdraw_')[1])
             if (!isNaN(index)) {
-                const wallet = user.wallets[index]
-                bot.sendMessage(chatId, `${await t('messages.withdraw1', userId)}`)
+                const userChain = await getUserChain(userId);
+                const withdrawMessage = userChain === "ethereum"
+                    ? await t('messages.withdraw1_ethereum', userId)
+                    : await t('messages.withdraw1', userId);
+                const wallet = userChain === "ethereum" ? user.ethereumWallets[index] : user.wallets[index];
+
+                if (!wallet) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+
+                bot.sendMessage(chatId, withdrawMessage)
                     .then((sentMessage1) => {
                         bot.once('text', createUserTextHandler(userId, async (reply) => {
                             const amount = Number(reply.text || "");
-                            if (isNaN(amount)) {
+                            if (isNaN(amount) || amount <= 0) {
                                 bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
                                 return;
                             }
-                            const decrypted = decryptSecretKey(wallet.secretKey, "password");
-                            const senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted))
-
-                            // get balance and rent exempt minimum
-                            const balance = await connection.getBalance(senderKeypair.publicKey);
-                            const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
-                            const availableLamports = Math.max(amount * LAMPORTS_PER_SOL - rentExempt - 10000, 0);
-                            const maxSendable = (availableLamports / LAMPORTS_PER_SOL) > 0 ? availableLamports / LAMPORTS_PER_SOL : 0;
 
                             await safeDeleteMessage(bot, chatId, reply.message_id);
                             bot.deleteMessage(chatId, sentMessage1.message_id).catch(() => { });
 
-                            bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
-                                .then(sentMessage2 => {
-                                    bot.once('text', createUserTextHandler(userId, async neewReply => {
-                                        const address = neewReply.text || ''
+                            if (userChain === "ethereum") {
+                                const balance = await getEthereumBalance(wallet.publicKey);
+                                const maxSendable = balance;
 
-                                        bot.deleteMessage(chatId, neewReply.message_id).catch(() => { });
-                                        bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => { });
+                                if (amount > balance) {
+                                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)} - ${await t('subscribe.insufficientEth', userId)}`);
+                                    return;
+                                }
 
-                                        if (isValidSolanaAddress(address)) {
-                                            bot.sendMessage(chatId, `<strong>${await t('withdrawal.p7', userId)}
+                                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
+                                    .then(sentMessage2 => {
+                                        bot.once('text', createUserTextHandler(userId, async neewReply => {
+                                            const address = neewReply.text?.trim() || '';
+
+                                            bot.deleteMessage(chatId, neewReply.message_id).catch(() => { });
+                                            bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => { });
+
+                                            if (isEvmAddress(address)) {
+                                                const currencySymbol = await t('currencySymbol_ethereum', userId);
+                                                bot.sendMessage(chatId, `<strong>${await t('withdrawal.p7', userId)}
+${await t('messages.fee', userId)}
+
+• ${await t('withdrawal.p8', userId)} : <code>${wallet.publicKey.slice(0, 6)}...${wallet.publicKey.slice(-4)} — ${wallet.label}</code>
+• ${await t('withdrawal.p9', userId)} : <code>${address}</code>
+
+• ${await t('withdrawal.p10', userId)} <code>${amount} ${currencySymbol}</code>
+
+${await t('withdrawal.p11', userId)}</strong>`, {
+                                                    parse_mode: 'HTML',
+                                                    reply_markup: {
+                                                        inline_keyboard: [
+                                                            [
+                                                                { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}_${address}_${amount}` },
+                                                                { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' }
+                                                            ]
+                                                        ]
+                                                    }
+                                                })
+                                            } else {
+                                                bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`)
+                                            }
+                                        }));
+                                    });
+                            } else {
+                                const decrypted = decryptSecretKey(wallet.secretKey);
+                                const senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted))
+
+                                const balance = await connection.getBalance(senderKeypair.publicKey);
+                                const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
+                                const availableLamports = Math.max(amount * LAMPORTS_PER_SOL - rentExempt - 10000, 0);
+                                const maxSendable = (availableLamports / LAMPORTS_PER_SOL) > 0 ? availableLamports / LAMPORTS_PER_SOL : 0;
+
+                                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
+                                    .then(sentMessage2 => {
+                                        bot.once('text', createUserTextHandler(userId, async neewReply => {
+                                            const address = neewReply.text || ''
+
+                                            bot.deleteMessage(chatId, neewReply.message_id).catch(() => { });
+                                            bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => { });
+
+                                            if (isValidSolanaAddress(address)) {
+                                                const currencySymbol = await t('currencySymbol_solana', userId);
+                                                bot.sendMessage(chatId, `<strong>${await t('withdrawal.p7', userId)}
 ${await t('messages.fee', userId)}
 
 • ${await t('withdrawal.p8', userId)} : <code>${wallet.publicKey.slice(0, 4)}...${wallet.publicKey.slice(-4)} — ${wallet.label}</code>
 • ${await t('withdrawal.p9', userId)} : <code>${address}</code>
 
-• ${await t('withdrawal.p10', userId)} <code>${maxSendable} SOL</code>
+• ${await t('withdrawal.p10', userId)} <code>${maxSendable} ${currencySymbol}</code>
 
 ${await t('withdrawal.p11', userId)}</strong>`, {
-                                                parse_mode: 'HTML',
-                                                reply_markup: {
-                                                    inline_keyboard: [
-                                                        [
-                                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
-                                                            { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' }
+                                                    parse_mode: 'HTML',
+                                                    reply_markup: {
+                                                        inline_keyboard: [
+                                                            [
+                                                                { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
+                                                                { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' }
+                                                            ]
                                                         ]
-                                                    ]
-                                                }
-                                            })
-                                        } else {
-                                            bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`)
-                                        }
-                                    }));
-                                });
+                                                    }
+                                                })
+                                            } else {
+                                                bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`)
+                                            }
+                                        }));
+                                    });
+                            }
                         }));
                     });
             }
         }
-        // Wallets -> Switch
         if (
             sel_action === "wallets_switch" ||
             sel_action === "wallets_switch_refresh"
         ) {
-            editSwitchWalletsMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendSwitchEthereumWalletsMessage(bot, chatId, userId, messageId);
+            } else {
+                sendSwitchWalletsMessage(bot, chatId, userId, messageId);
+            }
             return;
         }
 
-        // if (sel_action === "wallets_switch_generate") {
-        //     const { publicKey, secretKey } = walletCreate();
-        //     user.wallets.push({ publicKey, secretKey, is_active_wallet: false });
-        //     await user.save();
-        //     editSwitchWalletsMessage(bot, chatId, userId, messageId);
-        //     return;
-        // }
-
         if (sel_action === "wallets_create") {
-            bot.sendMessage(chatId, `${await t('messages.createName', userId)}`, {
-                reply_markup: { force_reply: true },
-            }).then((sentMessage) => {
-                bot.once('text',
-                    createUserTextHandler(userId, async (reply) => {
-                        const walletName = reply.text?.trim();
-
-                        if (!walletName || hasSpecialCharacters(walletName)) {
-                            await bot.sendMessage(chatId, `${await t('errors.invalidwWalletName1', userId)}`);
-                            return;
-                        }
-
-                        // Reload the user fresh from DB to avoid race conditions
-                        const freshUser = await User.findOne({ userId: user.userId });
-                        if (!freshUser) {
-                            await bot.sendMessage(chatId, `${await t('errors.invalidUser', userId)}`);
-                            return;
-                        }
-
-                        // Check for duplicate wallet name
-                        if (freshUser.wallets.some(wallet => wallet.label === walletName)) {
-                            await bot.sendMessage(chatId, `${await t('errors.invalidwWalletName2', userId)}`);
-                            return;
-                        }
-
-                        // wallet limit
-                        if (freshUser.wallets.length >= settings.wallets) {
-                            await bot.sendMessage(chatId, `${await t('errors.walletLimit', userId)} ${settings.wallets}`);
-                            return;
-                        }
-
-                        // Create the new wallet
-                        const keypair = Keypair.generate();
-                        const publicKey = keypair.publicKey.toBase58();
-                        const secretKeyBase58 = bs58.encode(keypair.secretKey);
-                        const secretKey = encryptSecretKey(secretKeyBase58, "password");
-                        // const secretKey = bs58.encode(keypair.secretKey);
-                        freshUser.wallets.push({ label: walletName, publicKey, secretKey, is_active_wallet: false });
-                        await freshUser.save();
-
-                        // Confirm wallet creation
-                        const sent = await bot.sendMessage(chatId, `${await t('messages.createSuccess1', userId)} "${walletName}" ${await t('messages.createSuccess2', userId)}`);
-
-                        // Optionally update UI, e.g., show updated wallet list
-                        editSwitchWalletsMessage(bot, chatId, userId, messageId);
-
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, sent.message_id);
-                        }, 5000);
-                        await safeDeleteMessage(bot, chatId, sentMessage.message_id);
-                        await safeDeleteMessage(bot, chatId, reply.message_id);
-                    }));
-            });
-
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                getCreateEthereumWallet(bot, chatId, userId);
+            } else {
+                getCreateWallet(bot, chatId, userId);
+            }
             return;
         }
 
         if (sel_action === 'wallets_import') {
-            getImportWallet(bot, chatId, userId)
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                getImportEthereumWallet(bot, chatId, userId);
+            } else {
+                getImportWallet(bot, chatId, userId);
+            }
+            return;
         }
 
         if (sel_action?.startsWith("wallets_switch_index_")) {
             const index = Number(sel_action.split("wallets_switch_index_")[1]);
-            active_wallet.is_active_wallet = false;
-            wallets[index].is_active_wallet = true;
-            await user.save();
-            editSwitchWalletsMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+
+            if (userChain === "ethereum") {
+                user.ethereumWallets.forEach(w => w.is_active_wallet = false);
+                if (user.ethereumWallets[index]) {
+                    user.ethereumWallets[index].is_active_wallet = true;
+                }
+                await user.save();
+                editSwitchEthereumWalletsMessage(bot, chatId, userId, messageId);
+            } else {
+                active_wallet.is_active_wallet = false;
+                wallets[index].is_active_wallet = true;
+                await user.save();
+                editSwitchWalletsMessage(bot, chatId, userId, messageId);
+            }
             return;
         }
 
-        // Wallets -> Export
         if (sel_action === "wallets_export") {
             const imagePath = "./src/assets/privateKey.jpg"; // Ensure the image is in this path
             await safeDeleteMessage(bot, chatId, messageId);
@@ -2278,43 +2479,66 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "wallets_export_cancel") {
             await safeDeleteMessage(bot, chatId, messageId);
-            sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendEthereumWalletsMessageWithImage(bot, chatId, userId, messageId);
+            } else {
+                sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            }
             return;
         }
 
         if (sel_action === "wallets_private_key") {
             await safeDeleteMessage(bot, chatId, messageId);
-            sendPrivateKeyWalletMessageWithImage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendPrivateKeyEthereumWalletMessageWithImage(bot, chatId, userId, messageId);
+            } else {
+                sendPrivateKeyWalletMessageWithImage(bot, chatId, userId, messageId);
+            }
         }
 
         if (sel_action?.startsWith("wallets_private_key_")) {
-            // Extract the wallet index from the action, e.g., "wallets_private_key_2"
             await safeDeleteMessage(bot, chatId, messageId);
-            console.log('debug wallets_private_key_', sel_action);
             const index = Number(sel_action.split("wallets_private_key_")[1]);
+            const userChain = await getUserChain(userId);
             const user = await User.findOne({ userId });
-            if (!user || !user.wallets || !user.wallets[index]) {
-                bot.sendMessage(chatId, `${await t('errors.invalidselection', userId)}`);
-                return;
+
+            let selectedWallet;
+            if (userChain === "ethereum") {
+                if (!user || !user.ethereumWallets || !user.ethereumWallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidselection', userId)}`);
+                    return;
+                }
+                selectedWallet = user.ethereumWallets[index];
+            } else {
+                if (!user || !user.wallets || !user.wallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidselection', userId)}`);
+                    return;
+                }
+                selectedWallet = user.wallets[index];
             }
-            const selectedWallet = user.wallets[index];
+
             if (!selectedWallet) {
                 bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
                 return;
             }
 
             const { secretKey, publicKey, label } = selectedWallet;
-            const decrypted = decryptSecretKey(secretKey, "password");
+            const decrypted = decryptSecretKey(secretKey);
             if (!decrypted || !publicKey) {
                 bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)}`);
                 return;
             }
 
+            const userChain2 = await getUserChain(userId);
             const imagePath = "./src/assets/privateKey.jpg";
             function escapeMarkdownV2(text: string): string {
                 return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
             }
-            const safeTxLink = escapeMarkdownV2(`https://solscan.io/account/${publicKey}`);
+            const safeTxLink = userChain2 === "ethereum"
+                ? escapeMarkdownV2(`https://etherscan.io/address/${publicKey}`)
+                : escapeMarkdownV2(`https://solscan.io/account/${publicKey}`);
             const message = `[${await t('privateKey.p4', userId)}](${safeTxLink})`;
 
             bot.sendPhoto(
@@ -2348,16 +2572,40 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action?.startsWith("copy_to_clipboard_")) {
             await safeDeleteMessage(bot, chatId, messageId);
             const index = Number(sel_action.split("copy_to_clipboard_")[1]);
+            const userChain = await getUserChain(userId);
             const user = await User.findOne({ userId });
 
-            if (!user || !user.wallets || !user.wallets[index]) {
-                bot.sendMessage(chatId, `${await t('errors.invalidCopy1', userId)}`);
+            if (!user) {
+                bot.sendMessage(chatId, `${await t('errors.invalidUser', userId)}`);
                 return;
             }
 
-            const selectedWallet = user.wallets[index];
+            let selectedWallet;
+            let scanBaseUrl: string;
+
+            if (userChain === "ethereum") {
+                if (!user.ethereumWallets || !user.ethereumWallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidCopy1', userId)}`);
+                    return;
+                }
+                selectedWallet = user.ethereumWallets[index];
+                scanBaseUrl = "https://etherscan.io/address/";
+            } else {
+                if (!user.wallets || !user.wallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidCopy1', userId)}`);
+                    return;
+                }
+                selectedWallet = user.wallets[index];
+                scanBaseUrl = "https://solscan.io/account/";
+            }
+
+            if (!selectedWallet) {
+                bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                return;
+            }
+
             const { secretKey, publicKey, label } = selectedWallet;
-            const decrypted = decryptSecretKey(secretKey, "password");
+            const decrypted = decryptSecretKey(secretKey);
 
             if (!decrypted) {
                 bot.sendMessage(chatId, `${await t('errors.invalidCopy2', userId)}`);
@@ -2368,7 +2616,7 @@ ${await t('privateKey.p7', userId)}`,
             function escapeMarkdownV2(text: string): string {
                 return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
             }
-            const safeTxLink = escapeMarkdownV2(`https://solscan.io/account/${publicKey}`);
+            const safeTxLink = escapeMarkdownV2(`${scanBaseUrl}${publicKey}`);
             const message = `[${await t('privateKey.p4', userId)}](${safeTxLink})`;
 
             bot.sendPhoto(
@@ -2399,50 +2647,25 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
 
-
-        //  if (sel_action === "wallets_export_confirm") {
-        //     const secretKey = user.wallets.find(
-        //         (wallet) => wallet.is_active_wallet,
-        //     )?.secretKey;
-        //     if (!secretKey) throw new Error("Active wallet not found");
-        //     bot.editMessageText(
-        //         `🔐 Here's your private key:
-        //         ||${secretKey}|| \\(click to reveal\\)
-
-        //         __DO NOT SHARE IT WITH ANYONE__
-        //         Once you're done, press \*_DELETE MESSAGE_* button below`,
-        //         {
-        //             chat_id: chatId,
-        //             message_id: messageId,
-        //             parse_mode: "MarkdownV2",
-        //             reply_markup: {
-        //                 inline_keyboard: [
-        //                     [
-        //                         { text: "🔐 Delete Message", callback_data: "wallets_export_confirm_delete" },
-        //                     ],
-        //                 ],
-        //             },
-        //         },
-        //     );
-        //     return;
-        // }
-
         if (sel_action === "wallets_export_confirm_delete") {
             await safeDeleteMessage(bot, chatId, messageId);
             sendWalletsMessageWithImage(bot, chatId, userId, messageId);
             return;
         }
 
-        // Wallets -> Rename
         if (sel_action === "wallets_rename") {
-            console.log('debug wallets_rename', sel_action);
             await safeDeleteMessage(bot, chatId, messageId);
-            sendRenameWalletMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendRenameEthereumWalletMessage(bot, chatId, userId, messageId);
+            } else {
+                sendRenameWalletMessage(bot, chatId, userId, messageId);
+            }
         }
 
         if (sel_action?.startsWith("wallets_rename_")) {
-            console.log('debug wallets_rename_', sel_action);
             const index = Number(sel_action.split("wallets_rename_")[1]);
+            const userChain = await getUserChain(userId);
             bot.sendMessage(
                 chatId,
                 `${await t('messages.renameWallet1', userId)}`,
@@ -2454,7 +2677,15 @@ ${await t('privateKey.p7', userId)}`,
                         if (!newName) {
                             bot.sendMessage(chatId, `${await t('errors.invalidwWalletName1', userId)}`);
                         } else {
-                            user.wallets[index].label = newName;
+                            if (userChain === "ethereum") {
+                                if (user.ethereumWallets[index]) {
+                                    user.ethereumWallets[index].label = newName;
+                                }
+                            } else {
+                                if (user.wallets[index]) {
+                                    user.wallets[index].label = newName;
+                                }
+                            }
                             await user.save();
                             const sent = await bot.sendMessage(
                                 chatId,
@@ -2464,7 +2695,11 @@ ${await t('privateKey.p7', userId)}`,
                             setTimeout(() => {
                                 bot.deleteMessage(chatId, sent.message_id).catch(() => { });
                             }, 5000);
-                            editRenameWalletMessage(bot, chatId, userId, messageId);
+                            if (userChain === "ethereum") {
+                                editRenameEthereumWalletMessage(bot, chatId, userId, messageId);
+                            } else {
+                                editRenameWalletMessage(bot, chatId, userId, messageId);
+                            }
                         }
                         await safeDeleteMessage(bot, chatId, sentMessage.message_id);
                         await safeDeleteMessage(bot, chatId, reply.message_id);
@@ -2473,10 +2708,14 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
 
-        // Wallets -> Delete
         if (sel_action === "wallets_delete") {
             await safeDeleteMessage(bot, chatId, messageId);
-            sendDeleteWalletMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendDeleteEthereumWalletMessage(bot, chatId, userId, messageId);
+            } else {
+                sendDeleteWalletMessage(bot, chatId, userId, messageId);
+            }
             return;
         }
 
@@ -2485,170 +2724,195 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
 
-        //  if (sel_action === "wallets_private_key") {
-        //     sendPrivateKeyWalletMessageWithImage(bot, chatId, userId, messageId);
-        // }
-        // if (sel_action === "wallets_private_key") {
-        //     console.log('debug wallets_private_key', sel_action);
-        //     editPrivateKeyWalletMessage(bot, chatId, userId, messageId);
-        //     return;
-        // }
-
-        // if (sel_action === "settings") {
-        //     sendPrivateKeyWalletMessage(bot, chatId, userId, messageId);
-        // } 
-
-        // if (sel_action?.startsWith("wallets_private_key_")) {
-        //     console.log('debug wallets_private_key_', sel_action);
-        //     const index = Number(sel_action.split("wallets_private_key_")[1]);
-
-        //     // Step 2: Retrieve the user and the selected wallet
-        //     const user = await User.findOne({ userId });
-        //     if (!user || !user.wallets || !user.wallets[index]) {
-        //         return bot.sendMessage(chatId, "❌ Invalid wallet selection.");
-        //     }
-
-        //     const selectedWallet = user.wallets[index];
-        //     const privateKey = selectedWallet.secretKey;
-
-        //     if (!privateKey) {
-        //         return bot.sendMessage(chatId, "❌ Private key not found for this wallet.");
-        //     }
-
-        //     // Step 3: Display the private key immediately in <code> (inline code format)
-        //     const privateKeyMessage = `<code>${privateKey}</code>`; // Inline code formatting
-
-        //     // Step 4: Send the private key and inform the user it is ready to be copied
-        //     bot.sendMessage(chatId, privateKeyMessage, {
-        //         parse_mode: "HTML",
-        //     });
-
-        //     // Optional: Clean up any previous messages if needed
-        //     // bot.deleteMessage(chatId, message_id_of_previous_instructions); // Add cleanup if needed
-        //     return;
-        // }
-
         if (sel_action === "wallets_back") {
-            sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendEthereumWalletsMessageWithImage(bot, chatId, userId, messageId);
+            } else {
+                sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            }
+            return;
         }
 
         if (sel_action === "wallets_default") {
-            // Set the first wallet as the default active wallet
-            // if (user.wallets.length > 0) {
-            //     user.wallets.forEach(wallet => wallet.is_active_wallet = false);
-            //     user.wallets[0].is_active_wallet = true;
-            //     await user.save();
-            editSwitchWalletsMessage(bot, chatId, userId, messageId);
-            // } else {
-            //     bot.sendMessage(chatId, "❌ No wallets available to set as default.");
-            // }
-            // return;
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendDefaultEthereumWalletMessage(bot, chatId, userId, messageId);
+            } else {
+                sendDefaultWalletMessage(bot, chatId, userId, messageId);
+            }
+            return;
         }
 
-        // Bundle Wallets - Main menu
+        if (sel_action?.startsWith("wallets_default_")) {
+            const index = Number(sel_action.split("wallets_default_")[1]);
+            const userChain = await getUserChain(userId);
+            const user = await User.findOne({ userId });
+
+            if (!user) {
+                bot.sendMessage(chatId, `${await t('errors.invalidUser', userId)}`);
+                return;
+            }
+
+            if (userChain === "ethereum") {
+                if (!user.ethereumWallets || !user.ethereumWallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+                user.ethereumWallets.forEach(w => w.is_active_wallet = false);
+                user.ethereumWallets[index].is_active_wallet = true;
+                await user.save();
+                editDefaultEthereumWalletMessage(bot, chatId, userId, messageId);
+            } else {
+                if (!user.wallets || !user.wallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+                user.wallets.forEach(w => w.is_active_wallet = false);
+                user.wallets[index].is_active_wallet = true;
+                await user.save();
+                editDefaultWalletMessage(bot, chatId, userId, messageId);
+            }
+            return;
+        }
+
         if (sel_action === "bundled_wallets") {
+            const user = await User.findOne({ userId });
+            if (user && user.chain === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Bundle functions are only available for Solana" });
+                return;
+            }
             await bundleWalletMenu.showBundleWalletMenu(User, callbackQuery, cleanupUserTextHandler, createUserTextHandler);
             return;
         }
 
-        // Bundle Wallets - View wallets
         if (sel_action === "bundle_view") {
             await bundleWalletMenu.viewBundleWallets(User, callbackQuery);
             return;
         }
 
-        // Bundle Wallets - Show create wallet prompt
         if (sel_action === "bundle_create_menu") {
             await bundleWalletMenu.showCreateWalletPrompt(callbackQuery, cleanupUserTextHandler, createUserTextHandler);
             return;
         }
 
-        // Bundle Wallets - Create wallets
         if (sel_action?.startsWith("bundle_create_")) {
             await bundleWalletMenu.createBundleWallets(User, callbackQuery);
             return;
         }
 
-        // Bundle Wallets - Fund wallets
         if (sel_action === "bundle_fund") {
             await bundleWalletMenu.fundBundleWallets(User, callbackQuery);
             return;
         }
 
-        // Bundle Wallets - Clean fund bundles
         if (sel_action === "bundle_clean_fund") {
             await bundleWalletMenu.cleanFundBundles(User, callbackQuery);
             return;
         }
 
-        // Bundle Wallets - Withdraw from bundles
         if (sel_action === "bundle_withdraw") {
             await bundleWalletMenu.withdrawFromBundles(User, callbackQuery, createUserTextHandler);
             return;
         }
 
-        // Bundle Wallets - Reset bundled wallets
         if (sel_action === "bundle_reset") {
             await bundleWalletMenu.resetBundledWallets(User, callbackQuery, createUserTextHandler);
             return;
         }
 
         if (sel_action?.startsWith("wallets_delete_confirm_")) {
-            // bot.deleteMessage(chatId, messageId);
-            console.log('debug wallets_delete_confirm_', sel_action);
             const indexStr = sel_action.replace("wallets_delete_confirm_", "");
             const index = parseInt(indexStr, 10);
-            if (isNaN(index) || index < 0 || index >= user.wallets.length) {
-                bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
-                return;
-            }
-            if (!user || !user.wallets || user.wallets.length === 1) {
-                const error = bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
-                setTimeout(async () => {
-                    bot.deleteMessage(chatId, (await error).message_id);
+            const userChain = await getUserChain(userId);
+
+            if (userChain === "ethereum") {
+                if (isNaN(index) || index < 0 || index >= (user.ethereumWallets?.length || 0)) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+                if (!user || !user.ethereumWallets || user.ethereumWallets.length === 1) {
+                    const error = await bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    setTimeout(async () => {
+                        bot.deleteMessage(chatId, error.message_id);
+                    }, 5000);
+                    return;
+                }
+                const wallet = user.ethereumWallets[index];
+                user.ethereumWallets.splice(index, 1);
+                await user.save();
+                const sent = await bot.sendMessage(
+                    chatId,
+                    `${await t('messages.deleteWallet1', userId)} "<b>${wallet.label}</b>" ${await t('messages.deleteWallet2', userId)}\n\n${await t('messages.deleteWallet3', userId)}`,
+                    { parse_mode: "HTML" }
+                );
+                if (messageId > 0) {
+                    try {
+                        await bot.deleteMessage(chatId, messageId);
+                    } catch (e) { }
+                }
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, sent.message_id).catch(() => { });
                 }, 5000);
+                const userChain2 = await getUserChain(userId);
+                if (userChain2 === "ethereum") {
+                    sendDeleteEthereumWalletMessage(bot, chatId, userId, messageId);
+                } else {
+                    sendDeleteWalletMessage(bot, chatId, userId, messageId);
+                }
+                return;
+            } else {
+                if (isNaN(index) || index < 0 || index >= user.wallets.length) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+                if (!user || !user.wallets || user.wallets.length === 1) {
+                    const error = await bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    setTimeout(async () => {
+                        bot.deleteMessage(chatId, error.message_id);
+                    }, 5000);
+                    return;
+                }
+                const wallet = user.wallets[index];
+                user.wallets.splice(index, 1);
+                await user.save();
+                const sent = await bot.sendMessage(
+                    chatId,
+                    `${await t('messages.deleteWallet1', userId)} "<b>${wallet.label}</b>" ${await t('messages.deleteWallet2', userId)}\n\n${await t('messages.deleteWallet3', userId)}`,
+                    { parse_mode: "HTML" }
+                );
+                if (messageId > 0) {
+                    try {
+                        await bot.deleteMessage(chatId, messageId);
+                    } catch (e) { }
+                }
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, sent.message_id).catch(() => { });
+                }, 5000);
+                sendDeleteWalletMessage(bot, chatId, userId, messageId);
                 return;
             }
-            const wallet = user.wallets[index];
-            user.wallets.splice(index, 1);
-            await user.save();
-            // console.log('debug wallets_delete_confirm_ index', wallet);
-            // Show success message and navigate back to wallets
-            const sent = await bot.sendMessage(
-                chatId,
-                `${await t('messages.deleteWallet1', userId)} "<b>${wallet.label}</b>" ${await t('messages.deleteWallet2', userId)}\n\n${await t('messages.deleteWallet3', userId)}`,
-                { parse_mode: "HTML" }
-            );
-
-            // Delete the confirmation dialog
-            if (messageId > 0) {
-                try {
-                    await safeDeleteMessage(bot, chatId, messageId);
-                } catch (e) {
-                    // Ignore if already deleted or not found
-                }
-            }
-
-            // Wait a moment then delete success message and show updated wallets
-            setTimeout(async () => {
-                try {
-                    await safeDeleteMessage(bot, chatId, sent.message_id);
-                    // Send fresh wallets message
-                } catch (e) {
-                    // If deletion fails, just send new wallets message
-                    sendWalletsMessageWithImage(bot, chatId, userId, 0);
-                }
-            }, 5000);
-            sendWalletsMessageWithImage(bot, chatId, userId, messageId);
-            // editDeleteWalletMessage(bot, chatId, userId, messageId);
-            return;
         }
 
-        // Handle wallets_delete_[index] (where index is a number)
         if (sel_action?.match(/^wallets_delete_\d+$/)) {
             await safeDeleteMessage(bot, chatId, messageId);
             const index = Number(sel_action.split("wallets_delete_")[1]);
-            const wallet = user.wallets[index];
+            const userChain = await getUserChain(userId);
+
+            let wallet;
+            if (userChain === "ethereum") {
+                if (!user || !user.ethereumWallets || !user.ethereumWallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+                wallet = user.ethereumWallets[index];
+            } else {
+                if (!user || !user.wallets || !user.wallets[index]) {
+                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    return;
+                }
+                wallet = user.wallets[index];
+            }
             if (!wallet) {
                 bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
                 return;
@@ -2673,18 +2937,70 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
 
-        //positions
         if (sel_action == "positions") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
-            sendPositionsMessageWithImage(bot, chatId, userId, messageId, 0, 0, wallets[0].label);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const ethWallets = user?.ethereumWallets || [];
+                sendEthereumPositionsMessageWithImage(
+                    bot,
+                    chatId,
+                    userId,
+                    messageId,
+                    0,
+                    0,
+                    ethWallets[0]?.label || "Wallet",
+                );
+            } else {
+                sendPositionsMessageWithImage(bot, chatId, userId, messageId, 0, 0, wallets[0].label);
+            }
+        }
+
+        if (sel_action?.startsWith('positions_refresh_eth_')) {
+            const now = Date.now();
+            let spamData = userRefreshCounts.get(userId)
+
+            if (!spamData) {
+                console.log("New user, initializing...");
+                spamData = { count: 1, lastReset: now };
+            } else {
+                const diff = now - spamData.lastReset;
+                console.log(`⏱ Time since last reset: ${diff} ms`);
+
+                if (diff > SPAM_WINDOW_MS) {
+                    console.log("⏰ Resetting count due to time window");
+                    spamData.count = 1;
+                    spamData.lastReset = now;
+                } else {
+                    spamData.count += 1;
+                }
+            }
+
+            userRefreshCounts.set(userId, spamData);
+            console.log(`User ${userId} refresh count: ${spamData.count}`);
+
+            if (spamData.count >= SPAM_LIMIT) {
+                await bot.answerCallbackQuery(callbackQuery.id, {
+                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    show_alert: true
+                });
+                return;
+            }
+
+            const index = Number(sel_action.split('positions_refresh_eth_')[1])
+            const ethWallets = user?.ethereumWallets || [];
+            if (ethWallets[index]) {
+                editEthereumPositionsMessage(bot, chatId, userId, messageId, index, 0, ethWallets[index].label)
+            }
+            return;
         }
 
         if (sel_action?.startsWith('positions_refresh_')) {
             const now = Date.now();
             let spamData = userRefreshCounts.get(userId)
 
-            // Reset count if time window has passed
             if (!spamData) {
                 console.log("New user, initializing...");
                 spamData = { count: 1, lastReset: now };
@@ -2728,29 +3044,113 @@ ${await t('privateKey.p7', userId)}`,
         }
         if (sel_action?.startsWith('sellToken_')) {
             const _selltoken = sel_action.replace("sellToken_", "");
-            const { caption, markup } = await getSell(userId, _selltoken);
-            // const imagePath = "./src/assets/Sell.jpg"; // Ensure the image is in this path
-            bot.sendMessage(chatId, caption, {
-                parse_mode: "HTML",
-                reply_markup: markup,
-            });
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum" && _selltoken.startsWith("eth_")) {
+                // Ethereum sell
+                const tokenAddress = _selltoken.replace("eth_", "");
+                const { Sell } = await import("./commands/ethereum/sell");
+                await Sell(bot, chatId, userId, tokenAddress);
+            } else {
+                // Solana sell
+                const { caption, markup } = await getSell(userId, _selltoken);
+                bot.sendMessage(chatId, caption, {
+                    parse_mode: "HTML",
+                    reply_markup: markup,
+                });
+            }
         }
 
+        // Ethereum positions handlers
+        if (sel_action?.startsWith('positions_wallet_left_eth_')) {
+            const index = Number(sel_action.split('positions_wallet_left_eth_')[1])
+            const ethWallets = user?.ethereumWallets || [];
+            if (!isNaN(index) && ethWallets[index]) {
+                const newIndex = index === 0 ? ethWallets.length - 1 : index - 1
+                const label = ethWallets[newIndex].label
+                editEthereumPositionsMessage(bot, chatId, userId, messageId, newIndex, 0, label)
+            }
+        } else if (sel_action?.startsWith('positions_wallet_right_eth_')) {
+            const index = Number(sel_action.split('positions_wallet_right_eth_')[1]);
+            const ethWallets = user?.ethereumWallets || [];
+            if (!isNaN(index) && ethWallets[index]) {
+                const newIndex = (index + 1) % ethWallets.length;
+                const label = ethWallets[newIndex].label;
+                editEthereumPositionsMessage(bot, chatId, userId, messageId, newIndex, 0, label)
+            }
+        } else if (sel_action?.startsWith(`positions_page_left_eth_`)) {
+            const indexNumbers = sel_action.match(/\d+/g);
+            const ethWallets = user?.ethereumWallets || [];
+            if (indexNumbers) {
+                const current_wallet = Number(indexNumbers[0])
+                const page = Number(indexNumbers[1])
+                const label = ethWallets[current_wallet]?.label || "Wallet"
+                if (!isNaN(current_wallet) && !isNaN(page) && ethWallets[current_wallet]) {
+                    editEthereumPositionsMessage(bot, chatId, userId, messageId, current_wallet, page - 1, label)
+                }
+            }
+        } else if (sel_action?.startsWith('positions_page_right_eth_')) {
+            const indexNumbers = sel_action.match(/\d+/g);
+            const ethWallets = user?.ethereumWallets || [];
+            if (indexNumbers) {
+                const current_wallet = Number(indexNumbers[0])
+                const page = Number(indexNumbers[1])
+                const label = ethWallets[current_wallet]?.label || "Wallet"
+                if (!isNaN(current_wallet) && !isNaN(page) && ethWallets[current_wallet]) {
+                    editEthereumPositionsMessage(bot, chatId, userId, messageId, current_wallet, page + 1, label)
+                }
+            }
+        } else if (sel_action?.startsWith(`positions_import_eth_`)) {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.positionImport1', userId)}`
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const address = reply.text || "";
+                        const ethWallets = user?.ethereumWallets || [];
+
+                        const indexNumbers = sel_action.match(/\d+/g);
+
+                        if (indexNumbers) {
+                            const current_wallet = Number(indexNumbers[0])
+                            const page = Number(indexNumbers[1])
+                            const currentWallet = ethWallets[current_wallet];
+                            const label = currentWallet?.label || "Wallet"
+                            const tradedTokenAddresses = (currentWallet?.tradeHistory || []).map((pos: any) => pos.token_address);
+
+                            if (tradedTokenAddresses.some((_address: string) => _address.toLowerCase() === address.toLowerCase())) {
+                                editEthereumPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, label)
+                            } else {
+                                const sent = bot.sendMessage(
+                                    chatId,
+                                    `${await t('messages.positionImport2', userId)}`,
+                                    { parse_mode: "HTML" })
+                                setTimeout(async () => {
+                                    bot.deleteMessage(chatId, (await sent).message_id);
+                                }, 5000);
+                            }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                            }, 5000);
+                        }
+                    }));
+            });
+            return;
+        }
+
+        // Solana positions handlers
         if (sel_action?.startsWith('positions_wallet_left_')) {
             const index = Number(sel_action.split('positions_wallet_left_')[1])
             if (!isNaN(index)) {
                 const newIndex = index === 0 ? wallets.length - 1 : index - 1
-                // console.log("wallet", wallets.length);
-                // console.log(newIndex)
                 const label = wallets[newIndex].label
-                // console.log(wallets[1]);
                 editPositionsMessage(bot, chatId, userId, messageId, newIndex, 0, label)
             }
         } else if (sel_action?.startsWith('positions_wallet_right_')) {
             const index = Number(sel_action.split('positions_wallet_right_')[1]);
             if (!isNaN(index)) {
                 const newIndex = (index + 1) % wallets.length;
-                console.log(newIndex)
                 const label = wallets[newIndex].label;
                 editPositionsMessage(bot, chatId, userId, messageId, newIndex, 0, label)
             }
@@ -2759,10 +3159,8 @@ ${await t('privateKey.p7', userId)}`,
             if (indexNumbers) {
                 const current_wallet = Number(indexNumbers[0])
                 const page = Number(indexNumbers[1])
-                console.log('current_wallet', current_wallet, page)
                 const label = wallets[current_wallet].label
                 if (!isNaN(current_wallet) && !isNaN(page)) {
-
                     editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page - 1, label)
                 }
             }
@@ -2772,10 +3170,8 @@ ${await t('privateKey.p7', userId)}`,
             if (indexNumbers) {
                 const current_wallet = Number(indexNumbers[0])
                 const page = Number(indexNumbers[1])
-                console.log('current_wallet', current_wallet, page)
                 const label = wallets[current_wallet].label
                 if (!isNaN(current_wallet) && !isNaN(page)) {
-
                     editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page + 1, label)
                 }
             }
@@ -2785,7 +3181,6 @@ ${await t('privateKey.p7', userId)}`,
             bot.sendMessage(
                 chatId,
                 `${await t('messages.positionImport1', userId)}`
-                // { parse_mode: "HTML", reply_markup: { force_reply: true } },
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -2803,10 +3198,8 @@ ${await t('privateKey.p7', userId)}`,
                             const tradedTokenAddresses = currentWallet.tradeHistory.map(pos => pos.token_address);
 
                             if (tradedTokenAddresses.some(_address => _address === address)) {
-                                console.log('debug-> found this token', currentWallet.publicKey, page)
                                 editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, label)
                             } else {
-                                console.log('Have not this token');
                                 const sent = bot.sendMessage(
                                     chatId,
                                     `${await t('messages.positionImport2', userId)}`,
@@ -2816,8 +3209,8 @@ ${await t('privateKey.p7', userId)}`,
                                 }, 5000);
                             }
                             setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                             }, 5000);
                         }
                     }));
@@ -2827,11 +3220,47 @@ ${await t('privateKey.p7', userId)}`,
 
         // Setting
         if (sel_action === "settings") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             sendSettingsMessageWithImage(bot, chatId, userId, messageId);
         } else if (sel_action === "settings_fee") {
             editFeeMessage(bot, chatId, userId, messageId);
+        } else if (sel_action?.startsWith("settings_fee_gas_eth_")) {
+            const index = Number(sel_action.split("settings_fee_gas_eth_")[1]);
+            if (!isNaN(index) && index >= 0 && index < 3) {
+                bot.sendMessage(
+                    chatId,
+                    `Enter gas fee in Gwei (e.g., 10, 50, 100):`,
+                ).then((sentMessage) => {
+                    bot.once('text',
+                        createUserTextHandler(userId, async (reply) => {
+                            const gasValue = Number(reply.text || "");
+                            if (isNaN(gasValue) || gasValue < 0) {
+                                bot.sendMessage(
+                                    chatId,
+                                    `Invalid gas fee. Please enter a valid number.`,
+                                ).then((newSentMessage) => {
+                                    setTimeout(() => {
+                                        safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
+                                    }, 10000);
+                                });
+                            } else {
+                                if (!user.settings.gas_values_eth) {
+                                    user.settings.gas_values_eth = [10, 50, 100];
+                                }
+                                user.settings.gas_values_eth[index] = gasValue;
+                                await user.save();
+                                editFeeMessage(bot, chatId, userId, messageId);
+                            }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                            }, 5000);
+                        }),
+                    );
+                });
+            }
         } else if (sel_action === "settings_fee_buy_fee" || sel_action === "settings_fee_sell_fee" || sel_action === "settings_fee_buy_tip" || sel_action === "settings_fee_sell_tip") {
             bot.sendMessage(
                 chatId,
@@ -2876,31 +3305,107 @@ ${await t('privateKey.p7', userId)}`,
                         editFeeMessage(bot, chatId, userId, messageId);
                     }
                     setTimeout(() => {
-                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                     }, 5000);
                 });
                 bot.once('text', handleReply);
             });
         }
 
-        if (sel_action === "settings_buy_slippage" || sel_action === "settings_sell_slippage") {
+        if (sel_action === "settings_buy_slippage" || sel_action === "settings_sell_slippage" || sel_action === "settings_buy_slippage_eth" || sel_action === "settings_sell_slippage_eth") {
             await safeDeleteMessage(bot, chatId, messageId);
             sendSlippageMessage(bot, chatId, userId, messageId);
         }
 
+        if (sel_action === "settings_buy_gas_eth" || sel_action === "settings_sell_gas_eth") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            const { sendFeeMessage } = await import("./messages/solana/settings/fee");
+            sendFeeMessage(bot, chatId, userId, messageId);
+        }
+
+        if (sel_action === "buy_gas_eth_0" || sel_action === "buy_gas_eth_1" || sel_action === "buy_gas_eth_2") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const gasIndex = Number(sel_action.split("buy_gas_eth_")[1]);
+                if (!isNaN(gasIndex) && gasIndex >= 0 && gasIndex < 3) {
+                    const gasValues = user.settings.gas_values_eth || [10, 50, 100];
+                    const selectedGas = gasValues[gasIndex];
+
+                    user.settings.option_gas_eth = selectedGas;
+                    await user.save();
+
+                    await bot.answerCallbackQuery(callbackQuery.id, {
+                        text: `⛽ Gas set to ${selectedGas} Gwei`,
+                    });
+
+                    const refreshMessageId = user.manual_message_id || messageId;
+                    if (refreshMessageId) {
+                        try {
+                            const { editBuyMessageWithAddress } = await import("./messages/ethereum/buy");
+                            const messageText = text || caption || "";
+                            const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
+                            const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
+
+                            if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
+                                await editBuyMessageWithAddress(bot, chatId, userId, refreshMessageId, ethTokenAddress);
+                            } else {
+                                await bot.answerCallbackQuery(callbackQuery.id, {
+                                    text: "❌ Could not find Ethereum token address in message",
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error refreshing buy menu:', error);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (sel_action === "sell_gas_eth_0" || sel_action === "sell_gas_eth_1" || sel_action === "sell_gas_eth_2") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const gasIndex = Number(sel_action.split("sell_gas_eth_")[1]);
+                if (!isNaN(gasIndex) && gasIndex >= 0 && gasIndex < 3) {
+                    const gasValues = user.settings.gas_values_eth || [10, 50, 100];
+                    const selectedGas = gasValues[gasIndex];
+
+                    user.settings.option_gas_eth = selectedGas;
+                    await user.save();
+
+                    await bot.answerCallbackQuery(callbackQuery.id, {
+                        text: `⛽ Gas set to ${selectedGas} Gwei`,
+                    });
+
+                    const refreshMessageId = user.manual_message_id || messageId;
+                    if (refreshMessageId) {
+                        try {
+                            const { editEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
+                            const messageText = text || caption || "";
+                            const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
+                            const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
+
+                            if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
+                                await editEthereumSellMessageWithAddress(bot, chatId, userId, refreshMessageId, ethTokenAddress);
+                            } else {
+                                await bot.answerCallbackQuery(callbackQuery.id, {
+                                    text: "❌ Could not find Ethereum token address in message",
+                                });
+                            }
+                        } catch (error) {
+                            console.error('Error refreshing sell menu:', error);
+                        }
+                    }
+                }
+            }
+        }
+
         if (sel_action === "settings_slippage") {
             editSlippageMessage(bot, chatId, userId, messageId);
-            // sendSlippageMessage(bot, chatId, userId, messageId);
         } else if (sel_action === "settings_slippage_buy" || sel_action === "settings_slippage_sell") {
             bot.sendMessage(
                 chatId,
                 `${await t('messages.slippageInput', userId)}`,
-                // {
-                //     reply_markup: {
-                //         force_reply: true,
-                //     },
-                // },
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -2909,10 +3414,9 @@ ${await t('privateKey.p7', userId)}`,
                             bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidSlippage', userId)}`,
-                                // { reply_markup: { force_reply: true } },
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -2951,10 +3455,72 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSlippageMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
+                    }),
+                );
+            });
+        }
+
+        if (sel_action === "settings_slippage_buy_eth" || sel_action === "settings_slippage_sell_eth") {
+            bot.sendMessage(
+                chatId,
+                `${await t('messages.slippageInput', userId)}`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const slippageValueEth = Number(reply.text || "");
+                        if (isNaN(slippageValueEth) || slippageValueEth < 0 || slippageValueEth > 100) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.invalidSlippage', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
+                                }, 10000);
+                                bot.once('text',
+                                    createUserTextHandler(userId, async (newReply) => {
+                                        const newSlippageValueEth = Number(newReply.text || "");
+                                        if (isNaN(newSlippageValueEth) || newSlippageValueEth < 0 || newSlippageValueEth > 100) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidSlippage', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            switch (sel_action) {
+                                                case "settings_slippage_buy_eth":
+                                                    user.settings.slippage_eth.buy_slippage_eth = newSlippageValueEth;
+                                                    break;
+                                                case "settings_slippage_sell_eth":
+                                                    user.settings.slippage_eth.sell_slippage_eth = newSlippageValueEth;
+                                                    break;
+                                            }
+                                            await user.save();
+                                            editSlippageMessage(bot, chatId, userId, messageId);
+                                        }
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
+                                );
+                            });
+                        } else {
+                            switch (sel_action) {
+                                case "settings_slippage_buy_eth":
+                                    user.settings.slippage_eth.buy_slippage_eth = slippageValueEth;
+                                    break;
+                                case "settings_slippage_sell_eth":
+                                    user.settings.slippage_eth.sell_slippage_eth = slippageValueEth;
+                                    break;
+                            }
+                            await user.save();
+                            editSlippageMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -2970,7 +3536,14 @@ ${await t('privateKey.p7', userId)}`,
             editFeeAutoMessage(bot, chatId, userId, messageId)
         }
 
-        //settings->young token
+        if (sel_action === "settings_fee_auto_eth") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                editFeeAutoMessageEth(bot, chatId, userId, messageId);
+            } else {
+                editFeeAutoMessage(bot, chatId, userId, messageId);
+            }
+        }
 
         if (sel_action === "young_token") {
             const sent = bot.sendMessage(
@@ -2991,7 +3564,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidyoung', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 6000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3016,16 +3589,15 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSettingsMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
         }
 
-        //settings>quick
         if (sel_action === 'settings_quick_buy' || sel_action === 'settings_quick_buy_refresh') {
             await safeDeleteMessage(bot, chatId, messageId);
             sendQuickBuyMessage(bot, chatId, userId, messageId);
@@ -3040,7 +3612,7 @@ ${await t('privateKey.p7', userId)}`,
                             if (isNaN(buy_amount) || buy_amount < 0) {
                                 const errorMessage = await bot.sendMessage(chatId, `${await t('errors.invalidBuy', userId)}`)
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => { });
                                 }, 5000);
                             } else {
                                 user.settings.quick_buy.buy_amount[index] = buy_amount
@@ -3048,13 +3620,93 @@ ${await t('privateKey.p7', userId)}`,
                                 editQuickBuyMessage(bot, chatId, userId, messageId)
                             }
                             setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                             }, 5000);
                         }))
                     })
             }
 
+        }
+
+        if (sel_action === 'settings_quick_buy_eth' || sel_action === 'settings_quick_buy_eth_refresh') {
+            await safeDeleteMessage(bot, chatId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const { sendQuickBuyEthMessage } = await import("./messages/ethereum/settings/quick_buy");
+                sendQuickBuyEthMessage(bot, chatId, userId, messageId);
+            }
+        } else if (sel_action?.startsWith('settings_quick_buy_eth_amount_')) {
+            const index = Number(sel_action?.split('settings_quick_buy_eth_amount_')[1])
+            if (!isNaN(index)) {
+                bot.sendMessage(chatId, `Enter buy amount in ETH for button ${index + 1}:`)
+                    .then(sentMessage => {
+                        bot.once('text', createUserTextHandler(userId, async reply => {
+                            const buy_amount = Number(reply.text)
+                            if (isNaN(buy_amount) || buy_amount < 0) {
+                                const errorMessage = await bot.sendMessage(chatId, `Invalid amount. Please enter a valid number.`)
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => { });
+                                }, 5000);
+                            } else {
+                                if (!user.settings.quick_buy_eth) {
+                                    user.settings.quick_buy_eth = { buy_amount_eth: [0.1, 0.2, 0.5, 1, 2] };
+                                }
+                                if (!user.settings.quick_buy_eth.buy_amount_eth) {
+                                    user.settings.quick_buy_eth.buy_amount_eth = [0.1, 0.2, 0.5, 1, 2];
+                                }
+                                user.settings.quick_buy_eth.buy_amount_eth[index] = buy_amount
+                                await user.save()
+                                const { editQuickBuyEthMessage } = await import("./messages/ethereum/settings/quick_buy");
+                                editQuickBuyEthMessage(bot, chatId, userId, messageId)
+                            }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                            }, 5000);
+                        }))
+                    })
+            }
+        }
+
+        if (sel_action === 'settings_quick_sell_eth' || sel_action === 'settings_quick_sell_eth_refresh') {
+            await safeDeleteMessage(bot, chatId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const { sendQuickSellEthMessage } = await import("./messages/ethereum/settings/quick_sell");
+                sendQuickSellEthMessage(bot, chatId, userId, messageId);
+            }
+        } else if (sel_action?.startsWith('settings_quick_sell_eth_percent_')) {
+            const index = Number(sel_action?.split('settings_quick_sell_eth_percent_')[1])
+            if (!isNaN(index)) {
+                bot.sendMessage(chatId, `${await t('messages.quickSell', userId)}`)
+                    .then(sentMessage => {
+                        bot.once('text', createUserTextHandler(userId, async reply => {
+                            const sell_percent = Number(reply.text)
+                            if (isNaN(sell_percent) || sell_percent < 0 || sell_percent > 100) {
+                                const errorMessage = await bot.sendMessage(chatId, `${await t('errors.invalidSell', userId)}`)
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => { });
+                                }, 5000);
+                            } else {
+                                if (!user.settings.quick_sell_eth) {
+                                    user.settings.quick_sell_eth = { sell_percent_eth: [10, 20, 50, 75, 100] };
+                                }
+                                if (!user.settings.quick_sell_eth.sell_percent_eth) {
+                                    user.settings.quick_sell_eth.sell_percent_eth = [10, 20, 50, 75, 100];
+                                }
+                                user.settings.quick_sell_eth.sell_percent_eth[index] = sell_percent
+                                await user.save()
+                                const { editQuickSellEthMessage } = await import("./messages/ethereum/settings/quick_sell");
+                                editQuickSellEthMessage(bot, chatId, userId, messageId)
+                            }
+                            setTimeout(() => {
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                            }, 5000);
+                        }))
+                    })
+            }
         }
 
         if (sel_action === 'settings_quick_sell' || sel_action === 'settings_quick_sell_refresh') {
@@ -3070,7 +3722,7 @@ ${await t('privateKey.p7', userId)}`,
                             if (isNaN(sell_percent) || sell_percent < 0 || sell_percent > 100) {
                                 const errorMessage = await bot.sendMessage(chatId, `${await t('errors.invalidSell', userId)}`)
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => { });
                                 }, 5000);
                             } else {
                                 user.settings.quick_sell.sell_percent[index] = sell_percent
@@ -3078,8 +3730,8 @@ ${await t('privateKey.p7', userId)}`,
                                 editQuickSellMessage(bot, chatId, userId, messageId)
                             }
                             setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
                             }, 5000);
                         }))
                     })
@@ -3088,14 +3740,21 @@ ${await t('privateKey.p7', userId)}`,
         }
 
         if (sel_action === "settings_back") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             sendSettingsMessageWithImage(bot, chatId, userId, messageId);
         } else if (sel_action === "settings_fee_back") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers when going back
+            cleanupUserTextHandler(userId);
             editFeeMessage(bot, chatId, userId, messageId);
         } else if (sel_action === "autotip_refresh") {
             editFeeAutoMessage(bot, chatId, userId, messageId);
+        } else if (sel_action === "autogas_refresh") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                editFeeAutoMessageEth(bot, chatId, userId, messageId);
+            } else {
+                editFeeAutoMessage(bot, chatId, userId, messageId);
+            }
         }
 
         if (sel_action === "speed_low" || sel_action === "speed_medium" || sel_action === "speed_high") {
@@ -3114,19 +3773,48 @@ ${await t('privateKey.p7', userId)}`,
             editFeeAutoMessage(bot, chatId, userId, messageId);
         }
 
+        // Ethereum gas speed settings
+        if (sel_action === "speed_gas_low" || sel_action === "speed_gas_medium" || sel_action === "speed_gas_high" || sel_action === "speed_gas_veryHigh") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                let newSpeed: "low" | "medium" | "high" | "veryHigh" = "medium";
+                switch (sel_action) {
+                    case "speed_gas_low":
+                        (user.settings as any).auto_gas_eth = "low";
+                        newSpeed = "low";
+                        break;
+                    case "speed_gas_medium":
+                        (user.settings as any).auto_gas_eth = "medium";
+                        newSpeed = "medium";
+                        break;
+                    case "speed_gas_high":
+                        (user.settings as any).auto_gas_eth = "high";
+                        newSpeed = "high";
+                        break;
+                    case "speed_gas_veryHigh":
+                        (user.settings as any).auto_gas_eth = "veryHigh";
+                        newSpeed = "veryHigh";
+                        break;
+                }
+                await user.save();
+                // Refetch user to ensure we have latest data
+                const updatedUser = await User.findOne({ userId });
+                if (updatedUser) {
+                    editFeeAutoMessageEth(bot, chatId, userId, messageId);
+                }
+            }
+        }
+
         if (sel_action === "settings_refresh") {
             editFeeMessage(bot, chatId, userId, messageId);
         }
 
-        //settings -> PNL image
         if (sel_action === "settings_image") {
             user.settings.image_activation = !user.settings.image_activation;
             await user.save();
             editSettingsMessage(bot, chatId, userId, messageId);
-            // editAutoSellMessage(bot, chatId, userId, messageId);
         }
 
-        //Settings -> auto_sell
         if (sel_action === "settings_auto_sell") {
             sendAutoSellMessage(bot, chatId, userId, messageId);
             await safeDeleteMessage(bot, chatId, messageId);
@@ -3135,7 +3823,6 @@ ${await t('privateKey.p7', userId)}`,
             user.settings.auto_sell.enabled = !user.settings.auto_sell.enabled;
             await user.save();
             editMessageReplyMarkup(bot, chatId, userId, messageId);
-            // editAutoSellMessage(bot, chatId, userId, messageId);
         }
         if (sel_action === "settings_auto_Sell_wallets") {
             if (user.wallets.length > 0) {
@@ -3148,41 +3835,7 @@ ${await t('privateKey.p7', userId)}`,
             }
             return;
         }
-        // if (sel_action === "settings_auto_Sell_add_rule") {
-        //     bot.sendMessage(
-        //         chatId,
-        //         `Reply with the percent of tokens you want to auto sell. 10 -> 10%, 20 -> 20%`,
-        //         // { reply_markup: { force_reply: true } },
-        //     ).then((sentMessage) => {
-        //         bot.once('text',
-        //             async (reply) => {
-        //                 const autoSellPercent = Number(reply.text || "");
-        //                 if (
-        //                     isNaN(autoSellPercent) ||
-        //                     autoSellPercent <= 0 ||
-        //                     autoSellPercent > 100
-        //                 ) {
-        //                     bot.sendMessage(
-        //                         chatId,
-        //                         `❌ Validation error: Invalid trade amount. Please enter a value between 1 and 100.`,
-        //                     );
-        //                 } else {
-        //                     user.settings.auto_sell.sellPercent = autoSellPercent;
-        //                     await user.save();
-        //                     editMessageReplyMarkup(bot, chatId, userId, messageId);
-        //                 }
-        //                 bot.deleteMessage(chatId, sentMessage.message_id);
-        //                 bot.deleteMessage(chatId, reply.message_id);
-        //             },
-        //         );
-        //     });
-        //     return;
-        // }
-        // if(sel_action === "settings_auto_Sell_Sell_once"){
-        //     user.settings.auto_sell.sellOnce = !user.settings.auto_sell.sellOnce;
-        //     await user.save();
-        //     editMessageReplyMarkup(bot, chatId, userId, messageId);
-        // }
+
         if (sel_action === "settings_auto_Sell_tp_sl") {
             editprofitLevelMessage(bot, chatId, userId, messageId)
         }
@@ -3244,7 +3897,6 @@ ${await t('privateKey.p7', userId)}`,
                 await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
                 await bot.deleteMessage(chatId, reply.message_id).catch(() => { });
 
-                // Stop loss must be negative (e.g., -10 for -10%)
                 if (isNaN(SlPercent) || SlPercent >= 0 || SlPercent < -100) {
                     const errorMessage = await bot.sendMessage(
                         chatId,
@@ -3279,10 +3931,7 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
 
-        // Settings -> language
         if (sel_action === "settings_language") {
-            // sendLanguageMessage(bot, chatId, userId, messageId);
-            // bot.deleteMessage(chatId, messageId);
             bot.editMessageCaption(
                 `${await t('language.p1', userId)}`,
                 {
@@ -3313,12 +3962,6 @@ ${await t('privateKey.p7', userId)}`,
 
         if (sel_action === "settings_language_en") {
             await setUserLanguage(userId, 'en');
-
-            // const message = await t('language.changed_to_english', userId); // Add this to your en.ts
-            // await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
-
-            // bot.deleteMessage(chatId, messageId);
-            // sendSettingsMessageWithImage(bot, chatId, userId, messageId);
             try {
                 bot.editMessageCaption(
                     `${await t('language.p1', userId)}`,
@@ -3354,11 +3997,6 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "settings_language_fr") {
             await setUserLanguage(userId, 'fr');
 
-            // const message = await t('language.changed_to_french', userId); // Add this to your en.ts
-            // await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
-            // bot.deleteMessage(chatId, messageId);
-            // sendSettingsMessageWithImage(bot, chatId, userId, messageId);
-
             bot.editMessageCaption(
                 `${await t('language.p1', userId)}`,
                 {
@@ -3387,40 +4025,40 @@ ${await t('privateKey.p7', userId)}`,
             );
         }
 
-        // Trending Coin
         if (sel_action === "trending_coin") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
-            sendTrendingPageMessage(bot, chatId, userId, 1); // always start on page 1
+            sendTrendingPageMessage(bot, chatId, userId, 1);
         }
 
-        // Next / Previous page (edit same message)
         if (sel_action?.startsWith("trending_page_")) {
             const page = parseInt(sel_action.split("_").pop()!);
             await editTrendingPageMessage(bot, chatId, messageId, userId, page);
         }
 
-        // Refresh current page (edit same message)
         if (sel_action?.startsWith("refresh_trending_")) {
             const page = parseInt(sel_action.split("_").pop()!);
             await editTrendingPageMessage(bot, chatId, messageId, userId, page);
         }
 
-        // Help
         else if (sel_action === "help") {
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            cleanupUserTextHandler(userId);
             sendHelpMessageWithImage(bot, chatId, userId, messageId);
             if (messageId) {
                 await safeDeleteMessage(bot, chatId, messageId);
             }
         }
 
-        // Sniper bot
         if (sel_action === "sniper") {
+            const userCheck = await User.findOne({ userId });
+            if (userCheck && userCheck.chain === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Sniper functions are only available for Solana" });
+                return;
+            }
             safeDeleteMessage(bot, chatId, messageId);
-            cleanupUserTextHandler(userId); // Clean up any active text handlers
+            cleanupUserTextHandler(userId);
             let allowed: boolean;
-            const userUserId = user.userId;
+            const userUserId = users.userId;
             if (userUserId !== null && userUserId !== undefined) {
                 const isWhitelisted = await isSniperWhitelisted(userUserId);
                 if (isWhitelisted) {
@@ -3432,8 +4070,6 @@ ${await t('privateKey.p7', userId)}`,
                 allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
             }
 
-            // const allowed = await ensureSubscriptionForSniper(bot, chatId, userId);
-            
             if (!allowed) {
                 return;
             }
@@ -3445,7 +4081,12 @@ ${await t('privateKey.p7', userId)}`,
             sendSniperMessageeWithImage(bot, chatId, userId, messageId);
         }
         if (sel_action === "sniper_refresh") {
-            editTokenListMessage(bot, chatId, userId, messageId);
+            try {
+                await editTokenListMessage(bot, chatId, userId, messageId);
+            } catch (error) {
+                console.error("Error in sniper_refresh:", error);
+                // Don't crash the bot, just log the error
+            }
         }
 
         if (sel_action === "detection") {
@@ -3462,7 +4103,6 @@ ${await t('privateKey.p7', userId)}`,
                     await bot.deleteMessage(chatId, (await message).message_id).catch(() => { });
                 }, 10000);
             } else {
-                // Stop the sniper when user disables it
                 const { stopSniper } = await import("./services/sniper");
                 stopSniper(userId);
                 const message1 = bot.sendMessage(chatId, await t('sniper.stopped', userId));
@@ -3529,7 +4169,7 @@ ${await t('privateKey.p7', userId)}`,
                                 // { reply_markup: { force_reply: true } },
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3554,19 +4194,23 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
         }
 
         if (sel_action === "sniper_buyAmount") {
+            const userChain = await getUserChain(userId);
+            const buyXMessage = userChain === "ethereum"
+                ? await t('messages.buy_x_ethereum', userId)
+                : await t('messages.buy_x', userId);
             bot.sendMessage(
                 chatId,
-                `${await t('messages.buy_x', userId)}`,
+                buyXMessage,
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -3577,7 +4221,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3602,10 +4246,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3630,7 +4274,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3655,10 +4299,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3683,7 +4327,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3708,10 +4352,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3736,7 +4380,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3761,10 +4405,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3789,7 +4433,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3814,10 +4458,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3842,7 +4486,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3867,10 +4511,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3895,7 +4539,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3920,10 +4564,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -3948,7 +4592,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -3973,10 +4617,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4001,7 +4645,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4026,10 +4670,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4054,7 +4698,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4079,10 +4723,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4108,7 +4752,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4133,10 +4777,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4161,7 +4805,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4186,10 +4830,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4215,7 +4859,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4240,10 +4884,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4268,7 +4912,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4293,10 +4937,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4322,7 +4966,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4347,10 +4991,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4375,7 +5019,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4400,10 +5044,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4428,7 +5072,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4453,10 +5097,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4481,7 +5125,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4506,10 +5150,10 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
@@ -4534,7 +5178,7 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidAmount', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => {});
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
                                 }, 10000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
@@ -4559,17 +5203,26 @@ ${await t('privateKey.p7', userId)}`,
                             await user.save();
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
-                            setTimeout(() => {
-                                safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
-                                safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
-                            }, 5000);
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 5000);
                     }),
                 );
             });
         }
 
-    } catch (error) {
+    } catch (error: any) {
         console.error("Error handling callback query:", error);
+        // Answer the callback query to prevent "loading" state
+        try {
+            await bot.answerCallbackQuery(callbackQuery.id, {
+                text: "❌ An error occurred. Please try again.",
+                show_alert: false
+            });
+        } catch (answerError) {
+            // Ignore errors when answering callback query
+        }
     }
 });
 
@@ -4584,10 +5237,9 @@ async function setBotCommands() {
         { command: "/wallets", description: `${await t('commands.wallet')}` },
         { command: "/positions", description: `${await t('commands.position')}` },
         { command: "/sniper", description: `${await t('commands.sniper')}` },
-        // { command: "/copytrade", description: "Foxy Copy-Trading." },
+        { command: "/chains", description: "Choisissez votre blockchain préférée pour le trading." },
         // { command: "/orders", description: "View limit orders." },
-    ])
-        .then(() => {
+    ]).then(() => {
             console.log("Commands have been set successfully.");
         })
         .catch((err) => {
@@ -4597,167 +5249,305 @@ async function setBotCommands() {
 
 setBotCommands();
 
-// Register fund bundle wallet message handler
 bot.on('message', async (msg) => {
     if (msg.text && msg.from?.id) {
         await fundBundleWalletModule.handleUserReply(msg);
     }
 });
 
-// Auto sell manin
-
-// Flag to prevent overlapping executions
 let isCheckingAutoSell = false;
 
 export async function checkAndAutoSell() {
-    // Prevent overlapping executions
     if (isCheckingAutoSell) {
         console.log("⏳ Auto-sell check already in progress, skipping...");
         return;
     }
-    
+
     isCheckingAutoSell = true;
     try {
         console.log("🔍 Running auto-sell check...");
 
         const orders = await limitOrderData.find({ status: "Pending" });
 
-    for (const order of orders) {
-        try {
-            //@ts-ignore
-            const currentPrice = Number(await getTokenPrice(order.token_mint));
-            // if (!currentPrice) continue;
+        for (const order of orders) {
+            try {
+                const user = await User.findOne({ userId: order.user_id });
+                if (!user) continue;
 
-            console.log(`💰 Token ${order.token_mint}: current price $${currentPrice}, target $${order.target_price1} & $${order.target_price2}`);
+                // Determine if this is Ethereum or Solana based on wallet
+                const isEthereumWallet = user.ethereumWallets?.some(w => w.publicKey === order.wallet);
+                let currentPrice = 0;
+                let tokenInfo: any = null;
 
-            if (currentPrice >= order.target_price1 || currentPrice <= order.target_price2) {
-                console.log(`🚀 Triggering auto-sell for ${order.token_mint} (user ${order.user_id})`);
-                const id = order.user_id;
-                const wallet = order.wallet;
-                const address = order.token_mint;
-                const tp = order.Tp;
-                const sl = order.Sl;
-                // const sellPercent =Number(order.auto_sell_percent);
-                const amount = order.token_amount;
-                console.log(wallet, address, id, amount)
-                const result = await swapToken(
-                    id,
-                    wallet,
-                    address,
-                    100,
-                    "sell",
-                    50,
-                    0.0005 * 10 ** 9,
-                    amount
-                );
-
-                if (result?.success) {
-                    await limitOrderData.updateOne(
-                        { _id: order._id },
-                        { $set: { status: "Success" } }
-                    );
-                    const user = await User.findOne({ userId: order.user_id });
-                    if (!user) throw "No User";
-                    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
-                    if (!settings) throw new Error("Tipping settings not found!");
-                    const active_wallet = user.wallets.find(
-                        (wallet) => wallet.is_active_wallet,
-                    );
-                    const sol_price = getSolPrice();
-                    const pairArray = await getPairByAddress(address);
+                if (isEthereumWallet) {
+                    // Ethereum token - use Ethereum price fetching
+                    try {
+                        const pairInfo = await getPairInfoWithTokenAddress(order.token_mint);
+                        if (pairInfo?.priceUsd) {
+                            currentPrice = Number(pairInfo.priceUsd);
+                            console.log('pairInfo.priceUsd', pairInfo.priceUsd);
+                            console.log('currentPrice', currentPrice);
+                            tokenInfo = {
+                                priceUsd: pairInfo.priceUsd,
+                                marketCap: pairInfo.marketCap,
+                                symbol: pairInfo.baseToken?.symbol || 'TOKEN',
+                                name: pairInfo.baseToken?.name || 'Token'
+                            };
+                        } else {
+                            const dbToken = await Token.findOne({ address: { $regex: new RegExp(`^${order.token_mint}$`, "i") } });
+                            if (dbToken?.priceUsd) {
+                                currentPrice = Number(dbToken.priceUsd);
+                                tokenInfo = {
+                                    priceUsd: dbToken.priceUsd,
+                                    marketCap: dbToken.market_cap,
+                                    symbol: dbToken.symbol || 'TOKEN',
+                                    name: dbToken.name || 'Token'
+                                };
+                            }
+                        }
+                    } catch (error) {
+                        console.error(`Error fetching Ethereum token price for ${order.token_mint}:`, error);
+                        continue;
+                    }
+                } else {
+                    // Solana token - use existing Solana price fetching
+                    //@ts-ignore
+                    currentPrice = Number(await getTokenPrice(order.token_mint));
+                    const pairArray = await getPairByAddress(order.token_mint);
                     const pair = pairArray[0];
-                    const priceUsd = pair.priceUsd;
-                    const priceNative = pair.priceNative;
-                    const liquidity = pair?.liquidity?.usd;
-                    const market_cap = pair?.marketCap;
-                    const symbol = pair.baseToken.symbol;
-                    const name = pair.baseToken.name;
-                    // console.log("token_price", priceNative);
+                    tokenInfo = {
+                        priceUsd: pair?.priceUsd,
+                        marketCap: pair?.marketCap,
+                        symbol: pair?.baseToken?.symbol || 'TOKEN',
+                        name: pair?.baseToken?.name || 'Token'
+                    };
+                }
 
-                    if (currentPrice >= order.target_price1) {
-                        const message = `${await t('messages.autoSell1', order.user_id)}\n
+                if (!currentPrice || currentPrice <= 0) {
+                    console.warn(`⚠️ Could not get price for token ${order.token_mint}`);
+                    continue;
+                }
+
+                console.log(`💰 Token ${order.token_mint}: current price $${currentPrice}, target $${order.target_price1} & $${order.target_price2}`);
+
+                if (currentPrice >= order.target_price1 || currentPrice <= order.target_price2) {
+                    console.log(`🚀 Triggering auto-sell for ${order.token_mint} (user ${order.user_id})`);
+                    const id = order.user_id;
+                    const wallet = order.wallet;
+                    const address = order.token_mint;
+                    const tp = order.Tp;
+                    const sl = order.Sl;
+                    const amount = order.token_amount;
+
+                    let result: any = null;
+
+                    if (isEthereumWallet) {
+                        // Ethereum auto-sell
+                        try {
+                            const active_wallet = user.ethereumWallets.find(w => w.publicKey === wallet);
+                            if (!active_wallet) {
+                                console.error(`❌ Active Ethereum wallet not found for user ${id}`);
+                                continue;
+                            }
+
+                            const token = await Token.findOne({ address: { $regex: new RegExp(`^${address}$`, "i") } });
+                            if (!token) {
+                                console.error(`❌ Token not found: ${address}`);
+                                continue;
+                            }
+
+                            const slippage = BigInt(Math.floor((user.settings.slippage_eth?.sell_slippage_eth || 0.5) * 100000));
+                            const gas_amount = user.settings.option_gas_eth || 10;
+                            const secretKey = decryptSecretKey(active_wallet.secretKey);
+                            const tokenDecimals = token.decimal || 18;
+                            const tokenAmount = ethers.parseUnits(amount.toString(), tokenDecimals);
+                            const deadline = Math.floor(Date.now() / 1000) + 1200;
+
+                            const swapResult = await swapExactTokenForETHUsingUniswapV2_({
+                                index: 0,
+                                amount: tokenAmount,
+                                token_address: address,
+                                pair_address: token.pairAddress || "",
+                                slippage: slippage,
+                                gas_amount: gas_amount,
+                                dexId: token.dex_name || "Uniswap V2",
+                                secretKey: secretKey,
+                                deadline: deadline
+                            });
+
+                            result = { success: !!swapResult, txHash: swapResult };
+                        } catch (error: any) {
+                            console.error(`❌ Ethereum auto-sell error for ${address}:`, error);
+                            result = { success: false, error: error.message };
+                        }
+                    } else {
+                        // Solana auto-sell (existing logic)
+                        console.log(wallet, address, id, amount);
+                        result = await swapToken(
+                            id,
+                            wallet,
+                            address,
+                            100,
+                            "sell",
+                            50,
+                            0.0005 * 10 ** 9,
+                            amount
+                        );
+                    }
+
+                    if (result?.success || result?.txHash) {
+                        await limitOrderData.updateOne(
+                            { _id: order._id },
+                            { $set: { status: "Success" } }
+                        );
+
+                        const settings = await TippingSettings.findOne() || new TippingSettings();
+                        if (!settings) throw new Error("Tipping settings not found!");
+
+                        let adminFeePercent;
+                        if (user.userId === 7994989802 || user.userId === 2024002049) {
+                            adminFeePercent = 0;
+                        } else {
+                            adminFeePercent = settings.feePercentage / 100;
+                        }
+
+                        if (isEthereumWallet) {
+                            const active_wallet = user.ethereumWallets.find(w => w.publicKey === wallet);
+                            const eth_price = await getEtherPrice();
+                            const remainingBalance = await getTokenBalancWithContract(address, wallet);
+
+                            if (currentPrice >= order.target_price1) {
+                                const message = `${await t('messages.autoSell1', order.user_id)}\n
+${await t('messages.autoSell2', order.user_id)} ${order.token_mint}\n
+${await t('messages.autoSell3', order.user_id)} ${tp}%
+${await t('messages.autoSell4', order.user_id)} $${currentPrice.toFixed(6)}
+${await t('messages.autoSell5', order.user_id)} $${(currentPrice * amount).toFixed(6)}\n
+${await t('messages.autoSell6', order.user_id)}`
+                                await bot.sendMessage(order.user_id, message, { disable_web_page_preview: true });
+
+                                if (active_wallet) {
+                                    if (!active_wallet.tradeHistory) {
+                                        (active_wallet as any).tradeHistory = [];
+                                    }
+                                    (active_wallet.tradeHistory as any[]).push({
+                                        transaction_type: "sell",
+                                        token_address: address,
+                                        amount: 100,
+                                        token_price: order.target_price1,
+                                        token_amount: amount * order.target_price1 / eth_price, // ETH received
+                                        token_balance: remainingBalance,
+                                        mc: tokenInfo.marketCap || 0,
+                                        date: Date.now().toString(),
+                                        name: tokenInfo.name,
+                                        tip: (amount * order.target_price1 / eth_price) * adminFeePercent,
+                                        pnl: false
+                                    });
+                                }
+                            }
+
+                            if (currentPrice <= order.target_price2) {
+                                const message1 = `${await t('messages.autoSell7', order.user_id)}\n
+${await t('messages.autoSell2', order.user_id)} ${order.token_mint}\n
+${await t('messages.autoSell4', order.user_id)} $${currentPrice.toFixed(4)}
+${await t('messages.autoSell5', order.user_id)} $${(currentPrice * amount).toFixed(4)}\n
+${await t('messages.autoSell8', order.user_id)}`
+                                await bot.sendMessage(order.user_id, message1, { disable_web_page_preview: true });
+
+                                if (active_wallet) {
+                                    if (!active_wallet.tradeHistory) {
+                                        (active_wallet as any).tradeHistory = [];
+                                    }
+                                    (active_wallet.tradeHistory as any[]).push({
+                                        transaction_type: "sell",
+                                        token_address: address,
+                                        amount: 100,
+                                        token_price: order.target_price2,
+                                        token_amount: amount * order.target_price2 / eth_price, // ETH received
+                                        token_balance: remainingBalance,
+                                        mc: tokenInfo.marketCap || 0,
+                                        date: Date.now().toString(),
+                                        name: tokenInfo.name,
+                                        tip: (amount * order.target_price2 / eth_price) * adminFeePercent,
+                                        pnl: false
+                                    });
+                                }
+                            }
+                        } else {
+                            // Solana auto-sell (existing logic)
+                            const active_wallet = user.wallets.find(
+                                (wallet) => wallet.is_active_wallet,
+                            );
+                            const sol_price = getSolPrice();
+                            const pairArray = await getPairByAddress(address);
+                            const pair = pairArray[0];
+                            const priceUsd = pair.priceUsd;
+                            const priceNative = pair.priceNative;
+                            const liquidity = pair?.liquidity?.usd;
+                            const market_cap = pair?.marketCap;
+                            const symbol = pair.baseToken.symbol;
+                            const name = pair.baseToken.name;
+
+                            if (currentPrice >= order.target_price1) {
+                                const message = `${await t('messages.autoSell1', order.user_id)}\n
 ${await t('messages.autoSell2', order.user_id)} ${order.token_mint}\n
 ${await t('messages.autoSell3', order.user_id)} ${tp}%
 ${await t('messages.autoSell4', order.user_id)} $${currentPrice.toFixed(4)}
 ${await t('messages.autoSell5', order.user_id)} $${(currentPrice * amount).toFixed(4)}\n
 ${await t('messages.autoSell6', order.user_id)}`
-                        // Target: $${order.target_price1.toFixed(4)} & $${order.target_price2.toFixed(4)}`
-                        await bot.sendMessage(order.user_id, message);
-                        let adminFeePercent;
-                        if (user.userId === 7994989802 || user.userId === 2024002049) {
-                            adminFeePercent = 0;
-                        } else {
-                            adminFeePercent = settings.feePercentage / 100;
-                        }
-                        active_wallet?.tradeHistory.push({
-                            transaction_type: "sell",
-                            token_address: address.toString(),
-                            amount: 100,
-                            token_price: order.target_price1,
-                            token_amount: amount,
-                            token_balance: 0,
-                            mc: market_cap,
-                            date: Date.now(),
-                            name: name,
-                            tip: amount * adminFeePercent * order.target_price1 / sol_price,
-                            pnl: false
-                        });
-                        await user.save();
-                    }
-                    if (currentPrice < order.target_price2) {
-                        let adminFeePercent;
-                        if (user.userId === 7994989802 || user.userId === 2024002049) {
-                            adminFeePercent = 0;
-                        } else {
-                            adminFeePercent = settings.feePercentage / 100;
-                        }
-                        const message1 = `${await t('messages.autoSell7', order.user_id)}\n
+                                await bot.sendMessage(order.user_id, message);
+                                active_wallet?.tradeHistory.push({
+                                    transaction_type: "sell",
+                                    token_address: address.toString(),
+                                    amount: 100,
+                                    token_price: order.target_price1,
+                                    token_amount: amount,
+                                    token_balance: 0,
+                                    mc: market_cap,
+                                    date: Date.now(),
+                                    name: name,
+                                    tip: amount * adminFeePercent * order.target_price1 / sol_price,
+                                    pnl: false
+                                });
+                            }
+                            if (currentPrice < order.target_price2) {
+                                const message1 = `${await t('messages.autoSell7', order.user_id)}\n
 ${await t('messages.autoSell2', order.user_id)} ${order.token_mint}\n
 ${await t('💸 Stop Loss :', order.user_id)} ${sl}%
 ${await t('messages.autoSell4', order.user_id)} $${currentPrice.toFixed(4)}
 ${await t('messages.autoSell5', order.user_id)} $${(currentPrice * amount).toFixed(4)}\n
 ${await t('messages.autoSell8', order.user_id)}`
-                        // Target: $${order.target_price1.toFixed(4)} & $${order.target_price2.toFixed(4)}`
-                        await bot.sendMessage(order.user_id, message1);
-                        active_wallet?.tradeHistory.push({
-                            transaction_type: "sell",
-                            token_address: address.toString(),
-                            amount: 100,
-                            token_price: order.target_price2,
-                            token_amount: amount,
-                            token_balance: 0,
-                            mc: market_cap,
-                            date: Date.now(),
-                            name: name,
-                            tip: amount * adminFeePercent * order.target_price2 / sol_price,
-                            pnl: false
-                        });
+                                await bot.sendMessage(order.user_id, message1);
+                                active_wallet?.tradeHistory.push({
+                                    transaction_type: "sell",
+                                    token_address: address.toString(),
+                                    amount: 100,
+                                    token_price: order.target_price2,
+                                    token_amount: amount,
+                                    token_balance: 0,
+                                    mc: market_cap,
+                                    date: Date.now(),
+                                    name: name,
+                                    tip: amount * adminFeePercent * order.target_price2 / sol_price,
+                                    pnl: false
+                                });
+                            }
+                        }
+
                         await user.save();
+                        console.log(`✅ Sold ${order.token_mint} for user ${order.user_id}`);
+                    } else {
+                        await limitOrderData.updateOne(
+                            { _id: order._id },
+                            { $set: { status: "Failed" } }
+                        );
+                        console.error(`❌ Swap failed for ${order.token_mint}`);
                     }
-                    console.log(`✅ Sold ${order.token_mint} for user ${order.user_id}`);
-                    // wallet?.tradeHistory.push({
-                    //     transaction_type: "sell",
-                    //     token_address: tokenAddress.toString(),
-                    //     amount: amount,
-                    //     token_price: priceUsd,
-                    //     token_amount: tokenAmount,
-                    //     token_balance: tokenBalance,
-                    //     mc: market_cap
-                    // });
-                } else {
-                    await limitOrderData.updateOne(
-                        { _id: order._id },
-                        { $set: { status: "Failed" } }
-                    );
-                    console.error(`❌ Swap failed for ${order.token_mint}`);
                 }
+            } catch (err) {
+                console.error("⚠️ Error in auto-sell loop:", err);
             }
-        } catch (err) {
-            console.error("⚠️ Error in auto-sell loop:", err);
         }
-    }
     } finally {
-        // Always reset the flag, even if there was an error
         isCheckingAutoSell = false;
     }
 }
@@ -4766,44 +5556,35 @@ const updateSolanaPrice = async () => {
     setSolPrice(await getSolanaPrice());
 };
 
-// const updatedTokenPrice = async () => {
-//     setTokenPrice(await getTokenPrice("D1bc2VPHarFbDPhGD4o24DL8MJHnRBnB6GoCGkZEpump"));
-// }
-
 const main = async () => {
     updateSolanaPrice();
-    // updatedTokenPrice();
     checkAndAutoSell();
+    // Update price every 60 seconds (cached for 60s, so actual API calls are rate-limited)
     setInterval(() => {
-        // checkAndAutoSell();
         updateSolanaPrice();
-        // updatedTokenPrice();
-    }, 18000);
-    
-    // Auto-sell check interval (in milliseconds)
-    // Lower values = more frequent checks, but may hit API rate limits
-    // Recommended: 5000-10000ms (5-10 seconds) for balance between responsiveness and API limits
-    const AUTO_SELL_CHECK_INTERVAL = 5000; // 5 seconds - checks all the time, more frequently
-    
+    }, 60000);
+
+    const AUTO_SELL_CHECK_INTERVAL = 5000;
+
     setInterval(() => {
         checkAndAutoSell();
     }, AUTO_SELL_CHECK_INTERVAL);
 
-    // Run the sniper script continuously - but only start new ones, existing ones are managed
     setInterval(async () => {
-    try {
-        const users = await User.find({ "sniper.is_snipping": true });
-        console.log(`👥 Found ${users.length} active snipers.`);
-        for (const user of users) {
-            // runSniper will check if already running and skip if so
-            await runSniper(user.userId);
+        try {
+            const users = await User.find({ "sniper.is_snipping": true });
+            console.log(`👥 Found ${users.length} active snipers.`);
+            for (const user of users) {
+                if (user.userId != null && typeof user.userId === 'number') {
+                    await runSniper(user.userId);
+                }
+            }
+        } catch (error) {
+            console.error("⚠️ Error in sniper script:", error);
         }
-    } catch (error) {
-        console.error("⚠️ Error in sniper script:", error);
-    }
-    }, 60000); // Check every 60 seconds instead of 30 to reduce calls
+    }, 60000);
 
-    const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
+    const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
     setInterval(async () => {
         settings.BotStatus = new Date();
