@@ -25,6 +25,10 @@ export const getSniper = async (
     };
     // console.log("User Token List:", tokenlist);
 
+    // Pre-translate common strings to avoid await in map
+    const unknownTokenText = await t('sniper.unknownToken', userId);
+    const viewText = await t('sniper.view', userId);
+    
     // Fetch token names for each address
     const tokenListWithNames = await Promise.all(
         (user.sniper.tokenlist || []).map(async (tokenAddress: any, index: number) => {
@@ -33,17 +37,17 @@ export const getSniper = async (
                 const pair = pairArray?.[0];
                 
                 if (pair && pair.baseToken) {
-                    const tokenName = pair.baseToken.name || 'Unknown Token';
+                    const tokenName = pair.baseToken.name || unknownTokenText;
                     const tokenSymbol = pair.baseToken.symbol || 'N/A';
-                    return `${index + 1}. <strong>${tokenName} (${tokenSymbol})</strong> - <a href="https://pump.fun/coin/${tokenAddress}">View</a>`;
+                    return `${index + 1}. <strong>${tokenName} (${tokenSymbol})</strong> - <a href="https://pump.fun/coin/${tokenAddress}">${viewText}</a>`;
                 } else {
                     // Fallback if token info not found
-                    return `${index + 1}. <code>${tokenAddress}</code> - <a href="https://pump.fun/coin/${tokenAddress}">View</a>`;
+                    return `${index + 1}. <code>${tokenAddress}</code> - <a href="https://pump.fun/coin/${tokenAddress}">${viewText}</a>`;
                 }
             } catch (error) {
                 console.error(`Error fetching token info for ${tokenAddress}:`, error);
                 // Fallback on error
-                return `${index + 1}. <code>${tokenAddress}</code> - <a href="https://pump.fun/coin/${tokenAddress}">View</a>`;
+                return `${index + 1}. <code>${tokenAddress}</code> - <a href="https://pump.fun/coin/${tokenAddress}">${viewText}</a>`;
             }
         })
     );
@@ -53,7 +57,7 @@ export const getSniper = async (
 
     const caption =
         `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n` +
-        `<a href="https://Google.fr">${await t('Example link', userId)}</a>\n\n` +
+        `<a href="https://Google.fr">${await t('sniper.exampleLink', userId)}</a>\n\n` +
         `${await t('sniper.panelDescription', userId)}\n\n` +
         `${await t('sniper.panelDescription2', userId)} \n\n` +
         `<strong>${await t('sniper.important', userId)}</strong> ${await t('sniper.importantNote', userId)}\n\n`;
@@ -86,7 +90,7 @@ export const getSniper = async (
                 { text: `${await t('sniper.stopLoss', userId)} : ${user.sniper.stop_loss} %`, callback_data: "sniper_stopLoss" },
             ],
             [
-                { text: `${await t('sniper.timeLimit', userId)} : ${user.sniper.time_limit} min`, callback_data: "sniper_timeLimit" },
+                { text: `${await t('sniper.timeLimit', userId)} : ${user.sniper.time_limit} ${await t('sniper.minutes', userId)}`, callback_data: "sniper_timeLimit" },
             ],
             [
                 {
@@ -115,17 +119,34 @@ export const getSniper = async (
                     callback_data: "sniper_twitter",
                 },
             ],
+            // Token Status selector - show before bonding curve settings
             [
-                { text: `${await t('sniper.bondingCurveMin', userId)} : ${user.sniper.bonding_curve_min}%`, callback_data: "sniper_boundingMin" },
-                { text: `${await t('sniper.bondingCurveMax', userId)} : ${user.sniper.bonding_curve_max}%`, callback_data: "sniper_bondingMax" },
+                { 
+                    text: `${await t('sniper.tokenStatus', userId)}: ${
+                        user.sniper.token_status === 'migrated' 
+                            ? await t('sniper.tokenStatusMigrated', userId)
+                            : user.sniper.token_status === 'on_bonding'
+                            ? await t('sniper.tokenStatusOnBonding', userId)
+                            : await t('sniper.tokenStatusBoth', userId)
+                    }`, 
+                    callback_data: "sniper_tokenStatus" 
+                },
             ],
+            // Only show bonding curve settings if user selected "on_bonding" or "both"
+            // Migrated tokens don't have bonding curves (they're on Raydium)
+            ...(user.sniper.token_status === 'migrated' ? [] : [
+                [
+                    { text: `${await t('sniper.bondingCurveMin', userId)} : ${user.sniper.bonding_curve_min}%`, callback_data: "sniper_boundingMin" },
+                    { text: `${await t('sniper.bondingCurveMax', userId)} : ${user.sniper.bonding_curve_max}%`, callback_data: "sniper_bondingMax" },
+                ],
+            ]),
             [
                 { text: `${await t('sniper.minMC', userId)} : $${user.sniper.min_mc}K`, callback_data: "sniper_MCMin" },
                 { text: `${await t('sniper.maxMC', userId)} : $${user.sniper.max_mc}K`, callback_data: "sniper_MCMax" },
             ],
             [
-                { text: `${await t('sniper.minTokenAge', userId)} : ${user.sniper.min_token_age} min`, callback_data: "sniper_tokenAgeMin" },
-                { text: `${await t('sniper.maxTokenAge', userId)} : ${user.sniper.max_token_age} min`, callback_data: "sniper_tokenAgeMax" },
+                { text: `${await t('sniper.minTokenAge', userId)} : ${user.sniper.min_token_age} ${await t('sniper.minutes', userId)}`, callback_data: "sniper_tokenAgeMin" },
+                { text: `${await t('sniper.maxTokenAge', userId)} : ${user.sniper.max_token_age} ${await t('sniper.minutes', userId)}`, callback_data: "sniper_tokenAgeMax" },
             ],
             [
                 { text: `${await t('sniper.minHolders', userId)} : ${user.sniper.min_holders}`, callback_data: "sniper_holdersMin" },
@@ -175,7 +196,7 @@ export const getSniper = async (
                 { text: `${await t('sniper.stopLoss', userId)} : ${user.sniper.stop_loss} %`, callback_data: "sniper_stopLoss" },
             ],
             [
-                { text: `${await t('sniper.timeLimit', userId)} : ${user.sniper.time_limit} min`, callback_data: "sniper_timeLimit" },
+                { text: `${await t('sniper.timeLimit', userId)} : ${user.sniper.time_limit} ${await t('sniper.minutes', userId)}`, callback_data: "sniper_timeLimit" },
             ],
             [
                 {
@@ -226,12 +247,36 @@ export const editSniperMessage = async (
     userId: number,
     messageId: number,
 ) => {
-    const { caption, markup } = await getSniper(userId);
-    console.log("Edit Sniper Message");
-    await bot.editMessageCaption(caption, {
-        chat_id: chatId,
-        parse_mode: "HTML",
-        message_id: messageId,
-        reply_markup: markup,
-    });
+    try {
+        const { caption, markup } = await getSniper(userId);
+        console.log("Edit Sniper Message");
+        
+        try {
+            await bot.editMessageCaption(caption, {
+                chat_id: chatId,
+                parse_mode: "HTML",
+                message_id: messageId,
+                reply_markup: markup,
+            });
+        } catch (captionError: any) {
+            // If it fails because there's no caption, try editing as text
+            if (captionError.message && captionError.message.includes('there is no text in the message to edit')) {
+                await bot.editMessageText(caption, {
+                    chat_id: chatId,
+                    parse_mode: "HTML",
+                    message_id: messageId,
+                    reply_markup: markup,
+                });
+            } else {
+                throw captionError;
+            }
+        }
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Sniper message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing sniper message:', error);
+    }
 };

@@ -3,7 +3,7 @@ import { hasSpecialCharacters } from "../../../services/other";
 import { walletCreate } from "../../../services/ethereum/wallet";
 import { walletsBackMarkup } from "../../../utils/markup";
 import { User } from "../../../models/user";
-import { getBalance, getEtherPrice } from "../../../services/ethereum/etherscan";
+import { t } from "../../../locales";
 
 export const getCreateWallet = async (
     bot: TelegramBot,
@@ -11,34 +11,27 @@ export const getCreateWallet = async (
     userId: number,
 ) => {
     const user = (await User.findOne({ userId })) || new User();
-
     const ethereumWallets = user.ethereumWallets || [];
-    
     bot.sendMessage(
         chatId,
-        `What would you like to name your new wallet?`,
+        `${await t('createWallet.p1', userId)}`,
     ).then((sentMessage) => {
         bot.once("text", async (reply) => {
             const label = reply.text || "";
             if (hasSpecialCharacters(label)) {
                 bot.sendMessage(
                     chatId,
-                    `Wallet name cannot contain symbols or special characters.`,
+                    `${await t('createWallet.p2', userId)}`,
                 );
             } else if (ethereumWallets.some(w => w.label === label)) {
                 bot.sendMessage(
                     chatId,
-                    `Wallet with this name already exists. Please try again.`,
+                    `${await t('createWallet.p3', userId)}`,
                 );
             } else {
                 const { publicKey, secretKey } = walletCreate();
-                const balance = await getBalance(publicKey);
-                const eth_price = await getEtherPrice();
-                const chainName = "ETH";
-                
                 const { decryptSecretKey } = await import("../../../config/security");
                 const privateKey = decryptSecretKey(secretKey);
-                
                 user.ethereumWallets.push({ 
                     label, 
                     publicKey, 
@@ -46,35 +39,38 @@ export const getCreateWallet = async (
                     is_active_wallet: ethereumWallets.length === 0
                 });
                 await user.save();
-                
+                function escapeMarkdownV2(text: string): string {
+                    return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+                }
+                const escapedLabel = escapeMarkdownV2(label);
+                const escapedPublicKey = escapeMarkdownV2(publicKey);
+                const escapedPrivateKey = escapeMarkdownV2(privateKey);
+                const p4 = escapeMarkdownV2(await t('createWallet.p4', userId));
+                const p5 = escapeMarkdownV2(await t('createWallet.p5', userId));
+                const p6 = escapeMarkdownV2(await t('createWallet.p6', userId));
+                const p7 = escapeMarkdownV2(await t('createWallet.p7', userId));
+                const p8 = escapeMarkdownV2(await t('createWallet.p8', userId));
+                const p10 = escapeMarkdownV2(await t('createWallet.p10', userId));
                 bot.sendMessage(
                     chatId,
-                    `<strong>✅ Foxy Wallet Created!
+                    `*${p4}*
 
-💳 Name:</strong>
+*${p5}*${escapedLabel}
 
-<code>${label}</code>
+*${p6}* \`${escapedPublicKey}\`
 
-<strong>🔗 Address:</strong>
+*${p7}*
+||${escapedPrivateKey}||
 
-<code>${publicKey}</code>
+*${p8}*
 
-<strong>🔑 Private Key:</strong>
-
-<code>${privateKey}</code>
-
-<strong>⚠️ Keep your private key safe and secure. Foxy will no longer remember your private key, and you will no longer be able to retrieve it after this message. Please import your wallet into MetaMask.
-
-💡 To view your other wallets, head over to settings.</strong>`,
+${p10}`,
                     {
-                        parse_mode: "HTML",
+                        parse_mode: "MarkdownV2",
                         reply_markup: await walletsBackMarkup(userId),
                     },
                 );
             }
-            bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
-            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
         });
     });
 };
-

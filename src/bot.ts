@@ -1575,7 +1575,136 @@ bot.on("callback_query", async (callbackQuery) => {
             }
             console.log('debug buy_refresh', sel_action);
 
-            await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const messageText = text || caption || "";
+                const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
+                const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
+
+                if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
+                    const { BuyEdit: EthereumBuyEdit } = await import("./commands/ethereum/buy");
+                    await EthereumBuyEdit(bot, chatId, userId, messageId, ethTokenAddress);
+                } else {
+                    await bot.answerCallbackQuery(callbackQuery.id, {
+                        text: "❌ Could not find Ethereum token address in message",
+                    });
+                }
+            } else {
+                await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
+            }
+            return;
+        }
+
+        if (sel_action === "manual_refresh") {
+            const now = Date.now();
+            let spamData = userRefreshCounts.get(userId)
+
+            if (!spamData) {
+                console.log("New user, initializing...");
+                spamData = { count: 1, lastReset: now };
+            } else {
+                const diff = now - spamData.lastReset;
+                console.log(`⏱ Time since last reset: ${diff} ms`);
+
+                if (diff > SPAM_WINDOW_MS) {
+                    console.log("⏰ Resetting count due to time window");
+                    spamData.count = 1;
+                    spamData.lastReset = now;
+                } else {
+                    spamData.count += 1;
+                }
+            }
+
+            userRefreshCounts.set(userId, spamData);
+            console.log(`User ${userId} refresh count: ${spamData.count}`);
+
+            if (spamData.count >= SPAM_LIMIT) {
+                await bot.answerCallbackQuery(callbackQuery.id, {
+                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    show_alert: true
+                });
+                return;
+            }
+            console.log('debug manual_refresh', sel_action);
+
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const refreshMessageId = user.manual_message_id || messageId;
+                if (refreshMessageId) {
+                    try {
+                        const messageText = text || caption || "";
+                        const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
+                        const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
+
+                        if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
+                            const { BuyEdit: EthereumBuyEdit } = await import("./commands/ethereum/buy");
+                            await EthereumBuyEdit(bot, chatId, userId, refreshMessageId, ethTokenAddress);
+                        } else {
+                            await bot.answerCallbackQuery(callbackQuery.id, {
+                                text: "❌ Could not find Ethereum token address in message",
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing buy menu:', error);
+                    }
+                }
+            }
+            return;
+        }
+
+        if (sel_action === "manual_refresh") {
+            const now = Date.now();
+            let spamData = userRefreshCounts.get(userId)
+
+            if (!spamData) {
+                console.log("New user, initializing...");
+                spamData = { count: 1, lastReset: now };
+            } else {
+                const diff = now - spamData.lastReset;
+                console.log(`⏱ Time since last reset: ${diff} ms`);
+
+                if (diff > SPAM_WINDOW_MS) {
+                    console.log("⏰ Resetting count due to time window");
+                    spamData.count = 1;
+                    spamData.lastReset = now;
+                } else {
+                    spamData.count += 1;
+                }
+            }
+
+            userRefreshCounts.set(userId, spamData);
+            console.log(`User ${userId} refresh count: ${spamData.count}`);
+
+            if (spamData.count >= SPAM_LIMIT) {
+                await bot.answerCallbackQuery(callbackQuery.id, {
+                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    show_alert: true
+                });
+                return;
+            }
+
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                const refreshMessageId = user.manual_message_id || messageId;
+                if (refreshMessageId) {
+                    try {
+                        const messageText = text || caption || "";
+                        const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
+                        const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
+
+                        if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
+                            const { BuyEdit: EthereumBuyEdit } = await import("./commands/ethereum/buy");
+                            await EthereumBuyEdit(bot, chatId, userId, refreshMessageId, ethTokenAddress);
+                        } else {
+                            await bot.answerCallbackQuery(callbackQuery.id, {
+                                text: "❌ Could not find Ethereum token address in message",
+                            });
+                        }
+                    } catch (error) {
+                        console.error('Error refreshing buy menu:', error);
+                    }
+                }
+            }
             return;
         }
 
@@ -1688,17 +1817,22 @@ bot.on("callback_query", async (callbackQuery) => {
             const getTokenPercent = (
                 action: BuyAction,
             ): number | "custom" | null => {
+                const buy_amount = user?.settings.quick_buy?.buy_amount || [0.1, 0.5, 1, 2, 5];
                 switch (action) {
-                    case "buy_01": return Number(user?.settings.quick_buy.buy_amount[0]);
-                    case "buy_05": return Number(user?.settings.quick_buy.buy_amount[1]);
-                    case "buy_1": return Number(user?.settings.quick_buy.buy_amount[2]);
-                    case "buy_2": return Number(user?.settings.quick_buy.buy_amount[3]);
-                    case "buy_5": return Number(user?.settings.quick_buy.buy_amount[4]);
+                    case "buy_01": return Number(buy_amount[0]) || 0.1;
+                    case "buy_05": return Number(buy_amount[1]) || 0.5;
+                    case "buy_1": return Number(buy_amount[2]) || 1;
+                    case "buy_2": return Number(buy_amount[3]) || 2;
+                    case "buy_5": return Number(buy_amount[4]) || 5;
                     default: return null;
                 }
             };
 
             const buySolAmount = getTokenPercent(sel_action);
+            if (buySolAmount === null || buySolAmount === "custom" || isNaN(Number(buySolAmount)) || Number(buySolAmount) <= 0) {
+                console.error(`Invalid buy amount for action: ${sel_action}`);
+                return;
+            }
             sendBuyMessageWithAddress(
                 bot,
                 chatId,
@@ -1793,7 +1927,7 @@ bot.on("callback_query", async (callbackQuery) => {
                             if (userChain === "ethereum") {
                                 await sendEthereumBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tradeAmount);
                             } else {
-                                sendEthereumBuyMessageWithAddress(
+                                await sendBuyMessageWithAddress(
                                     bot,
                                     chatId,
                                     userId,
@@ -1932,6 +2066,34 @@ bot.on("callback_query", async (callbackQuery) => {
                 const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
                 await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, sellPercent, tokenBalance);
                 return;
+            } else {
+                // Handle Solana users
+                if (sel_action === "sell_x") {
+                    // sell_x is handled separately below
+                    return;
+                }
+                
+                let sellPercent: number;
+                const sell_percent = user.settings.quick_sell?.sell_percent || [10, 20, 50, 75, 100];
+                switch (sel_action) {
+                    case "sell_10": sellPercent = sell_percent[0] || 10; break;
+                    case "sell_20": sellPercent = sell_percent[1] || 20; break;
+                    case "sell_50": sellPercent = sell_percent[2] || 50; break;
+                    case "sell_75": sellPercent = sell_percent[3] || 75; break;
+                    case "sell_100": sellPercent = sell_percent[4] || 100; break;
+                    default: sellPercent = 10;
+                }
+                
+                await sendSellMessageWithAddress(
+                    bot,
+                    chatId,
+                    userId,
+                    messageId,
+                    tokenAddress,
+                    sellPercent,
+                    Number(tokenBalance)
+                );
+                return;
             }
         }
 
@@ -1977,8 +2139,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
                                 await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tokenSellPercent, tokenBalance);
                             } else {
-                                const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
-                                await sendEthereumSellMessageWithAddress(
+                                await sendSellMessageWithAddress(
                                     bot,
                                     chatId,
                                     userId,
@@ -2180,8 +2341,23 @@ ${amount} SOL ⇄ <code>${solToAddress}  </code>
                     }
                 })
 
-                const decrypted = decryptSecretKey(wallet.secretKey);
-                const senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted))
+                let decrypted: string;
+                try {
+                    decrypted = decryptSecretKey(wallet.secretKey);
+                } catch (error: any) {
+                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${wallet.publicKey}:`, error.message);
+                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
+                    return;
+                }
+
+                let senderKeypair: Keypair;
+                try {
+                    senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted));
+                } catch (error: any) {
+                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to create keypair from decrypted key for wallet ${wallet.publicKey}:`, error.message);
+                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.invalidKeyFormat', userId) || 'Invalid key format. Please re-import this wallet.'}`);
+                    return;
+                }
 
                 const receiverPublicKey = new PublicKey(solToAddress || '')
 
@@ -2359,8 +2535,23 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                         }));
                                     });
                             } else {
-                                const decrypted = decryptSecretKey(wallet.secretKey);
-                                const senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted))
+                                let decrypted: string;
+                                try {
+                                    decrypted = decryptSecretKey(wallet.secretKey);
+                                } catch (error: any) {
+                                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${wallet.publicKey}:`, error.message);
+                                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
+                                    return;
+                                }
+
+                                let senderKeypair: Keypair;
+                                try {
+                                    senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted));
+                                } catch (error: any) {
+                                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to create keypair from decrypted key for wallet ${wallet.publicKey}:`, error.message);
+                                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.invalidKeyFormat', userId) || 'Invalid key format. Please re-import this wallet.'}`);
+                                    return;
+                                }
 
                                 const balance = await connection.getBalance(senderKeypair.publicKey);
                                 const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
@@ -2525,7 +2716,14 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             }
 
             const { secretKey, publicKey, label } = selectedWallet;
-            const decrypted = decryptSecretKey(secretKey);
+            let decrypted: string;
+            try {
+                decrypted = decryptSecretKey(secretKey);
+            } catch (error: any) {
+                console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${publicKey}:`, error.message);
+                bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
+                return;
+            }
             if (!decrypted || !publicKey) {
                 bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)}`);
                 return;
@@ -2605,7 +2803,14 @@ ${await t('privateKey.p7', userId)}`,
             }
 
             const { secretKey, publicKey, label } = selectedWallet;
-            const decrypted = decryptSecretKey(secretKey);
+            let decrypted: string;
+            try {
+                decrypted = decryptSecretKey(secretKey);
+            } catch (error: any) {
+                console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${publicKey}:`, error.message);
+                bot.sendMessage(chatId, `${await t('errors.invalidCopy2', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
+                return;
+            }
 
             if (!decrypted) {
                 bot.sendMessage(chatId, `${await t('errors.invalidCopy2', userId)}`);
@@ -2806,11 +3011,6 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
 
-        if (sel_action === "bundle_clean_fund") {
-            await bundleWalletMenu.cleanFundBundles(User, callbackQuery);
-            return;
-        }
-
         if (sel_action === "bundle_withdraw") {
             await bundleWalletMenu.withdrawFromBundles(User, callbackQuery, createUserTextHandler);
             return;
@@ -2818,6 +3018,11 @@ ${await t('privateKey.p7', userId)}`,
 
         if (sel_action === "bundle_reset") {
             await bundleWalletMenu.resetBundledWallets(User, callbackQuery, createUserTextHandler);
+            return;
+        }
+
+        if (sel_action === "bundle_keys_delete") {
+            await safeDeleteMessage(bot, chatId, messageId);
             return;
         }
 
@@ -3231,7 +3436,7 @@ ${await t('privateKey.p7', userId)}`,
             if (!isNaN(index) && index >= 0 && index < 3) {
                 bot.sendMessage(
                     chatId,
-                    `Enter gas fee in Gwei (e.g., 10, 50, 100):`,
+                    `${await t('feeSettings.enterGasFee', userId)}`,
                 ).then((sentMessage) => {
                     bot.once('text',
                         createUserTextHandler(userId, async (reply) => {
@@ -3239,7 +3444,7 @@ ${await t('privateKey.p7', userId)}`,
                             if (isNaN(gasValue) || gasValue < 0) {
                                 bot.sendMessage(
                                     chatId,
-                                    `Invalid gas fee. Please enter a valid number.`,
+                                    `${await t('feeSettings.invalidGasFee', userId)}`,
                                 ).then((newSentMessage) => {
                                     setTimeout(() => {
                                         safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
@@ -3639,12 +3844,12 @@ ${await t('privateKey.p7', userId)}`,
         } else if (sel_action?.startsWith('settings_quick_buy_eth_amount_')) {
             const index = Number(sel_action?.split('settings_quick_buy_eth_amount_')[1])
             if (!isNaN(index)) {
-                bot.sendMessage(chatId, `Enter buy amount in ETH for button ${index + 1}:`)
+                bot.sendMessage(chatId, (await t('quickBuy.enterBuyAmountEth', userId)).replace('{index}', (index + 1).toString()))
                     .then(sentMessage => {
                         bot.once('text', createUserTextHandler(userId, async reply => {
                             const buy_amount = Number(reply.text)
                             if (isNaN(buy_amount) || buy_amount < 0) {
-                                const errorMessage = await bot.sendMessage(chatId, `Invalid amount. Please enter a valid number.`)
+                                const errorMessage = await bot.sendMessage(chatId, await t('quickBuy.invalidAmountEth', userId))
                                 setTimeout(() => {
                                     safeDeleteMessage(bot, chatId, errorMessage.message_id).catch(() => { });
                                 }, 5000);
@@ -3841,6 +4046,7 @@ ${await t('privateKey.p7', userId)}`,
         }
 
         if (sel_action === "autoSell_tp") {
+            const userChain = await getUserChain(userId);
             const sentMessage = await bot.sendMessage(
                 chatId,
                 `${await t('messages.tp', userId)}`
@@ -3871,13 +4077,23 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidTp', userId)}`
                             );
                         } else {
-                            user.settings.auto_sell.takeProfitPercent = newTpPercent;
+                            // Save to chain-specific field
+                            if (userChain === "ethereum") {
+                                user.settings.auto_sell.takeProfitPercent_ethereum = newTpPercent;
+                            } else {
+                                user.settings.auto_sell.takeProfitPercent_solana = newTpPercent;
+                            }
                             await user.save();
                             editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                         }
                     }));
                 } else {
-                    user.settings.auto_sell.takeProfitPercent = TpPercent;
+                    // Save to chain-specific field
+                    if (userChain === "ethereum") {
+                        user.settings.auto_sell.takeProfitPercent_ethereum = TpPercent;
+                    } else {
+                        user.settings.auto_sell.takeProfitPercent_solana = TpPercent;
+                    }
                     await user.save();
                     editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                 }
@@ -3887,6 +4103,7 @@ ${await t('privateKey.p7', userId)}`,
         }
 
         if (sel_action === "autoSell_sl") {
+            const userChain = await getUserChain(userId);
             const sentMessage = await bot.sendMessage(
                 chatId,
                 `${await t('messages.sl', userId)}`
@@ -3917,13 +4134,23 @@ ${await t('privateKey.p7', userId)}`,
                                 `${await t('errors.invalidSl', userId)}`
                             );
                         } else {
-                            user.settings.auto_sell.stopLossPercent = newSlPercent;
+                            // Save to chain-specific field
+                            if (userChain === "ethereum") {
+                                user.settings.auto_sell.stopLossPercent_ethereum = newSlPercent;
+                            } else {
+                                user.settings.auto_sell.stopLossPercent_solana = newSlPercent;
+                            }
                             await user.save();
                             editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                         }
                     }));
                 } else {
-                    user.settings.auto_sell.stopLossPercent = SlPercent;
+                    // Save to chain-specific field
+                    if (userChain === "ethereum") {
+                        user.settings.auto_sell.stopLossPercent_ethereum = SlPercent;
+                    } else {
+                        user.settings.auto_sell.stopLossPercent_solana = SlPercent;
+                    }
                     await user.save();
                     editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
                 }
@@ -3932,38 +4159,8 @@ ${await t('privateKey.p7', userId)}`,
         }
 
         if (sel_action === "settings_language") {
-            bot.editMessageCaption(
-                `${await t('language.p1', userId)}`,
-                {
-                    chat_id: chatId,
-                    message_id: messageId,
-                    parse_mode: "HTML",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                {
-                                    text: `🇺🇸 ${await t('language.english', userId)}`,
-                                    callback_data: "settings_language_en",
-                                },
-                                {
-                                    text: `🇫🇷 ${await t('language.french', userId)}`,
-                                    callback_data: "settings_language_fr",
-                                },
-                            ],
-                            [
-                                { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-                                { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
-                            ]
-                        ],
-                    },
-                },
-            );
-        }
-
-        if (sel_action === "settings_language_en") {
-            await setUserLanguage(userId, 'en');
             try {
-                bot.editMessageCaption(
+                await bot.editMessageCaption(
                     `${await t('language.p1', userId)}`,
                     {
                         chat_id: chatId,
@@ -3989,40 +4186,89 @@ ${await t('privateKey.p7', userId)}`,
                         },
                     },
                 );
-            } catch (error) {
+            } catch (error: any) {
+                if (error?.message && error.message.includes('message is not modified')) {
+                    console.log('Language settings message is already up to date');
+                    return;
+                }
+                console.error("Error editing message caption:", error);
+            }
+        }
+
+        if (sel_action === "settings_language_en") {
+            await setUserLanguage(userId, 'en');
+            try {
+                await bot.editMessageCaption(
+                    `${await t('language.p1', userId)}`,
+                    {
+                        chat_id: chatId,
+                        message_id: messageId,
+                        parse_mode: "HTML",
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    {
+                                        text: `🇺🇸 ${await t('language.english', userId)}`,
+                                        callback_data: "settings_language_en",
+                                    },
+                                    {
+                                        text: `🇫🇷 ${await t('language.french', userId)}`,
+                                        callback_data: "settings_language_fr",
+                                    },
+                                ],
+                                [
+                                    { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
+                                    { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
+                                ]
+                            ],
+                        },
+                    },
+                );
+            } catch (error: any) {
+                if (error?.message && error.message.includes('message is not modified')) {
+                    console.log('Language settings message is already up to date');
+                    return;
+                }
                 console.error("Error editing message caption:", error);
             }
         }
 
         if (sel_action === "settings_language_fr") {
             await setUserLanguage(userId, 'fr');
-
-            bot.editMessageCaption(
-                `${await t('language.p1', userId)}`,
-                {
-                    chat_id: chatId,
-                    message_id: messageId,
-                    parse_mode: "HTML",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                {
-                                    text: `🇺🇸 ${await t('language.english', userId)}`,
-                                    callback_data: "settings_language_en",
-                                },
-                                {
-                                    text: `🇫🇷 ${await t('language.french', userId)}`,
-                                    callback_data: "settings_language_fr",
-                                },
+            try {
+                await bot.editMessageCaption(
+                    `${await t('language.p1', userId)}`,
+                    {
+                        chat_id: chatId,
+                        message_id: messageId,
+                        parse_mode: "HTML",
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    {
+                                        text: `🇺🇸 ${await t('language.english', userId)}`,
+                                        callback_data: "settings_language_en",
+                                    },
+                                    {
+                                        text: `🇫🇷 ${await t('language.french', userId)}`,
+                                        callback_data: "settings_language_fr",
+                                    },
+                                ],
+                                [
+                                    { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
+                                    { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
+                                ]
                             ],
-                            [
-                                { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-                                { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
-                            ]
-                        ],
+                        },
                     },
-                },
-            );
+                );
+            } catch (error: any) {
+                if (error?.message && error.message.includes('message is not modified')) {
+                    console.log('Language settings message is already up to date');
+                    return;
+                }
+                console.error("Error editing message caption:", error);
+            }
         }
 
         if (sel_action === "trending_coin") {
@@ -4258,7 +4504,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_buyLimit") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the purchase number. If you enter 1, the bot will trade the token only once.', userId)}`,
+                `${await t('sniper.enterBuyLimit', userId)}`,
                 // {`
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4311,7 +4557,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_takeProfit") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the take profit amount.', userId)}`,
+                `${await t('sniper.enterTakeProfit', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4364,7 +4610,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_stopLoss") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the stop loss amount.', userId)}`,
+                `${await t('sniper.enterStopLoss', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4417,7 +4663,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_timeLimit") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter a time limit. If you enter 10, the bot will sell your tokens after 10 minutes.', userId)}`,
+                `${await t('sniper.enterTimeLimit', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4467,10 +4713,28 @@ ${await t('privateKey.p7', userId)}`,
             });
         }
 
+        if (sel_action === "sniper_tokenStatus") {
+            // Toggle between migrated, on_bonding, and both
+            const currentStatus = user.sniper.token_status || "both";
+            let newStatus: "migrated" | "on_bonding" | "both";
+            
+            if (currentStatus === "both") {
+                newStatus = "migrated";
+            } else if (currentStatus === "migrated") {
+                newStatus = "on_bonding";
+            } else {
+                newStatus = "both";
+            }
+            
+            user.sniper.token_status = newStatus;
+            await user.save();
+            editSniperMessage(bot, chatId, userId, messageId);
+        }
+
         if (sel_action === "sniper_boundingMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the bonding curve min percent.', userId)}`,
+                `${await t('sniper.enterBondingCurveMin', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4523,7 +4787,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_bondingMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the bonding curve max percent.', userId)}`,
+                `${await t('sniper.enterBondingCurveMax', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4576,7 +4840,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_MCMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the minium marcket cap', userId)}`,
+                `${await t('sniper.enterMinMarketCap', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4629,7 +4893,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_MCMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the maxium marcket cap', userId)}`,
+                `${await t('sniper.enterMaxMarketCap', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4682,7 +4946,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_tokenAgeMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the minimum token age in minutes.', userId)}`,
+                `${await t('sniper.enterMinTokenAge', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4736,7 +5000,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_tokenAgeMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the maximum token age in minutes.', userId)}`,
+                `${await t('sniper.enterMaxTokenAge', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4789,7 +5053,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_holdersMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the minimum holder numbers.', userId)}`,
+                `${await t('sniper.enterMinHolders', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4843,7 +5107,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_holdersMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the maximum holders numbers.', userId)}`,
+                `${await t('sniper.enterMaxHolders', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4896,7 +5160,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_volumeMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the minium volume.', userId)}`,
+                `${await t('sniper.enterMinVolume', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -4950,7 +5214,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_volumeMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the maximum volume.', userId)}`,
+                `${await t('sniper.enterMaxVolume', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -5003,7 +5267,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_liquidityMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the minimum liquidity.', userId)}`,
+                `${await t('sniper.enterMinLiquidity', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -5056,7 +5320,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_liquidityMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the maximum liquidity.', userId)}`,
+                `${await t('sniper.enterMaxLiquidity', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -5109,7 +5373,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_TxnMin") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the minimum transaction numbers.', userId)}`,
+                `${await t('sniper.enterMinTransactions', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -5162,7 +5426,7 @@ ${await t('privateKey.p7', userId)}`,
         if (sel_action === "sniper_TxnMax") {
             bot.sendMessage(
                 chatId,
-                `${await t('Enter the maximum transaction numbers.', userId)}`,
+                `${await t('sniper.enterMaxTransactions', userId)}`,
                 // {
                 //     reply_markup: {
                 //         force_reply: true,
@@ -5216,8 +5480,9 @@ ${await t('privateKey.p7', userId)}`,
         console.error("Error handling callback query:", error);
         // Answer the callback query to prevent "loading" state
         try {
+            const errorUserId = callbackQuery.from?.id || 0;
             await bot.answerCallbackQuery(callbackQuery.id, {
-                text: "❌ An error occurred. Please try again.",
+                text: `${await t('errors.errorOccurred', errorUserId)}`,
                 show_alert: false
             });
         } catch (answerError) {
@@ -5229,15 +5494,17 @@ ${await t('privateKey.p7', userId)}`,
 
 
 async function setBotCommands() {
+    // Use default userId (0) for commands since they're global
+    const defaultUserId = 0;
     bot.setMyCommands([
-        { command: "/start", description: `${await t('commands.start')}` },
-        { command: "/help", description: "Centre d'aide" },
-        { command: "/menu", description: `${await t('commands.menu')}` },
-        { command: "/settings", description: `${await t('commands.setting')}` },
-        { command: "/wallets", description: `${await t('commands.wallet')}` },
-        { command: "/positions", description: `${await t('commands.position')}` },
-        { command: "/sniper", description: `${await t('commands.sniper')}` },
-        { command: "/chains", description: "Choisissez votre blockchain préférée pour le trading." },
+        { command: "/start", description: `${await t('commands.start', defaultUserId)}` },
+        { command: "/help", description: `${await t('commands.help', defaultUserId)}` },
+        { command: "/menu", description: `${await t('commands.menu', defaultUserId)}` },
+        { command: "/settings", description: `${await t('commands.setting', defaultUserId)}` },
+        { command: "/wallets", description: `${await t('commands.wallet', defaultUserId)}` },
+        { command: "/positions", description: `${await t('commands.position', defaultUserId)}` },
+        { command: "/sniper", description: `${await t('commands.sniper', defaultUserId)}` },
+        { command: "/chains", description: `${await t('commands.chains', defaultUserId)}` },
         // { command: "/orders", description: "View limit orders." },
     ]).then(() => {
             console.log("Commands have been set successfully.");
@@ -5358,7 +5625,13 @@ export async function checkAndAutoSell() {
 
                             const slippage = BigInt(Math.floor((user.settings.slippage_eth?.sell_slippage_eth || 0.5) * 100000));
                             const gas_amount = user.settings.option_gas_eth || 10;
-                            const secretKey = decryptSecretKey(active_wallet.secretKey);
+                            let secretKey: string;
+                            try {
+                                secretKey = decryptSecretKey(active_wallet.secretKey);
+                            } catch (error: any) {
+                                console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for auto-sell (wallet ${active_wallet.publicKey}):`, error.message);
+                                continue; // Skip this order if decryption fails
+                            }
                             const tokenDecimals = token.decimal || 18;
                             const tokenAmount = ethers.parseUnits(amount.toString(), tokenDecimals);
                             const deadline = Math.floor(Date.now() / 1000) + 1200;
@@ -5372,7 +5645,8 @@ export async function checkAndAutoSell() {
                                 gas_amount: gas_amount,
                                 dexId: token.dex_name || "Uniswap V2",
                                 secretKey: secretKey,
-                                deadline: deadline
+                                deadline: deadline,
+                                userId: id
                             });
 
                             result = { success: !!swapResult, txHash: swapResult };
@@ -5512,7 +5786,7 @@ ${await t('messages.autoSell6', order.user_id)}`
                             if (currentPrice < order.target_price2) {
                                 const message1 = `${await t('messages.autoSell7', order.user_id)}\n
 ${await t('messages.autoSell2', order.user_id)} ${order.token_mint}\n
-${await t('💸 Stop Loss :', order.user_id)} ${sl}%
+${await t('sniper.stopLossLabel', order.user_id)} ${sl}%
 ${await t('messages.autoSell4', order.user_id)} $${currentPrice.toFixed(4)}
 ${await t('messages.autoSell5', order.user_id)} $${(currentPrice * amount).toFixed(4)}\n
 ${await t('messages.autoSell8', order.user_id)}`

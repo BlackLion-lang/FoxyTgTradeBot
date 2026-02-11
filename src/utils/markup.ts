@@ -82,13 +82,13 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
     const isWhitelisted = await SniperWhitelist.findOne({ userId });
     const hasAccess = !!isWhitelisted || await hasActiveSubscription(userId);
     const sniperButtonText = hasAccess
-        ? `🔫 ${await t('sniper.sniperButton', userId)} 🔫`
-        : `🔒 ${await t('sniper.sniperButtonLocked', userId)} 🔒`;
+        ? await t('sniper.sniperButton', userId)
+        : await t('sniper.sniperButtonLocked', userId);
 
     if (isAdmin && process.env.ADMIN_BUTTON_SHOW === "1") {
         buttons = [
             [
-                { text: `🔗 Chain`, callback_data: "select_chain" },
+                { text: `${await t('menu.chainButton', userId)}`, callback_data: "select_chain" },
             ],
             [
                 { text: `${await t('menu.buy', userId)}`, callback_data: "buy" },
@@ -130,7 +130,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
     } else {
         buttons = [
             [
-                { text: `🔗 Chain`, callback_data: "select_chain" },
+                { text: `${await t('menu.chainButton', userId)}`, callback_data: "select_chain" },
             ],
             [
                 { text: `${await t('menu.buy', userId)}`, callback_data: "buy" },
@@ -268,9 +268,9 @@ export const getSnippingSettingsMarkup = async (userId: number): Promise<Telegra
                 { text: `🗑️ ${await t('admin.removeSniperUser', userId)}`, callback_data: "remove_sniper_user" },
             ],
             [
-                { text: `🔫${await t('snippingSettings.week', userId)} : ${settings.subscriptionPriceWeek || 0.3} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_week" },
-                { text: `🔫${await t('snippingSettings.month', userId)} : ${settings.subscriptionPriceMonth || 0.5} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_month" },
-                { text: `🔫${await t('snippingSettings.year', userId)} : ${settings.subscriptionPriceYear || 5} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_year" },
+                { text: `🔫 ${await t('snippingSettings.week', userId)} : ${settings.subscriptionPriceWeek || 0.3} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_week" },
+                { text: `🔫 ${await t('snippingSettings.month', userId)} : ${settings.subscriptionPriceMonth || 0.5} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_month" },
+                { text: `🔫 ${await t('snippingSettings.year', userId)} : ${settings.subscriptionPriceYear || 5} ${await t('bundleWallets.sol', userId)}`, callback_data: "admin_subscription_price_year" },
             ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "admin_panel" },

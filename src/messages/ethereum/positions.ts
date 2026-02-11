@@ -34,7 +34,7 @@ export const getEthereumPositions = async (
     if (!currentWallet.tradeHistory || currentWallet.tradeHistory.length === 0) {
         const caption = `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
             `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('positions.p3', userId)}</a>\n\n` +
-            `No positions found. Start trading to see your positions here.\n\n` +
+            `${await t('positions.noPositionsFound', userId)}\n\n` +
             `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
         
         const options: TelegramBot.InlineKeyboardButton[][] = [

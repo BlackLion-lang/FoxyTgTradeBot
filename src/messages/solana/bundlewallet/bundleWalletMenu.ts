@@ -70,10 +70,7 @@ export const showBundleWalletMenu = async (
                 [{ text: await t('bundleWallets.viewWallets', userId), callback_data: "bundle_view" }],
                 [{ text: await t('bundleWallets.createWallets', userId), callback_data: "bundle_create_menu" }],
                 [{ text: await t('bundleWallets.fundWallets', userId), callback_data: "bundle_fund" }],
-                [
-                    { text: await t('bundleWallets.cleanFundBundles', userId), callback_data: "bundle_clean_fund" },
-                    { text: await t('bundleWallets.withdrawFromBundles', userId), callback_data: "bundle_withdraw" }
-                ],
+                [{ text: await t('bundleWallets.withdrawFromBundles', userId), callback_data: "bundle_withdraw" }],
                 [{ text: await t('bundleWallets.resetBundledWallets', userId), callback_data: "bundle_reset" }],
                 [{ text: `${await t('backWallet', userId)}`, callback_data: "wallets_back" }],
             ],
@@ -126,8 +123,8 @@ export const viewBundleWallets = async (
                 const solBalance = (solBalanceLamports / LAMPORTS_PER_SOL).toFixed(4);
 
                 let walletText = `*${await t('bundleWallets.walletNumber', userId)}${index + 1}*\n` +
-                    `${await t('bundleWallets.address', userId)}: \`${wallet.publicKey}\`\n` +
-                    `${await t('bundleWallets.sol', userId)}: *${solBalance} ${await t('bundleWallets.sol', userId)}*\n`;
+                    `${await t('bundleWallets.address', userId)} : \`${wallet.publicKey}\`\n` +
+                    `${await t('bundleWallets.sol', userId)} : *${solBalance} ${await t('bundleWallets.sol', userId)}*\n`;
 
                 try {
                     const tokenAccounts = await walletConnection.getParsedTokenAccountsByOwner(
@@ -136,7 +133,7 @@ export const viewBundleWallets = async (
                     );
 
                     if (tokenAccounts.value.length > 0) {
-                        walletText += `\n*${await t('bundleWallets.tokens', userId)}:*\n`;
+                        walletText += `\n*${await t('bundleWallets.tokens', userId)} :*\n`;
 
                         for (const tokenAccount of tokenAccounts.value) {
                             const parsedInfo = tokenAccount.account.data.parsed?.info;
@@ -175,10 +172,10 @@ export const viewBundleWallets = async (
                             walletText += `  _${await t('bundleWallets.noTokens', userId)}_\n`;
                         }
                     } else {
-                        walletText += `\n*${await t('bundleWallets.tokens', userId)}:* _${await t('bundleWallets.noTokens', userId)}_\n`;
+                        walletText += `\n*${await t('bundleWallets.tokens', userId)} :* _${await t('bundleWallets.noTokens', userId)}_\n`;
                     }
                 } catch (tokenErr) {
-                    walletText += `\n*${await t('bundleWallets.tokens', userId)}:* _${await t('bundleWallets.errorLoading', userId)}_\n`;
+                    walletText += `\n*${await t('bundleWallets.tokens', userId)} :* _${await t('bundleWallets.errorLoading', userId)}_\n`;
                 }
 
                 walletText += `\n`;
@@ -186,7 +183,7 @@ export const viewBundleWallets = async (
             } catch (err) {
                 return `*${await t('bundleWallets.walletNumber', userId)}${index + 1}*\n` +
                     `${await t('bundleWallets.address', userId)}: \`${wallet.publicKey}\`\n` +
-                    `${await t('bundleWallets.balance', userId)}: *${await t('bundleWallets.errorLoading', userId)}*\n\n`;
+                    `${await t('bundleWallets.balance', userId)} : *${await t('bundleWallets.errorLoading', userId)}*\n\n`;
             }
         })
     );
@@ -226,12 +223,12 @@ export const showCreateWalletPrompt = async (
         `• ${await t('bundleWallets.maxWallets', userId)}\n` +
         `• ${await t('bundleWallets.fasterExecution', userId)}\n` +
         `• ${await t('bundleWallets.bestForOperations', userId)}\n\n` +
-        `🧩 ${await t('bundleWallets.howManyWallets', userId)}\n` +
+        `🧩 ${await t('bundleWallets.howManyWallets', userId)}\n\n` +
         `${await t('bundleWallets.maxWalletsNote', userId)}`,
         {
             parse_mode: 'Markdown',
             reply_markup: {
-                force_reply: true,
+                force_reply: false,
             },
         }
     ).then((sentMessage: any) => {
@@ -265,7 +262,8 @@ export const showCreateWalletPrompt = async (
                 chatId,
                 `🔢 ${(await t('bundleWallets.youSelectedForBundler', userId))
                     .replace('{count}', count.toString())
-                    .replace('{bundler}', await t('bundleWallets.safeBundler', userId))}\n\nClick "${await t('bundleWallets.createWallets', userId)}" to proceed:`,
+                    .replace('{bundler}', await t('bundleWallets.safeBundler', userId))}\n\n${(await t('bundleWallets.clickToProceed', userId))
+                    .replace('{button}', await t('bundleWallets.createWallets', userId))}`,
                 {
                     parse_mode: 'Markdown',
                     reply_markup: {
@@ -312,52 +310,6 @@ export const fundBundleWallets = async (
 
     await safeDeleteMessage(chatId, messageId);
     await fundBundleWalletModule.fundBundledWallets(UserModel, callbackQuery);
-};
-
-export const cleanFundBundles = async (
-    UserModel: Model<any>,
-    callbackQuery: CallbackQuery
-) => {
-    const userId = callbackQuery.from.id;
-    const chatId = callbackQuery.message?.chat.id || 0;
-    const messageId = callbackQuery.message?.message_id || 0;
-
-    await safeDeleteMessage(chatId, messageId);
-
-    const user = await UserModel.findOne({ userId });
-    if (!user) {
-        return bot.sendMessage(chatId, `❌ ${await t('bundleWallets.userNotFound', userId)}`);
-    }
-
-    const userDoc = user as any;
-    const activeWallet = userDoc.wallets?.find((w: any) => w.is_active_wallet);
-    if (!activeWallet?.secretKey || !activeWallet?.publicKey) {
-        return bot.sendMessage(chatId, `❌ ${await t('bundleWallets.activeWalletNotConfigured', userId)}`);
-    }
-
-    await bot.sendMessage(
-        chatId,
-        `🧼 *${await t('bundleWallets.cleanFundTitle', userId)}*\n\n` +
-        `${await t('bundleWallets.cleanFundDesc', userId)}\n\n` +
-        `⚠️ ${await t('bundleWallets.mayTakeMoment', userId)}`,
-        { parse_mode: 'Markdown' }
-    );
-
-    // Note: The actual cleanup happens during the funding process
-    // This is mainly for user information
-    await bot.sendMessage(
-        chatId,
-        `✅ ${await t('bundleWallets.cleanFundComplete', userId)}\n\n` +
-        `${await t('bundleWallets.tempWalletsCleaned', userId)}`,
-        {
-            parse_mode: 'Markdown',
-            reply_markup: {
-                inline_keyboard: [
-                    [{ text: `${await t('back', userId)}`, callback_data: "bundled_wallets" }],
-                ],
-            },
-        }
-    );
 };
 
 // Withdraw from bundle wallets to active wallet
@@ -478,7 +430,12 @@ export const withdrawFromBundles = async (
 
                 try {
                     const bundlePubkey = new PublicKey(bundle.publicKey);
-                    const bundleWallet = userDoc.bundleWallets[i];
+                    // Find the bundle wallet by publicKey, not by index (bundleBalances may have fewer items)
+                    const bundleWallet = userDoc.bundleWallets.find((bw: any) => bw.publicKey === bundle.publicKey);
+                    if (!bundleWallet) {
+                        console.error(`Bundle wallet not found for ${bundle.publicKey}`);
+                        continue;
+                    }
                     const bundleSecretKey = decryptSecretKey(bundleWallet.secretKey);
                     const bundleKeypair = Keypair.fromSecretKey(bs58.decode(bundleSecretKey));
 
@@ -491,8 +448,9 @@ export const withdrawFromBundles = async (
                     );
                     tx.feePayer = bundleKeypair.publicKey;
 
+                    const userConnection = new Connection(userDoc.rpcProvider?.url || RPC_URL);
                     const sig = await sendAndConfirmTransaction(
-                        connection,
+                        userConnection,
                         tx,
                         [bundleKeypair],
                         { commitment: 'confirmed' }
@@ -581,7 +539,7 @@ export const resetBundledWallets = async (
         {
             parse_mode: 'Markdown',
             reply_markup: {
-                force_reply: true,
+                force_reply: false,
             },
         }
     ).then((sentMessage: any) => {
@@ -605,7 +563,7 @@ export const resetBundledWallets = async (
             await bot.sendMessage(
                 chatId,
                 `✅ *${await t('bundleWallets.resetComplete', userId)}*\n\n` +
-                `All ${bundleCount} ${await t('bundleWallets.selectedWallets', userId)} ${await t('bundleWallets.allWalletsDeleted', userId)}`,
+                `${await t('bundleWallets.all', userId)} ${bundleCount} ${await t('bundleWallets.selectedWallets', userId)} ${await t('bundleWallets.allWalletsDeleted', userId)}`,
                 {
                     parse_mode: 'Markdown',
                     reply_markup: {

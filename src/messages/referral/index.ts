@@ -114,7 +114,7 @@ export const getReferralsList = async (
     const pageReferrals = referrals.slice(startIndex, endIndex);
 
     let caption = `<strong>${await t('referral.listTitle', userId)}</strong>\n\n`;
-    caption += `${await t('referral.totalReferrals', userId)}: <strong>${referrals.length}</strong>\n\n`;
+    caption += `${await t('referral.totalReferrals', userId)} : <strong>${referrals.length}</strong>\n\n`;
 
     if (pageReferrals.length === 0) {
         caption += `${await t('referral.noReferrals', userId)}\n`;

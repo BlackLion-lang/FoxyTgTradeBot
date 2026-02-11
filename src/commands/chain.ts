@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../models/user";
+import { t } from "../locales";
 
 export const chain = async (
     bot: TelegramBot,
@@ -19,31 +20,45 @@ export const chain = async (
 
     const currentChain = user.chain || "solana";
     const chainEmoji = currentChain === "solana" ? "🟠" : "🟠";
-    const chainName = currentChain === "solana" ? "Solana" : "Ethereum";
+    
+    // Get all translations
+    const chainName = currentChain === "solana" 
+        ? await t('chain.solana', userId) 
+        : await t('chain.ethereum', userId);
+    const solanaText = currentChain === "solana" 
+        ? await t('chain.solanaSelected', userId)
+        : await t('chain.solana', userId);
+    const ethereumText = currentChain === "ethereum" 
+        ? await t('chain.ethereumSelected', userId)
+        : await t('chain.ethereum', userId);
+    const backToMenuText = await t('backMenu', userId);
+    const selectBlockchainText = await t('chain.selectBlockchain', userId);
+    const currentText = await t('chain.current', userId);
+    const choosePreferredText = await t('chain.choosePreferred', userId);
 
     const markup = {
         inline_keyboard: [
             [
                 { 
-                    text: currentChain === "solana" ? "✅ Solana" : "Solana", 
+                    text: solanaText, 
                     callback_data: "select_chain_solana" 
                 },
                 { 
-                    text: currentChain === "ethereum" ? "✅ Ethereum" : "Ethereum", 
+                    text: ethereumText, 
                     callback_data: "select_chain_ethereum" 
                 }
             ],
             [
-                { text: "🔙 Back to Menu", callback_data: "back_to_menu" }
+                { text: backToMenuText, callback_data: "back_to_menu" }
             ]
         ]
     };
 
     const imagePath = "./src/assets/chainSelection.jpg"; // Ensure the image is in this path
     await bot.sendPhoto(chatId, imagePath, {
-        caption: `<strong>🔗 Select Blockchain</strong>\n\n` +
-        `Current: ${chainEmoji} <strong>${chainName}</strong>\n\n` +
-        `Choose your preferred blockchain for trading:`,
+        caption: `<strong>${selectBlockchainText}</strong>\n\n` +
+        `${currentText} ${chainEmoji} <strong>${chainName}</strong>\n\n` +
+        `${choosePreferredText}`,
         parse_mode: "HTML",
         reply_markup: markup,
     });

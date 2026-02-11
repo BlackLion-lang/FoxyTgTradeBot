@@ -221,8 +221,11 @@ const userSchema = new mongoose.Schema(
                         enabled: { type: Boolean, default: false },
                         // sellOnce: { type: Boolean, default: true},
                         sellPercent: { type: Number, default: 100 },
-                        takeProfitPercent: { type: Number, default: 10 },
-                        stopLossPercent: { type: Number, default: -40 }
+                        // Chain-specific TP/SL settings
+                        takeProfitPercent_solana: { type: Number, default: 10 },
+                        stopLossPercent_solana: { type: Number, default: -40 },
+                        takeProfitPercent_ethereum: { type: Number, default: 10 },
+                        stopLossPercent_ethereum: { type: Number, default: -40 }
                     },
                     default: {},
                 },
@@ -302,6 +305,11 @@ const userSchema = new mongoose.Schema(
                 max_holders: { type: Number, default: 10000 },
                 bonding_curve_min: { type: Number, default: 10 },
                 bonding_curve_max: { type: Number, default: 80 },
+                token_status: { 
+                    type: String, 
+                    default: "both",
+                    enum: ["migrated", "on_bonding", "both"] // migrated = pump swap, on_bonding = pump.fun bonding curve, both = all
+                },
                 time_limit: { type: Number, default: 30 }, //minutes
                 social_check: { type: Boolean, default: false },
                 twitter_check: { type: Boolean, default: false },

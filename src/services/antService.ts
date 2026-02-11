@@ -9,8 +9,10 @@ export default class AntService {
     }
 
     private buildBasePayload(type: string = 'new_pairs', overrides: any = {}) {
-        const basePayload = {
-            "type": type,
+        // If type is empty/null, try to build payload without type restriction
+        // This might allow getting all tokens regardless of when they were created
+        const basePayload: any = {
+            "type": type || 'new_pairs', // Default to 'new_pairs' if type is not provided
             "filters": {
               "search_key_words": [],
               "exclude_key_words": [],
@@ -50,22 +52,22 @@ export default class AntService {
                   "dev_hold_ratio": { "max": null, "min": null },
                   "dev_migrations": { "max": null, "min": null },
                   "holders": { "max": null, "min": null },
-                  "is_pumpfun_live": false,
+                  "is_pumpfun_live": false, // false = include both live and migrated (swapped) tokens
                   "launchpad": {
-                    "pump": true,
-                    "moonshot": true,
-                    "raydium_launchpad": true,
-                    "meteora_dbc": true,
-                    "boop": true,
-                    "bonk": true,
-                    "believe": true,
-                    "jupiter_studio": true,
-                    "bags": true,
-                    "heaven": true,
-                    "token_mill": true,
-                    "cooking": true,
-                    "soar": true,
-                    "mayhem": true
+                    "pump": true,  // Only pump.fun tokens
+                    "moonshot": false,
+                    "raydium_launchpad": false,
+                    "meteora_dbc": false,
+                    "boop": false,
+                    "bonk": false,
+                    "believe": false,
+                    "jupiter_studio": false,
+                    "bags": false,
+                    "heaven": false,
+                    "token_mill": false,
+                    "cooking": false,
+                    "soar": false,
+                    "mayhem": false
                   },
                   "liquidity": { "max": null, "min": null },
                   "market_cap": { "max": null, "min": null },
@@ -136,8 +138,10 @@ export default class AntService {
         };
     }
 
-    private async callPulse(type: string = 'new_pairs', overrides: any = {}) {
+    async callPulse(type: string = 'new_pairs', overrides: any = {}) {
         try {
+            // Build payload with the specified type
+            // Note: 'new_pairs' type may only return new tokens, but filters should help get older tokens too
             const payload = this.buildBasePayload(type, overrides);
             const headers = this.getHeaders();
 
@@ -217,28 +221,67 @@ export default class AntService {
     }
 
     async pulseAllTokens(overrides: any = {}) {
-        // Fetch all tokens by combining new_pairs and migrated types
+        // Fetch ALL pump.fun tokens that match filter criteria, including:
+        // 1. New pairs (tokens still on pump.fun bonding curve)
+        // 2. Migrated tokens (tokens that have been swapped/migrated to Raydium)
+        // This ensures we detect tokens at all stages: new, live on pump.fun, and swapped/migrated
         try {
-            const [newPairs, migrated] = await Promise.all([
-                this.callPulse('new_pairs', overrides).catch(() => []),
-                this.callPulse('migrated', overrides).catch(() => [])
-            ]);
+            // Fetch new pairs - tokens still on pump.fun bonding curve
+            const newPairs = await this.callPulse('new_pairs', overrides).catch(() => []);
             
-            // Combine and deduplicate by mint address
-            const allTokens = [...(newPairs || []), ...(migrated || [])];
+            // Fetch migrated tokens - tokens that have been swapped/migrated from pump.fun to Raydium
+            // These are important as they represent tokens that have "graduated" from pump.fun
+            const migratedTokens = await this.callPulse('migrated', overrides).catch(() => []);
+            
+            // Mark tokens with their migration status
+            // Mark new pairs as NOT migrated (still on pump.fun bonding curve)
+            const markedNewPairs = (newPairs || []).map((token: any) => ({
+                ...token,
+                _isMigrated: false // Still on pump.fun bonding curve
+            }));
+            
+            // Mark migrated tokens as migrated (swapped to Raydium/pump swap)
+            const markedMigratedTokens = (migratedTokens || []).map((token: any) => ({
+                ...token,
+                _isMigrated: true // Migrated to pump swap (Raydium)
+            }));
+            
+            // Combine both types to get all pump.fun tokens (new + swapped/migrated)
+            const combinedTokens = [...markedNewPairs, ...markedMigratedTokens];
             const tokenMap = new Map<string, any>();
             
-            allTokens.forEach(token => {
+            combinedTokens.forEach(token => {
                 // Ant.fun API returns 'base' as the mint address field
                 const mint = token.base || token.mint || token.token_address || token.address || token.id;
                 if (mint) {
-                    tokenMap.set(mint, token);
+                    // If token already exists, prefer migrated version (has real liquidity and updated MC)
+                    // Migrated tokens have more accurate market cap from Raydium pool
+                    const existing = tokenMap.get(mint);
+                    if (!existing) {
+                        tokenMap.set(mint, token);
+                    } else {
+                        // Prefer migrated token if available (has real liquidity and updated MC from pump swap)
+                        if (token._isMigrated && !existing._isMigrated) {
+                            tokenMap.set(mint, token);
+                        } else if (!token._isMigrated && existing._isMigrated) {
+                            // Keep existing migrated version
+                        } else {
+                            // Both same type, prefer one with more complete data
+                            if (token.created_at && !existing.created_at) {
+                                tokenMap.set(mint, token);
+                            } else if (token.chain && !existing.chain) {
+                                tokenMap.set(mint, token);
+                            }
+                        }
+                    }
                 }
             });
             
-            return Array.from(tokenMap.values());
+            const result = Array.from(tokenMap.values());
+            console.log(`[${new Date().toLocaleString()}] 📊 Combined ${result.length} unique pump.fun tokens from AntService (new_pairs: ${newPairs?.length || 0}, migrated/swapped: ${migratedTokens?.length || 0})`);
+            return result;
         } catch (e) {
-            console.error(`[${new Date().toLocaleString()}] Error in pulseAllTokens:`, e instanceof Error ? e.message : e);
+            console.error(`[${new Date().toLocaleString()}] ❌ Error in pulseAllTokens:`, e instanceof Error ? e.message : e);
             return [];
         }
     }

@@ -20,28 +20,32 @@ export const getFee = async (
         // Get recommended gas price
         const recommendedGasPrice = await getRecommendedGasPrice(currentGasSpeed);
         
-        const feeSpeed = (() => {
-            switch (currentGasSpeed) {
-                case 'low':
-                    return 'Slow';
-                case 'medium':
-                    return 'Normal';
-                case 'high':
-                    return 'Fast';
-                case 'veryHigh':
-                    return 'Very Fast';
-                default:
-                    return 'Normal';
-            }
-        })();
+        let feeSpeed: string;
+        switch (currentGasSpeed) {
+            case 'low':
+                feeSpeed = await t('feeSettings.p8', userId);
+                break;
+            case 'medium':
+                feeSpeed = await t('feeSettings.p9', userId);
+                break;
+            case 'high':
+                feeSpeed = await t('feeSettings.p10', userId);
+                break;
+            case 'veryHigh':
+                feeSpeed = await t('feeSettings.veryFast', userId);
+                break;
+            default:
+                feeSpeed = await t('feeSettings.p9', userId);
+                break;
+        }
         
         const caption =
-            `<strong>⛽️ Gas Fee Settings (Ethereum)</strong>\n\n` +
-            `📚 Need more help?\n <a href="https://the-cryptofox-learning.com/">Click Here!</a>\n\n` +
-            `<strong>💡 Configure your gas fee values for Ethereum transactions.</strong>\n\n` +
-            `<strong>⚡ Fee Speed :</strong> ${feeSpeed}\n\n` +
+            `<strong>${await t('feeSettings.gasFeeSettingsEthereum', userId)}</strong>\n\n` +
+            `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p3', userId)}</a>\n\n` +
+            `<strong>${await t('feeSettings.configureGasFeeEthereum', userId)}</strong>\n\n` +
+            `<strong>${await t('feeSettings.p16', userId)}</strong> ${feeSpeed}\n\n` +
             `${await t('feeSettings.p14', userId)} ${recommendedGasPrice.toFixed(1)} Gwei\n\n` +
-            `<strong>Current Gas Values:</strong>\n` +
+            `<strong>${await t('feeSettings.currentGasValues', userId)}</strong>\n` +
             `<code>• ${gasValues[0]} Gwei\n` +
             `• ${gasValues[1]} Gwei\n` +
             `• ${gasValues[2]} Gwei</code>`;
@@ -49,19 +53,19 @@ export const getFee = async (
         const options: TelegramBot.InlineKeyboardButton[][] = [
             [
                 {
-                    text: `⛽ Gas Value 1 : ${gasValues[0]} Gwei`,
+                    text: `${await t('feeSettings.gasValue1', userId)} ${gasValues[0]} Gwei`,
                     callback_data: "settings_fee_gas_eth_0",
                 },
             ],
             [
                 {
-                    text: `⛽ Gas Value 2 : ${gasValues[1]} Gwei`,
+                    text: `${await t('feeSettings.gasValue2', userId)} ${gasValues[1]} Gwei`,
                     callback_data: "settings_fee_gas_eth_1",
                 },
             ],
             [
                 {
-                    text: `⛽ Gas Value 3 : ${gasValues[2]} Gwei`,
+                    text: `${await t('feeSettings.gasValue3', userId)} ${gasValues[2]} Gwei`,
                     callback_data: "settings_fee_gas_eth_2",
                 },
             ],
@@ -87,16 +91,21 @@ export const getFee = async (
     // Solana fee settings
     const result = await getRecommendedMEVTip(user.settings.auto_tip);
 
-    const feeSpeed = (() => {
-        switch (user.settings.auto_tip) {
-            case 'medium':
-                return 'Low';
-            case 'high':
-                return 'Normal';
-            case 'veryHigh':
-                return 'Fast';
-        }
-    })();
+    let feeSpeed: string;
+    switch (user.settings.auto_tip) {
+        case 'medium':
+            feeSpeed = await t('feeSettings.low', userId);
+            break;
+        case 'high':
+            feeSpeed = await t('feeSettings.p9', userId);
+            break;
+        case 'veryHigh':
+            feeSpeed = await t('feeSettings.p10', userId);
+            break;
+        default:
+            feeSpeed = await t('feeSettings.p9', userId);
+            break;
+    }
 
     const caption =
         `<strong>${await t('feeSettings.p1', userId)}</strong>\n\n` +
@@ -268,7 +277,7 @@ export const sendFeeAutoMessage = async (
                 ],
                 [
                     {
-                        text: currentGasSpeed === "veryHigh" ? `🟢 ⚡⚡ ${await t('feeSettings.p10', userId)}` : `🔘 ⚡⚡ ${await t('feeSettings.p10', userId)}`,
+                        text: currentGasSpeed === "veryHigh" ? `🟢 ⚡⚡ ${await t('feeSettings.p17', userId)}` : `🔘 ⚡⚡ ${await t('feeSettings.p17', userId)}`,
                         callback_data: "speed_gas_veryHigh",
                     }
                 ],
@@ -280,13 +289,13 @@ export const sendFeeAutoMessage = async (
         };
         bot.sendMessage(
             chatId,
-            `<strong>⛽️ Recommended Gas Fee Settings</strong>
+            `<strong>${await t('feeSettings.recommendedGasFeeSettings', userId)}</strong>
 
-📚 Need more help? <a href="https://the-cryptofox-learning.com/">Click Here!</a>
+${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
 
-🌎 Current Recommended Gas: ${result.toFixed(1)} Gwei
+${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwei
 
-<strong>💡 Automatically let Foxy calculate the recommended gas price.</strong>`,
+<strong>${await t('feeSettings.autoCalculateGasPrice', userId)}</strong>`,
             {
                 parse_mode: "HTML",
                 reply_markup: newMarkup,
@@ -300,26 +309,26 @@ export const sendFeeAutoMessage = async (
     const newMarkup: TelegramBot.InlineKeyboardMarkup = {
         inline_keyboard: [
             [
-                { text: "⚡ Slow", callback_data: "speed_medium" },
-                { text: "🚀 Fast", callback_data: "speed_veryHigh" },
-                { text: "⚡️ Normal", callback_data: "speed_high" },
-                { text: "🐢 Slow", callback_data: "speed_medium" },
+                { text: await t('feeSettings.slowButton', userId), callback_data: "speed_medium" },
+                { text: await t('feeSettings.fastButton', userId), callback_data: "speed_veryHigh" },
+                { text: await t('feeSettings.normalButton', userId), callback_data: "speed_high" },
+                { text: await t('feeSettings.slowButton2', userId), callback_data: "speed_medium" },
             ],
             [
-                { text: "⬅ Back", callback_data: "settings_fee_back" },
-                { text: "🔄 Refresh", callback_data: "autotip_refresh" },
+                { text: await t('back', userId), callback_data: "settings_fee_back" },
+                { text: await t('refresh', userId), callback_data: "autotip_refresh" },
             ]
         ],
     };
     bot.sendMessage(
         chatId,
-        `<strong>⛽️ Recommended Fee Settings</strong>
+        `<strong>${await t('feeSettings.recommendedFeeSettings', userId)}</strong>
 
-📚 Need more help? <a href="https://the-cryptofox-learning.com/">Click Here!</a>
+${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
 
-🌎 Current Recommended Fee: ${result} SOL
+${await t('feeSettings.currentRecommendedFee', userId)} ${result} SOL
 
-<strong>💡 Automatically let Foxy calculate the recommended MEV tip.</strong>`,
+<strong>${await t('feeSettings.autoCalculateMEVTip', userId)}</strong>`,
         {
             parse_mode: "HTML",
             reply_markup: newMarkup,
@@ -387,7 +396,7 @@ export const editFeeAutoMessageEth = async (
             ],
             [
                 {
-                    text: currentGasSpeed === "veryHigh" ? `🟢 ⚡⚡ ${await t('feeSettings.p10', userId)}` : `🔘 ⚡⚡ ${await t('feeSettings.p10', userId)}`,
+                    text: currentGasSpeed === "veryHigh" ? `🟢 ⚡⚡ ${await t('feeSettings.p17', userId)}` : `🔘 ⚡⚡ ${await t('feeSettings.p17', userId)}`,
                     callback_data: "speed_gas_veryHigh",
                 }
             ],
@@ -407,7 +416,7 @@ ${await t('feeSettings.p12', userId)}
 
 ${await t('feeSettings.p14', userId)} ${result.toFixed(1)} Gwei
 
-<strong>💡 Automatically let Foxy calculate the recommended gas price.</strong>`,
+<strong>${await t('feeSettings.autoCalculateGasPrice', userId)}</strong>`,
         {
             chat_id: chatId,
             message_id: messageId,

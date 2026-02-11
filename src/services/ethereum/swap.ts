@@ -32,12 +32,13 @@ interface swapInterface {
     gas_amount: number,
     secretKey: string,
     deadline: number,
-    dexId: string
+    dexId: string,
+    userId?: number // Optional userId for error message translation
 }
 
 export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface) => {
     try {
-        const { index, amount, token_address, pair_address, slippage, gas_amount, dexId, secretKey, deadline } = params
+        const { index, amount, token_address, pair_address, slippage, gas_amount, dexId, secretKey, deadline, userId } = params
         console.log('Buying params', index, amount, token_address, pair_address, slippage, gas_amount, dexId, secretKey, deadline)
         const provider = public_ethereum_provider
         const currentBlock = await provider.getBlock('latest')
@@ -105,7 +106,18 @@ export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface
             const balanceEth = Number(walletBalance) / 1e18
             const requiredEth = Number(totalRequired) / 1e18
             const shortfallEth = Number(totalRequired - walletBalance) / 1e18
-            throw new Error(`Insufficient funds. Required: ${requiredEth.toFixed(6)} ETH (${(Number(amount) / 1e18).toFixed(6)} ETH for swap + ${(Number(estimatedGasCost) / 1e18).toFixed(6)} ETH for gas). Available: ${balanceEth.toFixed(6)} ETH. Shortfall: ${shortfallEth.toFixed(6)} ETH`)
+            const swapAmountEth = (Number(amount) / 1e18).toFixed(6)
+            const gasAmountEth = (Number(estimatedGasCost) / 1e18).toFixed(6)
+            
+            // Format error message with translation
+            const translated = await t('errors.insufficientFundsForSwap', userId);
+            const errorMessage = translated
+                .replace('{required}', requiredEth.toFixed(6))
+                .replace('{swapAmount}', swapAmountEth)
+                .replace('{gasAmount}', gasAmountEth)
+                .replace('{available}', balanceEth.toFixed(6))
+                .replace('{shortfall}', shortfallEth.toFixed(6));
+            throw new Error(errorMessage);
         }
         
         const tokenABI = [
@@ -320,7 +332,14 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
             const balanceEth = Number(walletBalance) / 1e18
             const requiredEth = Number(estimatedGasCost) / 1e18
             const shortfallEth = Number(estimatedGasCost - walletBalance) / 1e18
-            throw new Error(`Insufficient funds for gas. Required: ${requiredEth.toFixed(6)} ETH for gas fees. Available: ${balanceEth.toFixed(6)} ETH. Shortfall: ${shortfallEth.toFixed(6)} ETH`)
+            
+            // Format error message with translation
+                const translated = await t('errors.insufficientFundsForGas', params.userId);
+            const errorMessage = translated
+                    .replace('{required}', requiredEth.toFixed(6))
+                    .replace('{available}', balanceEth.toFixed(6))
+                    .replace('{shortfall}', shortfallEth.toFixed(6));
+            throw new Error(errorMessage);
         }
 
         const tokenABI = [
@@ -537,7 +556,7 @@ export const swapETHForTokensUsingUniswapV2 = async (bot: TelegramBot, chatId: n
         if(!user) throw "No User Found"
 
         const token = await Token.findOne({ address: token_address })
-        if(!token) throw "Token not found"
+        if(!token) throw new Error(await t('errors.notToken', userId))
         
         const pair_address = token.pairAddress || ''
         const token_symbol = token.name
@@ -558,7 +577,11 @@ export const swapETHForTokensUsingUniswapV2 = async (bot: TelegramBot, chatId: n
         const balance = await getBalance(publicKey)
         const eth_amount_wei = eth_amount * 1e18
         if(eth_amount_wei > balance * 1e18 + 42000) {
-            bot.sendMessage(chatId, `<strong>❌ Insufficient funds!</strong>\nRequired: ${eth_amount} ETH\nAvailable: ${balance.toFixed(4)} ETH`, {
+            const translated = await t('errors.insufficientFundsSimple', userId);
+            const errorMessage = translated
+                .replace('{required}', eth_amount.toString())
+                .replace('{available}', balance.toFixed(4));
+            bot.sendMessage(chatId, `<strong>${errorMessage}</strong>`, {
                 parse_mode: 'HTML'
             })
             return
@@ -604,6 +627,7 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
                     dexId: token.dex_name || 'Uniswap V2',
                     slippage,
                     gas_amount,
+                    userId: userId,
                     secretKey,
                     deadline
                 })
@@ -739,7 +763,7 @@ export const swapExactTokenForETHUsingUniswapV2 = async (bot: TelegramBot, chatI
         if(!user) throw "No User Found"
         
         const token = await Token.findOne({ address: token_address })
-        if(!token) throw "Token not found"
+        if(!token) throw new Error(await t('errors.notToken', userId))
         
         const pair_address = token.pairAddress || ''
         const token_symbol = token.name
@@ -821,6 +845,7 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
                     dexId: token.dex_name || 'Uniswap V2',
                     slippage,
                     gas_amount,
+                    userId: userId,
                     secretKey,
                     deadline
                 })

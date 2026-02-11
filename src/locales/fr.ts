@@ -21,7 +21,9 @@ export const fr: Translations = {
         setting: "Afficher les paramètres de Foxy.",
         wallet: "Afficher vos portefeuilles Foxy.",
         sniper: "Lancer le sniper Foxy.",
-        position: "Afficher vos positions de token."
+        position: "Afficher vos positions de token.",
+        help: "Centre d'aide",
+        chains: "Choisissez votre blockchain préférée pour le trading."
     },
 
     // Admin
@@ -113,7 +115,9 @@ export const fr: Translations = {
         help: "🙋‍♂️ Aide",
         adminPanel: "👑 Panneau Admin",
         trendingCoin: "🥇 Pièce tendance",
-        chain: "Chaîne actuelle :"
+        chain: "Chaîne actuelle :",
+        chainButton: "🔗 Chaîne",
+        botVersion: "🤖 Version du Bot Telegram :"
     },
 
     // Acheter
@@ -173,7 +177,8 @@ export const fr: Translations = {
         p5: "📉 Profit :",
         p6: "💹 Prix moyen d'entrée (MC) :",
         p7: "🕒 Dernière mise à jour (UTC) :",
-        importPosition: "Importer une position"
+        importPosition: "Importer une position",
+        noPositionsFound: "Aucune position trouvée. Commencez à trader pour voir vos positions ici."
     },
 
     // Portefeuilles
@@ -245,6 +250,21 @@ export const fr: Translations = {
         p8: "Pour passer à un autre portefeuille, cliquez sur son adresse ci-dessous"
     },
 
+    //Create wallet
+    createWallet: {
+        p1: "Comment souhaitez-vous nommer votre nouveau portefeuille ?",
+        p2: "Le nom du portefeuille ne peut pas contenir de symboles ou de caractères spéciaux.",
+        p3: "Un portefeuille avec ce nom existe déjà. Veuillez réessayer.",
+        p4: "✅ Portefeuille Foxy créé !",
+        p5: "💳 Nom : ",
+        p6: "🔗 Adresse : ",
+        p7: "🔑 Clé privée : ",
+        p8: "⚠️ Gardez votre clé privée en sécurité. Foxy ne se souviendra plus de votre clé privée et vous ne pourrez plus la récupérer après ce message. Veuillez importer votre portefeuille dans MetaMask.",
+        p9: "⚠️ Gardez votre clé privée en sécurité. Foxy ne se souviendra plus de votre clé privée et vous ne pourrez plus la récupérer après ce message. Veuillez importer votre portefeuille dans Phantom.",
+        p10: "💡 Pour voir vos autres portefeuilles, allez dans les paramètres.",
+        p11: "⚙️ Paramètres",
+    },
+
     // Importer un portefeuille
     importWallet: {
         p1: "✅ Portefeuille importé avec succès !",
@@ -273,6 +293,12 @@ export const fr: Translations = {
     withdrawWallet: {
         p1: "💸 Retrait",
         p2: "💡 Sélectionnez un portefeuille depuis lequel retirer des fonds.",
+    },
+
+    //Default wallet
+    defaultWallet: {
+        p1: "💳 Changer le Portefeuille par Défaut",
+        p2: "💡 Sélectionnez un portefeuille que vous souhaitez définir par défaut.",
     },
 
     // Zone dangereuse
@@ -325,10 +351,31 @@ export const fr: Translations = {
         p14: "🌎 Frais recommandés actuels :",
         p15: "💡 Laisser Foxy calculer automatiquement le pourboire MEV recommandé.",
         p16: "⚡ Vitesse des frais :",
+        p17: "Ultra Rapide",
         buyFee: "⛽Frais d'achat :",
         sellFee: "⛽Frais de vente :",
         buyTip: "💸 Astuce achat :",
-        sellTip: "💸 Astuce vente :"
+        sellTip: "💸 Astuce vente :",
+        gasFeeSettingsEthereum: "⛽️ Paramètres des Frais de Gaz (Ethereum)",
+        configureGasFeeEthereum: "💡 Configurez vos valeurs de frais de gaz pour les transactions Ethereum.",
+        currentGasValues: "Valeurs de Gaz Actuelles :",
+        gasValue1: "⛽ Valeur de Gaz 1 :",
+        gasValue2: "⛽ Valeur de Gaz 2 :",
+        gasValue3: "⛽ Valeur de Gaz 3 :",
+        veryFast: "Très Rapide",
+        low: "Faible",
+        recommendedGasFeeSettings: "⛽️ Paramètres de Frais de Gaz Recommandés",
+        currentRecommendedGas: "🌎 Gaz Recommandé Actuel :",
+        autoCalculateGasPrice: "💡 Laissez Foxy calculer automatiquement le prix de gaz recommandé.",
+        recommendedFeeSettings: "⛽️ Paramètres de Frais Recommandés",
+        currentRecommendedFee: "🌎 Frais Recommandé Actuel :",
+        autoCalculateMEVTip: "💡 Laissez Foxy calculer automatiquement le pourboire MEV recommandé.",
+        slowButton: "⚡ Lent",
+        fastButton: "🚀 Rapide",
+        normalButton: "⚡️ Normal",
+        slowButton2: "🐢 Lent",
+        enterGasFee: "Entrez les frais de gaz en Gwei (ex. : 10, 50, 100) :",
+        invalidGasFee: "Frais de gaz invalides. Veuillez entrer un nombre valide."
     },
 
     // Paramètres de glissement
@@ -368,7 +415,9 @@ export const fr: Translations = {
         p16: "Voir sur Etherscan",
         viewToken: "🔄 Voir le token",
         positions: "📊 Positions",
-        sell: "🎒 Vendre"
+        sell: "🎒 Vendre",
+        enterBuyAmountEth: "Entrez le montant d'achat en ETH pour le bouton {index} :",
+        invalidAmountEth: "Montant invalide. Veuillez entrer un nombre valide."
     },
 
     // Vente rapide
@@ -394,7 +443,9 @@ export const fr: Translations = {
         p19: "Voir sur Etherscan",
         viewToken: "🔄 Voir le token",
         positions: "📊 Positions",
-        buy: "💰 Acheter"
+        buy: "💰 Acheter",
+        tokenBalance: "Solde en tokens :",
+        selling: "Vente :"
     },
 
     // Vente automatique
@@ -501,7 +552,8 @@ export const fr: Translations = {
         detectedActiveTokens: "🔥 Tokens actifs détectés :",
         noDetectedTokens: "Aucun token actif détecté",
         panelDescription: "C'est le panneau du bot sniper. Ici, vous pouvez configurer tous les paramètres du bot.",
-        panelDescription2: "Si vous avez des questions, n'hésitez pas à me le faire savoir. Si vous le souhaitez, j'ajouterai plus d'options selon votre stratégie.",
+        panelDescription2: "Si vous avez la moindre question veuillez nous contacter via notre site officiel ou via la section d’aide.",
+        exampleLink: "Lien d'exemple",
         important: "Important :",
         importantNote: "Le bot n'est pas une garantie de profit à tout moment. Veuillez l'utiliser avec prudence et à vos propres risques.",
         tokenDetection: "🌍 Détection de Token",
@@ -533,8 +585,8 @@ export const fr: Translations = {
         maxLiquidity: "Liquidité Max",
         minTXNS: "TXNS Min",
         maxTXNS: "TXNS Max",
-        sniperButton: "Tireur isolé",
-        sniperButtonLocked: "Tireur isolé",
+        sniperButton: "🔫 Sniper 🔫",
+        sniperButtonLocked: "🔒 Sniper Verrouillé 🔒",
         tokenDetectionList: "C'est la liste des tokens détectés par la détection du bot selon vos paramètres.",
         tokenInfoInstruction: "Vous pouvez voir les informations du token en cliquant sur le lien du token ci-dessous.",
         unknownToken: "Token inconnu",
@@ -544,6 +596,34 @@ export const fr: Translations = {
         buyToken3: "Acheter - 3",
         buyToken4: "Acheter - 4",
         buyToken5: "Acheter - 5",
+        lastRefreshed: "🕐 Dernière actualisation :",
+        tokenStatus: "Statut du Token",
+        tokenStatusMigrated: "🔄 Migré (Pump Swap)",
+        tokenStatusOnBonding: "🆕 Sur Courbe de Liaison",
+        tokenStatusBoth: "🌐 Les Deux",
+        view: "Voir",
+        price: "Prix",
+        marketCap: "MCap",
+        minutes: "min",
+        enterBuyLimit: "Entrez le nombre d'achats. Si vous entrez 1, le bot échangera le token une seule fois.",
+        enterTakeProfit: "Entrez le montant du take profit.",
+        enterStopLoss: "Entrez le montant du stop loss.",
+        enterTimeLimit: "Entrez une limite de temps. Si vous entrez 10, le bot vendra vos tokens après 10 minutes.",
+        enterBondingCurveMin: "Entrez le pourcentage minimum de la courbe de liaison.",
+        enterBondingCurveMax: "Entrez le pourcentage maximum de la courbe de liaison.",
+        enterMinMarketCap: "Entrez la capitalisation boursière minimum",
+        enterMaxMarketCap: "Entrez la capitalisation boursière maximum",
+        enterMinTokenAge: "Entrez l'âge minimum du token en minutes.",
+        enterMaxTokenAge: "Entrez l'âge maximum du token en minutes.",
+        enterMinHolders: "Entrez le nombre minimum de détenteurs.",
+        enterMaxHolders: "Entrez le nombre maximum de détenteurs.",
+        enterMinVolume: "Entrez le volume minimum.",
+        enterMaxVolume: "Entrez le volume maximum.",
+        enterMinLiquidity: "Entrez la liquidité minimum.",
+        enterMaxLiquidity: "Entrez la liquidité maximum.",
+        enterMinTransactions: "Entrez le nombre minimum de transactions.",
+        enterMaxTransactions: "Entrez le nombre maximum de transactions.",
+        stopLossLabel: "💸 Stop Loss :",
     },
 
     // Snipping Settings (Admin)
@@ -632,6 +712,7 @@ export const fr: Translations = {
         invalidAmount: "❌ Erreur de validation : montant invalide. Réessayez !",
         invalidSellAmount: "❌ Erreur de validation : montant de trade invalide. Veuillez entrer une valeur entre 1 et 100.",
         invalidPrivateKey: "❌ Clé privée invalide. Veuillez fournir une clé privée valide.",
+        errorOccurred: "❌ Une erreur s'est produite. Veuillez réessayer.",
         walletNotFound: "❌Il doit y avoir au moins un portefeuille créé.",
         insufficientBalance: "❌ Solde insuffisant.",
         invalidWithdrawal: "Montant de retrait invalide. Veuillez réessayer.",
@@ -656,9 +737,12 @@ export const fr: Translations = {
         targetSniperUser: "❌ Cet utilisateur Telegram n'existe pas dans la liste blanche Sniper.",
         userNotFound: "❌ Utilisateur introuvable. Veuillez vérifier le nom d'utilisateur ou l'ID utilisateur et réessayer.",
         notToken: "Token introuvable",
-        transactionFailed: "❌ Transaction échouée : solde du portefeuille faible ou transaction non confirmée en 60.00 secondes.",
+        transactionFailed: "❌ Transaction échouée : solde du portefeuille faible ou transaction non confirmée en 60.00 secondes",
         transactionError: "❌ Erreur : solde de token faible ou token non acheté.",
-        invalidtip: "❌ Erreur de validation : Pourcentage de pourboire invalide. Veuillez saisir une valeur comprise entre 0 et 100.",
+        insufficientFundsForGas: "Fonds insuffisants pour le gaz. Requis : {required} ETH pour les frais de gaz. Disponible : {available} ETH. Manque : {shortfall} ETH",
+        insufficientFundsForSwap: "Fonds insuffisants. Requis : {required} ETH ({swapAmount} ETH pour l'échange + {gasAmount} ETH pour le gaz). Disponible : {available} ETH. Manque : {shortfall} ETH",
+        insufficientFundsSimple: "❌ Fonds insuffisants !\nRequis : {required} ETH\nDisponible : {available} ETH",
+        invalidtip: "❌ Erreur de validation : Pourcentage de pourboire invalide. Veuillez saisir une valeur comprise entre 0 et 100.",
         walletLimit: "❌ Limite de portefeuilles atteinte. Vous ne pouvez pas créer plus de",
         invalidwallets: "❌ Erreur de validation : limites de portefeuille non valides. Veuillez saisir une valeur comprise entre 1 et 100.",
         invalidsettings: "❌ Erreur de validation : paramètres de parrainage non valides. Veuillez saisir une valeur supérieure à 0.",
@@ -703,15 +787,51 @@ export const fr: Translations = {
         invalidCount: "Nombre Invalide",
         invalidCountDesc: "Le regroupement sécurisé prend en charge un maximum de",
         selectedWallets: "portefeuilles",
+        all: "Tous",
         youSelectedCount: "Vous avez sélectionné",
         pleaseSelectMaxOrFewer: "Veuillez sélectionner {max} portefeuilles ou moins.",
         youSelectedForBundler: "Vous avez sélectionné {count} portefeuilles pour {bundler}",
+        clickToProceed: "Cliquez sur \"{button}\" pour continuer :",
         creatingWallets: "Création de",
         congratulations: "Félicitations !",
         walletsCreated: "portefeuilles ont été créés avec succès pour",
         savePrivateKeys: "Veuillez sauvegarder vos clés privées en toute sécurité. Elles ne seront plus affichées !",
         invalidWalletCount: "Nombre de portefeuilles invalide. Veuillez sélectionner entre 1 et 20 portefeuilles.",
         pleaseEnterValidNumber: "Veuillez entrer un nombre valide.",
+        walletKeysTitle: "Clés Privées des Portefeuilles Bundle",
+        storeSecurely: "Stockez ce fichier dans un endroit sûr!",
+        neverShare: "Ne partagez jamais vos clés privées avec qui que ce soit !",
+        downloadAndSave: "Téléchargez et sauvegardez ce fichier immédiatement.",
+        keysFileSent: "Le fichier des clés de portefeuille a été envoyé. Veuillez le télécharger et le sauvegarder en toute sécurité.",
+        
+        // Bundle Wallet Keys File
+        bundleWalletKeysHeader: "🔑 CLÉS PRIVÉES DES PORTEFEUILLES BUNDLE",
+        dateLabel: "Date :",
+        operationBundleCreation: "Opération : Création de Portefeuilles Bundle",
+        bundleTypeLabel: "Type de Bundle :",
+        totalWalletsLabel: "Total de Portefeuilles :",
+        bundleWalletNumber: "PORTEFEUILLE BUNDLE #",
+        publicKeyAddress: "Clé Publique (Adresse) :",
+        privateKeyLabel: "Clé Privée :",
+        solscanLabel: "Solscan :",
+        importantKeepKeysSafe: "⚠️ IMPORTANT : Gardez ces clés en sécurité !",
+        bundleWalletKeysDescription: "Ce sont les clés privées de vos portefeuilles bundle.",
+        loseKeysWarning: "Si vous les perdez, vous perdrez l'accès aux fonds de ces portefeuilles.",
+        storeFileSecure: "Stockez ce fichier dans un endroit sûr.",
+        neverShareKeys: "Ne partagez jamais vos clés privées avec qui que ce soit !",
+        
+        // Recovery Keys File
+        recoveryKeysHeader: "🔑 CLÉS DE RÉCUPÉRATION DES PORTEFEUILLES TEMPORAIRES",
+        operationCleanFunding: "Opération : Financement Propre des Bundles",
+        totalAmountLabel: "Montant Total :",
+        bundleWalletsLabel: "Portefeuilles Bundle :",
+        tempWalletsLabel: "Portefeuilles Temporaires :",
+        devWalletLabel: "Portefeuille Dev :",
+        tempWalletNumber: "PORTEFEUILLE TEMP #",
+        publicKeyLabel: "Clé Publique :",
+        recoveryKeysDescription: "⚠️ IMPORTANT : Gardez ces clés en sécurité !",
+        tempWalletsClosed: "Ces portefeuilles temporaires seront FERMÉS après la distribution.",
+        recoveryInstructions: "Si la distribution échoue, vous pouvez récupérer les SOL en utilisant ces clés.",
         
         // Fund
         fundTitle: "Financer les Portefeuilles Groupés",
@@ -740,6 +860,7 @@ export const fr: Translations = {
         insufficientBalance: "Solde Insuffisant",
         available: "Disponible",
         pleaseAdd: "Veuillez ajouter",
+        toActiveWallet: "à votre portefeuille actif.",
         
         // Clean Fund
         cleanFundTitle: "Nettoyer les Fonds Groupés",
@@ -797,6 +918,7 @@ export const fr: Translations = {
         successfulTransactions: "Transactions Réussies",
         failedWallets: "Portefeuilles Échoués",
         insufficientBalanceForBuy: "Solde Insuffisant",
+        noneHaveEnoughSol: "Aucun de vos portefeuilles groupés n'a assez de SOL pour exécuter cet achat.",
         needAtLeast: "(Besoin d'au moins 0.001 SOL après le minimum exonéré de loyer)",
         needAtLeast_ethereum: "(Besoin d'au moins 0.0001 ETH après les frais de gaz)",
         bundleSellStarted: "Vente Groupée Démarrée",
@@ -865,5 +987,16 @@ export const fr: Translations = {
         // Button labels
         bundleBuyButton: "👜 Achat Groupé",
         bundleSellButton: "👜 Vente Groupée",
+    },
+
+    // Sélection de Chaîne
+    chain: {
+        selectBlockchain: "🔗 Sélectionner la Blockchain",
+        current: "Actuel :",
+        choosePreferred: "Choisissez votre blockchain préférée pour le trading :",
+        solana: "Solana",
+        ethereum: "Ethereum",
+        solanaSelected: "✅ Solana",
+        ethereumSelected: "✅ Ethereum",
     },
 };

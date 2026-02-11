@@ -12,6 +12,14 @@ export const getAutoSell = async (
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
     
+    // Get chain-specific TP/SL values
+    const takeProfitPercent = isEthereum 
+        ? (user.settings.auto_sell.takeProfitPercent_ethereum ?? 10)
+        : (user.settings.auto_sell.takeProfitPercent_solana ?? 10);
+    const stopLossPercent = isEthereum
+        ? (user.settings.auto_sell.stopLossPercent_ethereum ?? -40)
+        : (user.settings.auto_sell.stopLossPercent_solana ?? -40);
+    
     const active_wallet = isEthereum 
         ? user.ethereumWallets.find((wallet: any) => wallet.is_active_wallet)
         : user.wallets.find((wallet: any) => wallet.is_active_wallet);
@@ -21,15 +29,19 @@ export const getAutoSell = async (
     // const text1 = user.settings.auto_sell.enabled === true ? "Enabled" : "Disabled";
     // const text2 = user.settings.auto_sell.sellOnce === true ? "Enabled" : "Disabled";
 
+    const chainName = isEthereum ? "Ethereum" : "Solana";
+    const chainEmoji = isEthereum ? "🟠" : "🟠";
+
     const caption =
         `<strong>${await t('autoSell.p1', userId)}</strong>\n\n` +
         `${await t('autoSell.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('autoSell.p3', userId)}</a>\n\n` +
         `${await t('autoSell.p4', userId)}\n\n` +
+        `<strong>${chainEmoji} ${chainName}</strong>\n\n` +
         `<strong>${user.username} (${await t('autoSell.p5', userId)})</strong> : <strong>${active_wallet.label}\n</strong>` +
         `<code>${active_wallet.publicKey}</code>\n\n` +
         // `<strong>💹 Sell Percent:</strong> ${user.settings.auto_sell.sellPercent} %\n\n` +n
-        `<strong>${await t('autoSell.p6', userId)}</strong> ${user.settings.auto_sell.takeProfitPercent}%\n` +
-        `<strong>${await t('autoSell.p7', userId)}</strong> ${user.settings.auto_sell.stopLossPercent}%\n\n` +
+        `<strong>${await t('autoSell.p6', userId)}</strong> ${takeProfitPercent}%\n` +
+        `<strong>${await t('autoSell.p7', userId)}</strong> ${stopLossPercent}%\n\n` +
         // `<strong>${status} Status</strong>\n\n` +
         // `<strong>${once} Sell Once</strong>\n\n` +
         // `<strong>⚙️ Auto Sell Rules</strong>\n\n` +

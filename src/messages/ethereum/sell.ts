@@ -12,7 +12,7 @@ import { getTokenBalancWithContract } from "../../services/ethereum/contract"
 import { TippingSettings } from "../../models/tipSettings"
 import { limitOrderData } from "../../models/limitOrder"
 import { formatNumberStyle, getCurrentTime, getFrenchTime, getlocationTime } from "../../services/other"
-import { getPairInfoWithTokenAddress } from "../../services/ethereum/dexscreener"
+import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
 import { getImage } from "../Image/image"
 
 export const editEthereumSellMessageWithAddress = async (
@@ -106,24 +106,27 @@ export const sendEthereumSellMessageWithAddress = async (
     const eth_price = await getEtherPrice();
     const balance = await getBalance(active_wallet.publicKey || "");
     
-    const token = await Token.findOne({ address: { $regex: new RegExp(`^${tokenAddress}$`, "i") } });
+    let token = await Token.findOne({ address: { $regex: new RegExp(`^${tokenAddress}$`, "i") } });
     if (!token) {
-        await bot.sendMessage(chatId, `❌ Token not found.`, {
-            disable_web_page_preview: true
-        });
-        return;
+        token = await newTokenRegistered(tokenAddress);
+        if (!token) {
+            await bot.sendMessage(chatId, `❌ ${await t('errors.notToken', userId)}.`, {
+                disable_web_page_preview: true
+            });
+            return;
+        }
     }
     
     const tokenAmountToSell = (tokenBalance * sellPercent) / 100;
     
     const text = `${await t('quickSell.p7', userId)}\n\n` +
         `Token : <code>${tokenAddress}</code>\n\n` +
-        `${await t('quickSell.p14', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+        `${await t('quickSell.p18', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
         `<code>${active_wallet?.publicKey}</code>\n\n` +
-        `Token Balance: <strong>${tokenBalance.toFixed(2)} ${token.symbol || 'TOKEN'}</strong>\n` +
-        `Selling: <strong>${tokenAmountToSell.toFixed(2)} ${token.symbol || 'TOKEN'} (${sellPercent}%)</strong>\n\n` +
+        `${await t('quickSell.tokenBalance', userId)} <strong>${tokenBalance.toFixed(2)} ${token.symbol || 'TOKEN'}</strong>\n` +
+        `${await t('quickSell.selling', userId)} <strong>${tokenAmountToSell.toFixed(2)} ${token.symbol || 'TOKEN'} (${sellPercent}%)</strong>\n\n` +
         `🟡 <strong><em>${await t('quickSell.p8', userId)}</em></strong>\n` +
-        `${await t('quickSell.p9', userId)}: ${user.settings.slippage_eth?.sell_slippage_eth || 0.5} % \n\n` +
+        `${await t('quickSell.p11', userId)} : ${user.settings.slippage_eth?.sell_slippage_eth || 0.5} % \n\n` +
         `<strong><em>${await t('quickSell.p19', userId)}</em></strong>`
     
     const sent = bot.sendMessage(
@@ -182,7 +185,8 @@ export const sendEthereumSellMessageWithAddress = async (
             gas_amount: gas_amount,
             dexId: token.dex_name || "Uniswap V2",
             secretKey: secretKey,
-            deadline: deadline
+            deadline: deadline,
+            userId: userId
         });
 
         if (result && result.success) {

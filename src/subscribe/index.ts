@@ -110,7 +110,7 @@ export const sendSubscriptionOptions = async (bot: TelegramBot, chatId: number, 
         chatId,
         imagePath,
         {
-            caption: `💸 *${await t('subscribe.options', telegramId)}:*\n\n${await t('subscribe.unlockFeatures', telegramId)}\n✨ ${await t('subscribe.sniping', telegramId)}\n\n${await t('subscribe.choosePlan', telegramId)}`,
+            caption: `💸 *${await t('subscribe.options', telegramId)} :*\n\n${await t('subscribe.unlockFeatures', telegramId)}\n✨ ${await t('subscribe.sniping', telegramId)}\n\n${await t('subscribe.choosePlan', telegramId)}`,
             parse_mode: "Markdown",
             reply_markup: {
                 inline_keyboard: [

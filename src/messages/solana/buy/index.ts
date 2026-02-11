@@ -148,8 +148,8 @@ export const getBuy = async (userId: number, address: string) => {
         `<strong>${await t('settings.mev', userId)} :</strong> ${p2} ${p1} \n\n` +
         `<strong>${await t('buy.p11', userId)} :</strong>\n` +
         `   <strong>${await t('buy.p12', userId)} :</strong> ${status} ${text}\n` +
-        `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell.takeProfitPercent} %\n` +
-        `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell.stopLossPercent} %\n\n` +
+        `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell.takeProfitPercent_solana ?? 10} %\n` +
+        `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell.stopLossPercent_solana ?? -40} %\n\n` +
         // `💰 Token Balance: <strong>${tokenBalance} ${name} | $${(tokenBalance * priceUsd).toFixed(2)}</strong>\n` +
         // `💼 Wallet Balance: <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
         `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
@@ -405,6 +405,10 @@ export const sendBuyMessageWithAddress = async (
             });
             await user.save();
             if (user.settings.auto_sell.enabled || user.sniper.allowAutoSell) {
+                // Get Solana-specific TP/SL values
+                const takeProfitPercent = user.settings.auto_sell.takeProfitPercent_solana ?? 10;
+                const stopLossPercent = user.settings.auto_sell.stopLossPercent_solana ?? -40;
+                
                 const existingOrder = await limitOrderData.findOne({
                     user_id: userId,
                     token_mint: tokenAddress,
@@ -413,8 +417,8 @@ export const sendBuyMessageWithAddress = async (
                 });
 
                 const newAmount = tokenBalance;
-                const newTargetPrice1 = ((user.settings.auto_sell.takeProfitPercent + 100) * priceUsd) / 100;
-                const newTargetPrice2 = ((user.settings.auto_sell.stopLossPercent + 100) * priceUsd) / 100;
+                const newTargetPrice1 = ((takeProfitPercent + 100) * priceUsd) / 100;
+                const newTargetPrice2 = ((stopLossPercent + 100) * priceUsd) / 100;
 
                 if (existingOrder) {
                     // Order exists: update token amount and target price (optional: weighted avg)
@@ -436,8 +440,8 @@ export const sendBuyMessageWithAddress = async (
                         {
                             $set: {
                                 token_amount: totalAmount,
-                                Tp: user.settings.auto_sell.takeProfitPercent,
-                                Sl: user.settings.auto_sell.stopLossPercent,
+                                Tp: takeProfitPercent,
+                                Sl: stopLossPercent,
                                 target_price1: updatedTargetPrice1,
                                 targer_price2: updatedTargetPrice2,
                                 status: "Pending"
@@ -452,8 +456,8 @@ export const sendBuyMessageWithAddress = async (
                         wallet: active_wallet.publicKey,
                         token_mint: tokenAddress,
                         token_amount: newAmount,
-                        Tp: user.settings.auto_sell.takeProfitPercent,
-                        Sl: user.settings.auto_sell.stopLossPercent,
+                        Tp: takeProfitPercent,
+                        Sl: stopLossPercent,
                         target_price1: newTargetPrice1,
                         target_price2: newTargetPrice2,
                         status: "Pending",

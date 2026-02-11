@@ -1,15 +1,30 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../../../models/user";
 import { t } from "../../../locales";
+import { getUserChain } from "../../../utils/chain";
 
 export const getProfitLevel = async (userId: number) => {
     const user = (await User.findOne({ userId })) || new User();
+    const userChain = await getUserChain(userId);
+    
+    // Get chain-specific TP/SL values
+    const takeProfitPercent = userChain === "ethereum" 
+        ? (user.settings.auto_sell.takeProfitPercent_ethereum ?? 10)
+        : (user.settings.auto_sell.takeProfitPercent_solana ?? 10);
+    const stopLossPercent = userChain === "ethereum"
+        ? (user.settings.auto_sell.stopLossPercent_ethereum ?? -40)
+        : (user.settings.auto_sell.stopLossPercent_solana ?? -40);
+    
+    const chainName = userChain === "ethereum" ? "Ethereum" : "Solana";
+    const chainEmoji = userChain === "ethereum" ? "🟠" : "🟠";
+    
     const caption =
         `<strong>${await t('TpSl.p1', userId)}</strong>\n\n` +
         `${await t('TpSl.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('TpSl.p3', userId)}</a>\n\n` +
         `${await t('TpSl.p4', userId)}\n\n` +
-        `<strong>${await t('TpSl.p5', userId)}</strong>${user.settings.auto_sell.takeProfitPercent} %\n` +
-        `<strong>${await t('TpSl.p6', userId)}</strong>${user.settings.auto_sell.stopLossPercent}%\n\n` +
+        `<strong>${chainEmoji} ${chainName}</strong>\n\n` +
+        `<strong>${await t('TpSl.p5', userId)}</strong>${takeProfitPercent} %\n` +
+        `<strong>${await t('TpSl.p6', userId)}</strong>${stopLossPercent}%\n\n` +
         // `<strong>${status} Status</strong>\n\n` +
         // `<strong>⚙️ Current Rules Set:</strong>\n\n` +
         `<strong>${await t('TpSl.p7', userId)}</strong>`;
@@ -18,11 +33,11 @@ export const getProfitLevel = async (userId: number) => {
     const options: TelegramBot.InlineKeyboardButton[][] = [
 
         [
-            { text: `${await t('TpSl.tp', userId)}${user.settings.auto_sell.takeProfitPercent}%`, callback_data: "autoSell_tp" },
+            { text: `${await t('TpSl.tp', userId)}${takeProfitPercent}%`, callback_data: "autoSell_tp" },
 
             // { text: "🗑 Delete Rule", callback_data: "settings_auto_Sell_delete_rule" },
         ],
-        [{ text: `${await t('TpSl.sl', userId)}${user.settings.auto_sell.stopLossPercent}%`, callback_data: "autoSell_sl" },],
+        [{ text: `${await t('TpSl.sl', userId)}${stopLossPercent}%`, callback_data: "autoSell_sl" },],
         // [
         // { text: `💦 New Stop Loss Level ${user.settings.auto_sell.takeProfitPercent}%`, callback_data: "settings_slippage" },
         // { text: "🗑 Delete Rule", callback_data: "settings_auto_Sell_delete_rule" },

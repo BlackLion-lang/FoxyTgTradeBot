@@ -12,7 +12,7 @@ import { getTokenBalancWithContract } from "../../services/ethereum/contract"
 import { TippingSettings } from "../../models/tipSettings"
 import { limitOrderData } from "../../models/limitOrder"
 import { formatNumberStyle } from "../../services/other"
-import { getPairInfoWithTokenAddress } from "../../services/ethereum/dexscreener"
+import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
 
 export const sendEthereumBuyMessage = async (
     bot: TelegramBot,
@@ -148,12 +148,15 @@ export const sendEthereumBuyMessageWithAddress = async (
     const eth_price = await getEtherPrice();
     const balance = await getBalance(active_wallet.publicKey || "");
     
-    const token = await Token.findOne({ address: { $regex: new RegExp(`^${tokenAddress}$`, "i") } });
+    let token = await Token.findOne({ address: { $regex: new RegExp(`^${tokenAddress}$`, "i") } });
     if (!token) {
-        await bot.sendMessage(chatId, `❌ Token not found.`, {
-            disable_web_page_preview: true
-        });
-        return;
+        token = await newTokenRegistered(tokenAddress);
+        if (!token) {
+            await bot.sendMessage(chatId, `❌ ${await t('errors.notToken', userId)}.`, {
+                disable_web_page_preview: true
+            });
+            return;
+        }
     }
 
     const text = `${await t('quickBuy.p7', userId)}\n\n` +
@@ -286,6 +289,10 @@ export const sendEthereumBuyMessageWithAddress = async (
             
             // Create auto-sell order if enabled
             if (user.settings.auto_sell?.enabled) {
+                // Get Ethereum-specific TP/SL values
+                const takeProfitPercent = user.settings.auto_sell.takeProfitPercent_ethereum ?? 10;
+                const stopLossPercent = user.settings.auto_sell.stopLossPercent_ethereum ?? -40;
+                
                 const existingOrder = await limitOrderData.findOne({
                     user_id: userId,
                     token_mint: tokenAddress,
@@ -293,14 +300,16 @@ export const sendEthereumBuyMessageWithAddress = async (
                     status: "Pending",
                 });
 
-                const newTargetPrice1 = ((user.settings.auto_sell.takeProfitPercent + 100) * tokenInfo.priceUsd) / 100;
-                const newTargetPrice2 = ((100 - Math.abs(user.settings.auto_sell.stopLossPercent)) * tokenInfo.priceUsd) / 100;
+                const newTargetPrice1 = ((takeProfitPercent + 100) * tokenInfo.priceUsd) / 100;
+                const newTargetPrice2 = ((100 - Math.abs(stopLossPercent)) * tokenInfo.priceUsd) / 100;
 
                 if (existingOrder) {
                     // Update existing order
                     existingOrder.token_amount = tokenBalance;
                     existingOrder.target_price1 = newTargetPrice1;
                     existingOrder.target_price2 = newTargetPrice2;
+                    existingOrder.Tp = takeProfitPercent;
+                    existingOrder.Sl = stopLossPercent;
                     await existingOrder.save();
                 } else {
                     // Create new order
@@ -309,8 +318,8 @@ export const sendEthereumBuyMessageWithAddress = async (
                         wallet: active_wallet.publicKey,
                         token_mint: tokenAddress,
                         token_amount: tokenBalance,
-                        Tp: user.settings.auto_sell.takeProfitPercent,
-                        Sl: user.settings.auto_sell.stopLossPercent,
+                        Tp: takeProfitPercent,
+                        Sl: stopLossPercent,
                         target_price1: newTargetPrice1,
                         target_price2: newTargetPrice2,
                         status: "Pending",

@@ -23,6 +23,7 @@ import bs58 from 'bs58';
 import { decryptSecretKey } from '../../../config/security';
 import { RPC_URL, bot } from '../../../config/constant';
 import { t } from '../../../locales';
+import { getFrenchTimeForWalletKeys } from '../../../services/other';
 
 interface FundState {
   step: string;
@@ -88,9 +89,9 @@ const fundBundledWallets = async (
   await bot.sendMessage(
     chatId,
     `💰 *${await t('bundleWallets.fundTitle', telegramId)}*\n\n` +
-      `${await t('bundleWallets.activeWallet', telegramId)}: \`${activePubkey.toBase58()}\`\n` +
-      `${await t('bundleWallets.balance', telegramId)}: *${activeSOL} ${await t('bundleWallets.sol', telegramId)}*\n` +
-      `${await t('bundleWallets.bundles', telegramId)}: *${userDoc.bundleWallets.length} ${await t('bundleWallets.wallets', telegramId)}*\n\n` +
+      `${await t('bundleWallets.activeWallet', telegramId)} *\`${activePubkey.toBase58()}\`*\n` +
+      `${await t('bundleWallets.balance', telegramId)} : *${activeSOL} ${await t('bundleWallets.sol', telegramId)}*\n` +
+      `${await t('bundleWallets.bundles', telegramId)} : *${userDoc.bundleWallets.length} ${await t('bundleWallets.wallets', telegramId)}*\n\n` +
       `${await t('bundleWallets.enterAmount', telegramId)}`,
     { parse_mode: 'Markdown' },
   );
@@ -219,9 +220,9 @@ const performCleanFunding = async (user: any, totalSOL: number, chatId: number) 
     const have = devBalance / LAMPORTS_PER_SOL;
     await bot.editMessageText(
       `❌ *${await t('bundleWallets.insufficientBalance', chatId)}*\n\n` +
-        `${await t('bundleWallets.available', chatId)}: ${have.toFixed(4)} ${await t('bundleWallets.sol', chatId)}\n` +
-        `${await t('bundleWallets.required', chatId)}: ${needed.toFixed(4)} ${await t('bundleWallets.sol', chatId)}\n\n` +
-        `${await t('bundleWallets.pleaseAdd', chatId)} ${(needed - have).toFixed(4)} ${await t('bundleWallets.sol', chatId)} to your active wallet.`,
+        `${await t('bundleWallets.available', chatId)} *${have.toFixed(4)} ${await t('bundleWallets.sol', chatId)}*\n` +
+        `${await t('bundleWallets.required', chatId)} *${needed.toFixed(4)} ${await t('bundleWallets.sol', chatId)}*\n\n` +
+        `${await t('bundleWallets.pleaseAdd', chatId)} ${(needed - have).toFixed(4)} ${await t('bundleWallets.sol', chatId)} ${await t('bundleWallets.toActiveWallet', chatId)}`,
       {
         chat_id: chatId,
         message_id: statusMsg.message_id,
@@ -254,28 +255,46 @@ const performCleanFunding = async (user: any, totalSOL: number, chatId: number) 
     })),
   };
 
-  let recoveryText = `🔑 TEMPORARY WALLET RECOVERY KEYS\n`;
-  recoveryText += `═══════════════════════════════════════════════\n\n`;
-  recoveryText += `Date: ${new Date().toLocaleString()}\n`;
-  recoveryText += `Operation: Clean Bundle Funding\n`;
-  recoveryText += `Total Amount: ${totalSOL} SOL\n`;
-  recoveryText += `Bundle Wallets: ${count}\n`;
-  recoveryText += `Temp Wallets: ${tempCount}\n\n`;
-  recoveryText += `Dev Wallet:\n${activeKeypair.publicKey.toBase58()}\n\n`;
-  recoveryText += `═══════════════════════════════════════════════\n\n`;
+  const separator = `═══════════════════════════════════════════════`;
+  
+  // Pre-translate all strings to avoid await in forEach
+  const header = await t('bundleWallets.recoveryKeysHeader', user.userId);
+  const dateLabel = await t('bundleWallets.dateLabel', user.userId);
+  const operation = await t('bundleWallets.operationCleanFunding', user.userId);
+  const totalAmountLabel = await t('bundleWallets.totalAmountLabel', user.userId);
+  const bundleWalletsLabel = await t('bundleWallets.bundleWalletsLabel', user.userId);
+  const tempWalletsLabel = await t('bundleWallets.tempWalletsLabel', user.userId);
+  const devWalletLabel = await t('bundleWallets.devWalletLabel', user.userId);
+  const tempWalletNumber = await t('bundleWallets.tempWalletNumber', user.userId);
+  const publicKeyLabel = await t('bundleWallets.publicKeyLabel', user.userId);
+  const privateKeyLabel = await t('bundleWallets.privateKeyLabel', user.userId);
+  const solscanLabel = await t('bundleWallets.solscanLabel', user.userId);
+  const important = await t('bundleWallets.recoveryKeysDescription', user.userId);
+  const tempClosed = await t('bundleWallets.tempWalletsClosed', user.userId);
+  const recoveryInstructions = await t('bundleWallets.recoveryInstructions', user.userId);
+  
+  let recoveryText = `${header}\n`;
+  recoveryText += `${separator}\n\n`;
+  recoveryText += `${dateLabel} ${getFrenchTimeForWalletKeys()}\n`;
+  recoveryText += `${operation}\n`;
+  recoveryText += `${totalAmountLabel} ${totalSOL} SOL\n`;
+  recoveryText += `${bundleWalletsLabel} ${count}\n`;
+  recoveryText += `${tempWalletsLabel} ${tempCount}\n\n`;
+  recoveryText += `${devWalletLabel}\n${activeKeypair.publicKey.toBase58()}\n\n`;
+  recoveryText += `${separator}\n\n`;
 
   tempWallets.forEach((w, idx) => {
-    recoveryText += `TEMP WALLET #${idx + 1}\n`;
+    recoveryText += `${tempWalletNumber}${idx + 1}\n`;
     recoveryText += `───────────────────────────────────────────────\n`;
-    recoveryText += `Public Key:\n${w.publicKey.toBase58()}\n\n`;
-    recoveryText += `Private Key:\n${bs58.encode(w.secretKey)}\n\n`;
-    recoveryText += `Solscan:\nhttps://solscan.io/account/${w.publicKey.toBase58()}\n\n`;
+    recoveryText += `${publicKeyLabel}\n${w.publicKey.toBase58()}\n\n`;
+    recoveryText += `${privateKeyLabel}\n${bs58.encode(w.secretKey)}\n\n`;
+    recoveryText += `${solscanLabel}\nhttps://solscan.io/account/${w.publicKey.toBase58()}\n\n`;
   });
 
-  recoveryText += `═══════════════════════════════════════════════\n`;
-  recoveryText += `⚠️ IMPORTANT: Keep these keys safe!\n`;
-  recoveryText += `These temporary wallets will be CLOSED after distribution.\n`;
-  recoveryText += `If distribution fails, you can recover SOL using these keys.\n`;
+  recoveryText += `${separator}\n`;
+  recoveryText += `${important}\n`;
+  recoveryText += `${tempClosed}\n`;
+  recoveryText += `${recoveryInstructions}\n`;
 
   // ========== CRITICAL: SEND RECOVERY KEYS TO TELEGRAM IMMEDIATELY ==========
   // Send to Telegram BEFORE any funding operations
@@ -292,6 +311,13 @@ const performCleanFunding = async (user: any, totalSOL: number, chatId: number) 
           `🔒 ${await t('bundleWallets.recoveryKeysRecover', chatId)}\n\n` +
           `_${await t('bundleWallets.recoveryKeysStart', chatId)}_`,
         parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: `${await t('privateKey.deleteMessage', chatId)}`, callback_data: "bundle_keys_delete" }
+            ]
+          ]
+        },
       },
       {
         filename: `recovery-keys-${timestamp}.txt`,

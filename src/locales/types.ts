@@ -22,6 +22,8 @@ export interface Translations {
         wallet: string;
         position: string;
         sniper: string;
+        help: string;
+        chains: string;
     };
 
     //Admin
@@ -118,6 +120,7 @@ export interface Translations {
         p6: string;
         p7: string;
         importPosition: string;
+        noPositionsFound: string;
     }
 
     //Referral
@@ -173,6 +176,8 @@ export interface Translations {
         adminPanel: string;
         trendingCoin: string;
         chain: string;
+        chainButton: string;
+        botVersion: string;
     };
 
     // Wallets
@@ -247,6 +252,21 @@ export interface Translations {
         p8: string;
     };
 
+    //Create wallet
+    createWallet: {
+        p1: string;
+        p2: string;
+        p3: string;
+        p4: string;
+        p5: string;
+        p6: string;
+        p7: string;
+        p8: string;
+        p9: string;
+        p10: string;
+        p11: string;
+    },
+
     //Import wallet
     importWallet: {
         p1: string;
@@ -254,7 +274,7 @@ export interface Translations {
         p3: string;
         p4: string;
         settings: string;
-    };
+    },
 
     //Rename wallet
     renameWallet: {
@@ -273,6 +293,12 @@ export interface Translations {
 
     //Withdraw wallet
     withdrawWallet: {
+        p1: string;
+        p2: string;
+    },
+
+    //Default wallet
+    defaultWallet: {
         p1: string;
         p2: string;
     }
@@ -327,10 +353,31 @@ export interface Translations {
         p14: string;
         p15: string;
         p16: string;
+        p17: string;
         buyFee: string;
         sellFee: string;
         buyTip: string;
         sellTip: string;
+        gasFeeSettingsEthereum: string;
+        configureGasFeeEthereum: string;
+        currentGasValues: string;
+        gasValue1: string;
+        gasValue2: string;
+        gasValue3: string;
+        veryFast: string;
+        low: string;
+        recommendedGasFeeSettings: string;
+        currentRecommendedGas: string;
+        autoCalculateGasPrice: string;
+        recommendedFeeSettings: string;
+        currentRecommendedFee: string;
+        autoCalculateMEVTip: string;
+        slowButton: string;
+        fastButton: string;
+        normalButton: string;
+        slowButton2: string;
+        enterGasFee: string;
+        invalidGasFee: string;
     };
 
     //slippage setting
@@ -371,6 +418,8 @@ export interface Translations {
         viewToken: string;
         positions: string;
         sell: string;
+        enterBuyAmountEth: string;
+        invalidAmountEth: string;
     };
 
     //Quick Sell
@@ -397,6 +446,8 @@ export interface Translations {
         viewToken: string;
         positions: string;
         buy: string;
+        tokenBalance: string;
+        selling: string;
     }
 
     //Auto Sell
@@ -504,6 +555,7 @@ export interface Translations {
         noDetectedTokens: string;
         panelDescription: string;
         panelDescription2: string;
+        exampleLink: string;
         important: string;
         importantNote: string;
         tokenDetection: string;
@@ -546,6 +598,34 @@ export interface Translations {
         buyToken3: string;
         buyToken4: string;
         buyToken5: string;
+        lastRefreshed: string;
+        tokenStatus: string;
+        tokenStatusMigrated: string;
+        tokenStatusOnBonding: string;
+        tokenStatusBoth: string;
+        view: string;
+        price: string;
+        marketCap: string;
+        minutes: string;
+        enterBuyLimit: string;
+        enterTakeProfit: string;
+        enterStopLoss: string;
+        enterTimeLimit: string;
+        enterBondingCurveMin: string;
+        enterBondingCurveMax: string;
+        enterMinMarketCap: string;
+        enterMaxMarketCap: string;
+        enterMinTokenAge: string;
+        enterMaxTokenAge: string;
+        enterMinHolders: string;
+        enterMaxHolders: string;
+        enterMinVolume: string;
+        enterMaxVolume: string;
+        enterMinLiquidity: string;
+        enterMaxLiquidity: string;
+        enterMinTransactions: string;
+        enterMaxTransactions: string;
+        stopLossLabel: string;
     };
 
     // Snipping Settings (Admin)
@@ -635,6 +715,7 @@ export interface Translations {
         invalidAmount: string;
         invalidSellAmount: string;
         invalidPrivateKey: string;
+        errorOccurred: string;
         walletNotFound: string;
         insufficientBalance: string;
         invalidwallet: string;
@@ -660,6 +741,9 @@ export interface Translations {
         notToken: string;
         transactionFailed: string;
         transactionError: string;
+        insufficientFundsForGas: string;
+        insufficientFundsForSwap: string;
+        insufficientFundsSimple: string;
         invalidtip: string;
         walletLimit: string;
         invalidwallets: string;
@@ -705,15 +789,51 @@ export interface Translations {
         invalidCount: string;
         invalidCountDesc: string;
         selectedWallets: string;
+        all: string;
         youSelectedCount: string;
         pleaseSelectMaxOrFewer: string;
         youSelectedForBundler: string;
+        clickToProceed: string;
         creatingWallets: string;
         congratulations: string;
         walletsCreated: string;
         savePrivateKeys: string;
         invalidWalletCount: string;
         pleaseEnterValidNumber: string;
+        walletKeysTitle: string;
+        storeSecurely: string;
+        neverShare: string;
+        downloadAndSave: string;
+        keysFileSent: string;
+        
+        // Bundle Wallet Keys File
+        bundleWalletKeysHeader: string;
+        dateLabel: string;
+        operationBundleCreation: string;
+        bundleTypeLabel: string;
+        totalWalletsLabel: string;
+        bundleWalletNumber: string;
+        publicKeyAddress: string;
+        privateKeyLabel: string;
+        solscanLabel: string;
+        importantKeepKeysSafe: string;
+        bundleWalletKeysDescription: string;
+        loseKeysWarning: string;
+        storeFileSecure: string;
+        neverShareKeys: string;
+        
+        // Recovery Keys File
+        recoveryKeysHeader: string;
+        operationCleanFunding: string;
+        totalAmountLabel: string;
+        bundleWalletsLabel: string;
+        tempWalletsLabel: string;
+        devWalletLabel: string;
+        tempWalletNumber: string;
+        publicKeyLabel: string;
+        recoveryKeysDescription: string;
+        tempWalletsClosed: string;
+        recoveryInstructions: string;
         
         // Fund
         fundTitle: string;
@@ -742,6 +862,7 @@ export interface Translations {
         insufficientBalance: string;
         available: string;
         pleaseAdd: string;
+        toActiveWallet: string;
         
         // Clean Fund
         cleanFundTitle: string;
@@ -799,6 +920,7 @@ export interface Translations {
         successfulTransactions: string;
         failedWallets: string;
         insufficientBalanceForBuy: string;
+        noneHaveEnoughSol: string;
         needAtLeast: string;
         needAtLeast_ethereum: string;
         bundleSellStarted: string;
@@ -867,5 +989,16 @@ export interface Translations {
         // Button labels
         bundleBuyButton: string;
         bundleSellButton: string;
+    };
+
+    // Chain Selection
+    chain: {
+        selectBlockchain: string;
+        current: string;
+        choosePreferred: string;
+        solana: string;
+        ethereum: string;
+        solanaSelected: string;
+        ethereumSelected: string;
     };
 }

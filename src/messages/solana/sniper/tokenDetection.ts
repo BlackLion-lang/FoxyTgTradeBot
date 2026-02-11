@@ -1,7 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../../../models/user";
 import { getBalance } from "../../../services/solana";
-import { formatNumberStyle, formatWithSuperscript } from "../../../services/other";
+import { formatNumberStyle, formatWithSuperscript, getCurrentTime } from "../../../services/other";
 import { t } from "../../../locales";
 import { getPairByAddress } from "../../../services/dexscreener";
 
@@ -34,6 +34,12 @@ export const getTokenlist = async (
     };
     // console.log("User Token List:", tokenlist);
 
+    // Pre-translate strings to avoid await in map
+    const unknownTokenText = await t('sniper.unknownToken', userId);
+    const detailsUnavailableText = await t('sniper.detailsUnavailable', userId);
+    const priceLabel = await t('sniper.price', userId);
+    const marketCapLabel = await t('sniper.marketCap', userId);
+
     const detectedTokens = await Promise.all(
         tokenlist.map(async (tokenAddress: any, index: number) => {
             try {
@@ -41,10 +47,10 @@ export const getTokenlist = async (
                 const pair = pairArray?.[0];
                 
                 if (!pair) {
-                    return `<strong>${index + 1}. ${await t('sniper.unknownToken', userId)}</strong>\n<code>${tokenAddress}</code>\n${await t('sniper.detailsUnavailable', userId)}`;
+                    return `<strong>${index + 1}. ${unknownTokenText}</strong>\n<code>${tokenAddress}</code>\n${detailsUnavailableText}`;
                 }
 
-                const tokenName = pair?.baseToken?.name || await t('sniper.unknownToken', userId);
+                const tokenName = pair?.baseToken?.name || unknownTokenText;
                 const tokenSymbol = pair?.baseToken?.symbol || 'N/A';
                 const priceUsd = pair?.priceUsd ? formatWithSuperscript(pair.priceUsd.toString()) : 'N/A';
                 const marketCap = pair?.marketCap ? `$${formatNumberStyle(pair.marketCap)}` : 'N/A';
@@ -70,7 +76,7 @@ export const getTokenlist = async (
 
                 return `<strong>${index + 1}. ${tokenName} (${tokenSymbol})</strong>\n` +
                        `<code>${tokenAddress}</code>\n` +
-                       `💰 Price : <strong>$${priceUsd}</strong> | 📊 MCap : <strong>${marketCap}</strong>\n`;
+                       `💰 ${priceLabel} : <strong>$${priceUsd}</strong> | 📊 ${marketCapLabel} : <strong>${marketCap}</strong>\n`;
                     //    `💧 Liq: <strong>${liquidity}</strong> | 📈 Vol24h: <strong>${volume24h}</strong>\n` +
                     //    `📉 24h: <strong>${priceChange24h}</strong> | 🏦 DEX: <strong>${dexId}</strong>`;
             } catch (error) {
@@ -79,7 +85,7 @@ export const getTokenlist = async (
                     tokenAddress,
                     error,
                 );
-                return `<strong>${index + 1}. ${tokenAddress}</strong>\n${await t('sniper.detailsUnavailable', userId)}`;
+                return `<strong>${index + 1}. ${tokenAddress}</strong>\n${detailsUnavailableText}`;
             }
         }),
     );
@@ -94,6 +100,9 @@ export const getTokenlist = async (
     // const symbol = pair.baseToken.symbol;
     // const name = pair.baseToken.name;
 
+    // Get current timestamp for refresh display
+    const refreshTime = getCurrentTime();
+
     const caption =
         // `<strong>${await t('Wallet', userId)}</strong>\n` +
         // `<code>${active_wallet.publicKey}</code>\n` +
@@ -103,7 +112,8 @@ export const getTokenlist = async (
         // `<strong>${await t('settings.p5', userId)}</strong>`;
         `${await t('sniper.tokenDetectionList', userId)}\n\n` +
         `${await t('sniper.tokenInfoInstruction', userId)} \n\n` +
-        `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n`;
+        `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n` +
+        `${await t('sniper.lastRefreshed', userId)} <strong>${refreshTime}</strong>`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [];
     
@@ -159,7 +169,8 @@ export const getTokenlist = async (
     } catch (error: any) {
         console.error("Error in getTokenlist:", error);
         // Return a default safe response instead of crashing
-        const errorCaption = `${await t('sniper.tokenDetectionList', userId)}\n\n${await t('sniper.noDetectedTokens', userId)}`;
+        const refreshTime = getCurrentTime();
+        const errorCaption = `${await t('sniper.tokenDetectionList', userId)}\n\n${await t('sniper.noDetectedTokens', userId)}\n\n${await t('sniper.lastRefreshed', userId)} <strong>${refreshTime}</strong>`;
         const errorMarkup: TelegramBot.InlineKeyboardMarkup = {
             inline_keyboard: [
                 [

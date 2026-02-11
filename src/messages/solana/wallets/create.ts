@@ -5,6 +5,7 @@ import { walletsBackMarkup } from "../../../utils/markup";
 import { User } from "../../../models/user";
 import { isExistWalletWithName } from "../../../utils/config";
 import { encryptSecretKey } from "../../../config/security";
+import { t } from "../../../locales";
 
 export const getCreateWallet = async (
     bot: TelegramBot,
@@ -15,47 +16,54 @@ export const getCreateWallet = async (
     const wallets = user.wallets;
     bot.sendMessage(
         chatId,
-        `What would you like to name your new wallet?`,
+        `${await t('createWallet.p1', userId)}`,
     ).then((sentMessage) => {
         bot.once("text", async (reply) => {
             const label = reply.text || "";
             if (hasSpecialCharacters(label)) {
                 bot.sendMessage(
                     chatId,
-                    `Wallet name cannot contain symbols or special characters.`,
+                    `${await t('createWallet.p2', userId)}`,
                 );
             } else if (isExistWalletWithName(wallets, label)) {
                 bot.sendMessage(
                     chatId,
-                    `Wallet with this name already exists. Please try again.`,
+                    `${await t('createWallet.p3', userId)}`,
                 );
             } else {
                 const { publicKey, secretKey } = walletCreate();
                 const balance = await getBalance(publicKey);
                 const encrypted = encryptSecretKey(secretKey);
-                user.wallets.push({ label, publicKey, encrypted, balance });
+                user.wallets.push({ label, publicKey, secretKey: encrypted, balance });
                 await user.save();
+                function escapeMarkdownV2(text: string): string {
+                    return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+                }
+                const escapedLabel = escapeMarkdownV2(label);
+                const escapedPublicKey = escapeMarkdownV2(publicKey);
+                const escapedRawSecretKey = escapeMarkdownV2(secretKey);
+                const p4 = escapeMarkdownV2(await t('createWallet.p4', userId));
+                const p5 = escapeMarkdownV2(await t('createWallet.p5', userId));
+                const p6 = escapeMarkdownV2(await t('createWallet.p6', userId));
+                const p7 = escapeMarkdownV2(await t('createWallet.p7', userId));
+                const p9 = escapeMarkdownV2(await t('createWallet.p9', userId));
+                const p10 = escapeMarkdownV2(await t('createWallet.p10', userId));
                 bot.sendMessage(
                     chatId,
-                    `<strong>✅ Foxy Wallet Created!
+                    `*${p4}*
 
-💳 Name:</strong>
+*${p5}*${escapedLabel}
 
-<code>${label}</code>
+*${p6}* \`${escapedPublicKey}\`
 
-<strong>🔗 Address:</strong>
+*${p7}*
+||${escapedRawSecretKey}||
 
-<code>${publicKey}</code>
+*${p9}*
 
-<strong>🔑 Private Key:</strong>
-
-<code>${secretKey}</code>
-
-<strong>⚠️ Keep your private key safe and secure. Foxy will no longer remember your private key, and you will no longer be able to retrieve it after this message. Please import your wallet into Phantom.
-
-💡 To view your other wallets, head over to settings.</strong>`,
+${p10}`,
                     {
-                        parse_mode: "HTML",
+                        parse_mode: "MarkdownV2",
                         reply_markup: await walletsBackMarkup(userId),
                     },
                 );

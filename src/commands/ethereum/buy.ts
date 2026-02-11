@@ -154,8 +154,8 @@ export async function Buy(bot: TelegramBot, chatId: number, userId: number, addr
             // `<strong>${await t('settings.mev', userId)} :</strong> ${p2} ${p1}\n\n` +
             `<strong>${await t('buy.p11', userId)} :</strong>\n` +
             `   <strong>${await t('buy.p12', userId)} :</strong> ${status} ${text}\n` +
-            `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell?.takeProfitPercent || 0} %\n` +
-            `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell?.stopLossPercent || 0} %\n\n` +
+            `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell?.takeProfitPercent_ethereum ?? 10} %\n` +
+            `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell?.stopLossPercent_ethereum ?? -40} %\n\n` +
             `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
             `<strong>${await t('buy.p16', userId)}</strong>`
 
@@ -321,8 +321,8 @@ export async function BuyEdit(bot: TelegramBot, chatId: number, userId: number, 
             // `<strong>${await t('settings.mev', userId)} :</strong> ${p2} ${p1}\n\n` +
             `<strong>${await t('buy.p11', userId)} :</strong>\n` +
             `   <strong>${await t('buy.p12', userId)} :</strong> ${status} ${text}\n` +
-            `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell?.takeProfitPercent || 0} %\n` +
-            `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell?.stopLossPercent || 0} %\n\n` +
+            `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell?.takeProfitPercent_ethereum ?? 10} %\n` +
+            `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell?.stopLossPercent_ethereum ?? -40} %\n\n` +
             `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
             `<strong>${await t('buy.p16', userId)}</strong>`
 

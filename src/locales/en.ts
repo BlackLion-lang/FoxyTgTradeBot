@@ -21,7 +21,9 @@ export const en: Translations = {
         setting: "View Foxy settings.",
         wallet: "View your Foxy wallets.",
         sniper: "Launch the Foxy sniper.",
-        position: "View your token positions."
+        position: "View your token positions.",
+        help: "Help Center",
+        chains: "Choose your preferred blockchain for trading."
     },
     //Admin
     admin: {
@@ -78,7 +80,9 @@ export const en: Translations = {
         help: "🙋‍♂️ Help",
         adminPanel: "👑 Admin Panel",
         trendingCoin: "🥇 Trending Coin",
-        chain: "Current Chain :"
+        chain: "Current Chain :",
+        chainButton: "🔗 Chain",
+        botVersion: "🤖 Bot Telegram Version :"
     },
 
     //Referral
@@ -171,7 +175,8 @@ export const en: Translations = {
         p5: "📉 Profit :",
         p6: "💹 Avg. Entry (MC) :",
         p7: "🕒 Last Updated (UTC) :",
-        importPosition: "Import Position"
+        importPosition: "Import Position",
+        noPositionsFound: "No positions found. Start trading to see your positions here."
     },
 
     // Wallets
@@ -243,6 +248,21 @@ export const en: Translations = {
         p8: "To switch to another wallet, click on its address below"
     },
 
+    //Create wallet
+    createWallet: {
+        p1: "What would you like to name your new wallet?",
+        p2: "Wallet name cannot contain symbols or special characters.",
+        p3: "Wallet with this name already exists. Please try again.",
+        p4: "✅ Foxy Wallet Created!",
+        p5: "💳 Name : ",
+        p6: "🔗 Address : ",
+        p7: "🔑 Private Key : ",
+        p8: "⚠️ Keep your private key safe and secure. Foxy will no longer remember your private key, and you will no longer be able to retrieve it after this message. Please import your wallet into MetaMask.",
+        p9: "⚠️ Keep your private key safe and secure. Foxy will no longer remember your private key, and you will no longer be able to retrieve it after this message. Please import your wallet into Phantom.",
+        p10: "💡 To view your other wallets, head over to settings.",
+        p11: "⚙️ Settings",
+    },
+
     //Import wallet
     importWallet: {
         p1: "✅ Wallet Successfully Imported!",
@@ -271,6 +291,12 @@ export const en: Translations = {
     withdrawWallet: {
         p1: "💸 Withdraw",
         p2: "💡 Select a wallet you want to withdraw funds from.",
+    },
+
+    //Default wallet
+    defaultWallet: {
+        p1: "💳 Change Default Wallet",
+        p2: "💡 Select a wallet you wish to set as default.",
     },
 
     //dangerZoneMessage
@@ -317,6 +343,7 @@ export const en: Translations = {
         p8: "Slow",
         p9: "Normal",
         p10: "Fast",
+        p17: "Ultra Fast",
         p11: "🤖 Recommended Fee Settings",
         p12: "📚 Need more help?",
         p13: "Click Here!",
@@ -326,7 +353,27 @@ export const en: Translations = {
         buyFee: "⛽BuyFee :",
         sellFee: "⛽SellFee :",
         buyTip: "💸BuyTip :",
-        sellTip: "💸SellTip :"
+        sellTip: "💸SellTip :",
+        gasFeeSettingsEthereum: "⛽️ Gas Fee Settings (Ethereum)",
+        configureGasFeeEthereum: "💡 Configure your gas fee values for Ethereum transactions.",
+        currentGasValues: "Current Gas Values:",
+        gasValue1: "⛽ Gas Value 1 :",
+        gasValue2: "⛽ Gas Value 2 :",
+        gasValue3: "⛽ Gas Value 3 :",
+        veryFast: "Very Fast",
+        low: "Low",
+        recommendedGasFeeSettings: "⛽️ Recommended Gas Fee Settings",
+        currentRecommendedGas: "🌎 Current Recommended Gas:",
+        autoCalculateGasPrice: "💡 Automatically let Foxy calculate the recommended gas price.",
+        recommendedFeeSettings: "⛽️ Recommended Fee Settings",
+        currentRecommendedFee: "🌎 Current Recommended Fee:",
+        autoCalculateMEVTip: "💡 Automatically let Foxy calculate the recommended MEV tip.",
+        slowButton: "⚡ Slow",
+        fastButton: "🚀 Fast",
+        normalButton: "⚡️ Normal",
+        slowButton2: "🐢 Slow",
+        enterGasFee: "Enter gas fee in Gwei (e.g., 10, 50, 100):",
+        invalidGasFee: "Invalid gas fee. Please enter a valid number."
     },
 
     //slippage setting
@@ -366,7 +413,9 @@ export const en: Translations = {
         p16: "View on Etherscan",
         viewToken: "🔄 View Token",
         positions: "📊 Positions",
-        sell: "🎒 Sell"
+        sell: "🎒 Sell",
+        enterBuyAmountEth: "Enter buy amount in ETH for button {index}:",
+        invalidAmountEth: "Invalid amount. Please enter a valid number."
     },
 
     //Quick Sell
@@ -392,7 +441,9 @@ export const en: Translations = {
         p19: "View on Etherscan",
         viewToken: "🔄 View Token",
         positions: "📊 Positions",
-        buy: "💰 Buy"
+        buy: "💰 Buy",
+        tokenBalance: "Token Balance:",
+        selling: "Selling:"
     },
 
     //Auto Sell
@@ -499,7 +550,8 @@ export const en: Translations = {
         detectedActiveTokens: "🔥 Detected active tokens :",
         noDetectedTokens: "No detected active tokens",
         panelDescription: "It is the panel of the sniper bot. Here you can configure all the parameters of the bot.",
-        panelDescription2: "If you have any questions, please let me know. If you want, I will add more options according your strategy.",
+        panelDescription2: "If you have any questions, please contact us via our official website or via the help section.",
+        exampleLink: "Example link",
         important: "Important :",
         importantNote: "The bot is not a guarantee of profit all the time. Please use it with caution and at your own risk.",
         tokenDetection: "🌍 Token Detection",
@@ -531,8 +583,8 @@ export const en: Translations = {
         maxLiquidity: "Max Liquidity",
         minTXNS: "Min TXNS",
         maxTXNS: "Max TXNS",
-        sniperButton: "Sniper",
-        sniperButtonLocked: "Sniper",
+        sniperButton: "🔫 Sniper 🔫",
+        sniperButtonLocked: "🔒 Sniper Locked 🔒",
         tokenDetectionList: "It is the detected token list by bot detection according your setting.",
         tokenInfoInstruction: "You can see the token information by click below token link.",
         unknownToken: "Unknown token",
@@ -542,6 +594,34 @@ export const en: Translations = {
         buyToken3: "Buy - 3",
         buyToken4: "Buy - 4",
         buyToken5: "Buy - 5",
+        lastRefreshed: "🕐 Last refreshed:",
+        tokenStatus: "Token Status",
+        tokenStatusMigrated: "🔄 Migrated (Pump Swap)",
+        tokenStatusOnBonding: "🆕 On Bonding Curve",
+        tokenStatusBoth: "🌐 Both",
+        view: "View",
+        price: "Price",
+        marketCap: "MCap",
+        minutes: "min",
+        enterBuyLimit: "Enter the purchase number. If you enter 1, the bot will trade the token only once.",
+        enterTakeProfit: "Enter the take profit amount.",
+        enterStopLoss: "Enter the stop loss amount.",
+        enterTimeLimit: "Enter a time limit. If you enter 10, the bot will sell your tokens after 10 minutes.",
+        enterBondingCurveMin: "Enter the bonding curve min percent.",
+        enterBondingCurveMax: "Enter the bonding curve max percent.",
+        enterMinMarketCap: "Enter the minimum market cap",
+        enterMaxMarketCap: "Enter the maximum market cap",
+        enterMinTokenAge: "Enter the minimum token age in minutes.",
+        enterMaxTokenAge: "Enter the maximum token age in minutes.",
+        enterMinHolders: "Enter the minimum holder numbers.",
+        enterMaxHolders: "Enter the maximum holders numbers.",
+        enterMinVolume: "Enter the minimum volume.",
+        enterMaxVolume: "Enter the maximum volume.",
+        enterMinLiquidity: "Enter the minimum liquidity.",
+        enterMaxLiquidity: "Enter the maximum liquidity.",
+        enterMinTransactions: "Enter the minimum transaction numbers.",
+        enterMaxTransactions: "Enter the maximum transaction numbers.",
+        stopLossLabel: "💸 Stop Loss :",
     },
 
     // Snipping Settings (Admin)
@@ -630,6 +710,7 @@ export const en: Translations = {
         invalidAmount: "❌ Validation error: Invalid amount. Try again!",
         invalidSellAmount: "❌ Validation error: Invalid trade amount. Please enter a value between 1 and 100.",
         invalidPrivateKey: "❌ Invalid private key. Please provide a valid private key.",
+        errorOccurred: "❌ An error occurred. Please try again.",
         walletNotFound: "❌ There must be at least one wallet created.",
         insufficientBalance: "❌ Insufficient balance.",
         invalidWithdrawal: "Invalid withdrawal amount. Please try again.",
@@ -654,8 +735,11 @@ export const en: Translations = {
         targetSniperUser: "❌ This Telegram user doesn't exist in the sniper whitelist.",
         userNotFound: "❌ User not found. Please check the username or user ID and try again.",
         notToken: "Token not found",
-        transactionFailed: "❌ Transaction failed: Wallet balance is low or transaction was not confirmed in 60.00 seconds.",
+        transactionFailed: "❌ Transaction failed: Wallet balance is low or transaction was not confirmed in 60.00 seconds",
         transactionError: "❌ Error: Token balance is low or has not been purchased.",
+        insufficientFundsForGas: "Insufficient funds for gas. Required: {required} ETH for gas fees. Available: {available} ETH. Shortfall: {shortfall} ETH",
+        insufficientFundsForSwap: "Insufficient funds. Required: {required} ETH ({swapAmount} ETH for swap + {gasAmount} ETH for gas). Available: {available} ETH. Shortfall: {shortfall} ETH",
+        insufficientFundsSimple: "❌ Insufficient funds!\nRequired: {required} ETH\nAvailable: {available} ETH",
         invalidtip: "❌ Validation error: Invalid tip percentage. Please enter a value between 0 and 100.",
         invalidsettings: "❌ Validation error: Invalid referral settings. Please enter a value greater than 0.",
         invalidwallets: "❌ Validation error: Invalid wallet limits. Please enter a value between 1 and 100.",
@@ -701,23 +785,59 @@ export const en: Translations = {
         invalidCount: "Invalid Count",
         invalidCountDesc: "Safe bundler supports maximum",
         selectedWallets: "wallets",
+        all: "All",
         youSelectedCount: "You selected",
         pleaseSelectMaxOrFewer: "Please select {max} or fewer wallets.",
         youSelectedForBundler: "You selected {count} wallets for {bundler}",
+        clickToProceed: "Click \"{button}\" to proceed:",
         creatingWallets: "Creating",
         congratulations: "Congratulations!",
         walletsCreated: "wallets were created successfully for",
         savePrivateKeys: "Please save your private keys securely. They won't be shown again!",
         invalidWalletCount: "Invalid wallet count. Please select between 1 and 20 wallets.",
         pleaseEnterValidNumber: "Please enter a valid number.",
+        walletKeysTitle: "Bundle Wallet Private Keys",
+        storeSecurely: "Store this file in a secure location!",
+        neverShare: "Never share your private keys with anyone!",
+        downloadAndSave: "Download and save this file immediately.",
+        keysFileSent: "Wallet keys file has been sent. Please download and save it securely.",
+        
+        // Bundle Wallet Keys File
+        bundleWalletKeysHeader: "🔑 BUNDLE WALLET PRIVATE KEYS",
+        dateLabel: "Date:",
+        operationBundleCreation: "Operation: Bundle Wallet Creation",
+        bundleTypeLabel: "Bundle Type:",
+        totalWalletsLabel: "Total Wallets:",
+        bundleWalletNumber: "BUNDLE WALLET #",
+        publicKeyAddress: "Public Key (Address):",
+        privateKeyLabel: "Private Key:",
+        solscanLabel: "Solscan:",
+        importantKeepKeysSafe: "⚠️ IMPORTANT: Keep these keys safe!",
+        bundleWalletKeysDescription: "These are your bundle wallet private keys.",
+        loseKeysWarning: "If you lose them, you will lose access to funds in these wallets.",
+        storeFileSecure: "Store this file in a secure location.",
+        neverShareKeys: "Never share your private keys with anyone!",
+        
+        // Recovery Keys File
+        recoveryKeysHeader: "🔑 TEMPORARY WALLET RECOVERY KEYS",
+        operationCleanFunding: "Operation: Clean Bundle Funding",
+        totalAmountLabel: "Total Amount:",
+        bundleWalletsLabel: "Bundle Wallets:",
+        tempWalletsLabel: "Temp Wallets:",
+        devWalletLabel: "Dev Wallet:",
+        tempWalletNumber: "TEMP WALLET #",
+        publicKeyLabel: "Public Key:",
+        recoveryKeysDescription: "⚠️ IMPORTANT: Keep these keys safe!",
+        tempWalletsClosed: "These temporary wallets will be CLOSED after distribution.",
+        recoveryInstructions: "If distribution fails, you can recover SOL using these keys.",
         
         // Fund
         fundTitle: "Fund Bundle Wallets",
         activeWallet: "Active Wallet",
         balance: "Balance",
         bundles: "Bundles",
-        enterAmount: "Enter amount to distribute (in SOL):",
-        enterAmount_ethereum: "Enter amount to distribute (in ETH):",
+        enterAmount: "Enter amount to distribute (in SOL) :",
+        enterAmount_ethereum: "Enter amount to distribute (in ETH) :",
         fundingInProgress: "Funding in progress\n\nPlease wait for the current operation to complete.",
         userNotFound: "User not found. Please /start first.",
         activeWalletNotConfigured: "Active wallet not configured. Please set an active wallet first.",
@@ -738,6 +858,7 @@ export const en: Translations = {
         insufficientBalance: "Insufficient Balance",
         available: "Available",
         pleaseAdd: "Please add",
+        toActiveWallet: "to your active wallet.",
         
         // Clean Fund
         cleanFundTitle: "Clean Fund Bundles",
@@ -795,6 +916,7 @@ export const en: Translations = {
         successfulTransactions: "Successful Transactions",
         failedWallets: "Failed Wallets",
         insufficientBalanceForBuy: "Insufficient Balance",
+        noneHaveEnoughSol: "None of your bundle wallets have enough SOL to execute this buy.",
         needAtLeast: "(Need at least 0.001 SOL after rent-exempt minimum)",
         needAtLeast_ethereum: "(Need at least 0.0001 ETH after gas fees)",
         bundleSellStarted: "Bundle Sell Started",
@@ -863,5 +985,16 @@ export const en: Translations = {
         // Button labels
         bundleBuyButton: "👜 Bundle Buy",
         bundleSellButton: "👜 Bundle Sell",
+    },
+
+    // Chain Selection
+    chain: {
+        selectBlockchain: "🔗 Select Blockchain",
+        current: "Current:",
+        choosePreferred: "Choose your preferred blockchain for trading:",
+        solana: "Solana",
+        ethereum: "Ethereum",
+        solanaSelected: "✅ Solana",
+        ethereumSelected: "✅ Ethereum",
     },
 };

@@ -2,13 +2,14 @@ import TelegramBot from "node-telegram-bot-api";
 import { walletBackButton } from "../../../utils/markup";
 import { User } from "../../../models/user";
 import { getWalletMessage } from "../../../utils/config";
+import { t } from "../../../locales";
 
 export const getDefaultWallet = async (userId: number) => {
     const user = (await User.findOne({ userId })) || new User();
     const caption =
-        `<strong>💳 Change Default Wallet</strong>\n\n` +
+        `<strong>${await t('defaultWallet.p1', userId)}</strong>\n\n` +
         `${await getWalletMessage(userId, "ethereum")}\n\n` +
-        `<strong>💡 Select a wallet you wish to set as default.</strong>`;
+        `<strong>${await t('defaultWallet.p2', userId)}</strong>`;
     
     const ethereumWallets = user.ethereumWallets || [];
     const default_wallet = (user as any).default_wallet;

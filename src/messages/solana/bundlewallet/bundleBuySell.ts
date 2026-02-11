@@ -100,9 +100,12 @@ const executeBundleBuyAllBalance = async (
             const balance = await connection.getBalance(new PublicKey(bundleWallet.publicKey));
             const balanceSOL = balance / LAMPORTS_PER_SOL;
             
+            // For buy operations, we need to reserve rent-exempt + transfer fee + swap fees
+            // Jupiter swap will handle the actual swap, but we need SOL for gas
             const rentExempt = 890880; // Rent exempt minimum
             const transferFee = 5000; // Transaction fee
-            const availableLamports = Math.max(0, balance - rentExempt - transferFee);
+            const swapFeeReserve = 10000; // Reserve for swap fees
+            const availableLamports = Math.max(0, balance - rentExempt - transferFee - swapFeeReserve);
             const availableBalanceSOL = availableLamports / LAMPORTS_PER_SOL;
             
             if (availableBalanceSOL >= 0.001) {
@@ -122,7 +125,7 @@ const executeBundleBuyAllBalance = async (
         return bot.sendMessage(
             chatId,
             `❌ *${await t('bundleWallets.insufficientBalanceForBuy', userId)}*\n\n` +
-            `None of your bundle wallets have enough SOL to execute this buy.\n` +
+            `${await t('bundleWallets.noneHaveEnoughSol', userId)}\n` +
             `${await t('bundleWallets.needAtLeast', userId)}`,
             { parse_mode: 'Markdown' }
         );

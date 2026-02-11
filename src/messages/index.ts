@@ -272,7 +272,7 @@ export const getMenu = async (
         `<strong>${user.username} (Default)</strong> : <strong>${balance.toFixed(userChain === "ethereum" ? 4 : 2)} ${await t(userChain === "ethereum" ? 'currencySymbol_ethereum' : 'currencySymbol_solana', userId)}</strong> ($${(balance * price).toFixed(2)})\n` +
         `<code>${publicKey}</code>\n\n` +
         `${menuP5}\n\n` +
-        `🤖 Bot Telegram Version : <strong>${versionData.bot_telegram_version}</strong>\n` ;
+        `${await t('menu.botVersion', userId)} <strong>${versionData.bot_telegram_version}</strong>\n` ;
 
     // `${await t('menu.p6', userId)}\n\n`;
     // `⚠️ Telegram ADs that might be displayed above are most likely a SCAM. We have no control over them. Please be cautious.`;
@@ -351,7 +351,7 @@ export const getSnippingSettingsMenu = async (userId: number) => {
         : `🔴 ${await t('snippingSettings.subscriptionNotRequired', userId)}`;
     
     const caption = `<strong>🔫 ${await t('snippingSettings.title', userId)}</strong>\n\n` +
-        `<strong>${await t('snippingSettings.subscriptionRequirement', userId)}:</strong> ${subscriptionStatus}\n\n` +
+        `<strong>${await t('snippingSettings.subscriptionRequirement', userId)} :</strong> ${subscriptionStatus}\n\n` +
         `${await t('snippingSettings.manageDescription', userId)}`;
     
     return { caption, markup: await getSnippingSettingsMarkup(userId) };

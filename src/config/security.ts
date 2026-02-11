@@ -52,18 +52,58 @@ export function encryptSecretKey(secretKeyBase64: string, password?: string): st
 }
 
 export function decryptSecretKey(encryptedBase64: string, password?: string): string {
-  const encryptionKey = password || getEncryptionKey();
-  const data = Buffer.from(encryptedBase64, 'base64');
-  const salt = data.slice(0, SALT_LENGTH);
-  const iv = data.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
-  const encrypted = data.slice(SALT_LENGTH + IV_LENGTH);
+  if (!encryptedBase64 || typeof encryptedBase64 !== 'string') {
+    throw new Error('Invalid encrypted data: empty or not a string');
+  }
 
-  const key = crypto.scryptSync(encryptionKey, salt, KEY_LENGTH);
-  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-  const decrypted = Buffer.concat([
-    decipher.update(encrypted),
-    decipher.final(),
-  ]);
+  try {
+    const encryptionKey = password || getEncryptionKey();
+    const data = Buffer.from(encryptedBase64, 'base64');
+    
+    // Validate minimum length: salt (32) + IV (16) = 48 bytes minimum
+    // Base64 encoding adds ~33% overhead, so minimum string length should be ~64 chars
+    if (data.length < SALT_LENGTH + IV_LENGTH) {
+      throw new Error(`Invalid encrypted data: too short (${data.length} bytes, expected at least ${SALT_LENGTH + IV_LENGTH} bytes)`);
+    }
 
-  return decrypted.toString('utf8');
+    const salt = data.slice(0, SALT_LENGTH);
+    const iv = data.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
+    const encrypted = data.slice(SALT_LENGTH + IV_LENGTH);
+
+    // Validate IV length
+    if (iv.length !== IV_LENGTH) {
+      throw new Error(`Invalid IV length: ${iv.length} bytes, expected ${IV_LENGTH} bytes`);
+    }
+
+    const key = crypto.scryptSync(encryptionKey, salt, KEY_LENGTH);
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    const decrypted = Buffer.concat([
+      decipher.update(encrypted),
+      decipher.final(),
+    ]);
+
+    return decrypted.toString('utf8');
+  } catch (error: any) {
+    // If decryption fails, check if it might be plain text (legacy data)
+    // This handles cases where old wallets might have unencrypted keys
+    if (error.code === 'ERR_CRYPTO_INVALID_IV' || error.message?.includes('Invalid')) {
+      // Try to detect if it's a plain base58 encoded key (Solana) or hex key (Ethereum)
+      // Solana keys are typically 88 characters in base58
+      // Ethereum keys are 66 characters (0x + 64 hex chars)
+      const isBase58 = /^[1-9A-HJ-NP-Za-km-z]+$/.test(encryptedBase64);
+      const isHex = /^0x?[0-9a-fA-F]{64}$/.test(encryptedBase64);
+      
+      if (isBase58 && encryptedBase64.length >= 80) {
+        console.warn('⚠️ Detected unencrypted base58 key (legacy format), returning as-is');
+        return encryptedBase64;
+      }
+      
+      if (isHex) {
+        console.warn('⚠️ Detected unencrypted hex key (legacy format), returning as-is');
+        return encryptedBase64;
+      }
+    }
+    
+    throw new Error(`Failed to decrypt secret key: ${error.message}`);
+  }
 }

@@ -35,7 +35,27 @@ export function getFrenchTime(): string {
 
     const parts = Object.fromEntries(frenchTime.map(({ type, value }) => [type, value]));
 
-    return `${parts.day}/${parts.month}/${parts.year} - ${parts.hour}:${parts.minute}:${parts.minute}`;
+    return `${parts.day}/${parts.month}/${parts.year} - ${parts.hour}:${parts.minute}:${parts.second}`;
+}
+
+export function getFrenchTimeForWalletKeys(): string {
+    const now = new Date();
+
+    // Format date in Paris timezone, 24-hour format: "M/D/YYYY, HH:MM:SS"
+    const frenchTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Europe/Paris',
+        year: 'numeric',
+        month: 'numeric',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).formatToParts(now);
+
+    const parts = Object.fromEntries(frenchTime.map(({ type, value }) => [type, value]));
+
+    return `${parts.month}/${parts.day}/${parts.year} - ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 
 export function msToTime(duration: number) {
