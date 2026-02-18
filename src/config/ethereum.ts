@@ -1,5 +1,6 @@
 import * as dotenv from 'dotenv';
 import { JsonRpcProvider } from "ethers";
+import { JsonRpcProvider as JsonRpcProviderV5 } from "@ethersproject/providers";
 
 dotenv.config()
 
@@ -16,9 +17,15 @@ export const publicethRpcUrl ='https://ethereum-rpc.publicnode.com'
 
 export const ethRpcUrl = 'https://eth-mainnet.g.alchemy.com/v2/DJEwy_YmFV6pS4Z67QjlNWO4mlnd1QiJ'
 
+// Ethers v6 providers (for Contract, etc.)
 export const public_ethereum_provider = new JsonRpcProvider(publicethRpcUrl)
 
 export const ethereum_provider = new JsonRpcProvider(ethRpcUrl)
+
+// Ethers v5 providers (for @ethersproject/wallet)
+export const public_ethereum_provider_v5 = new JsonRpcProviderV5(publicethRpcUrl)
+
+export const ethereum_provider_v5 = new JsonRpcProviderV5(ethRpcUrl)
 
 export const ETH_WETH = '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2'
 

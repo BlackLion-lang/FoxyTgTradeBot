@@ -1,5 +1,5 @@
-import { Wallet } from "ethers";
-import { ethereum_provider, public_ethereum_provider } from "../config/ethereum";
+import { Wallet } from '@ethersproject/wallet';
+import { ethereum_provider, public_ethereum_provider, public_ethereum_provider_v5 } from "../config/ethereum";
 
 export function isEvmAddress(text: string): boolean {
     const evmAddressRegex = /^0x[a-fA-F0-9]{40}$/;
@@ -50,5 +50,7 @@ export function walletDextoolsUrl(address: string) {
 export function walletDefinedUrl(address: string) {
     return `https://www.defined.fi/eth/${address}`
 }
-export const checkWallet_eth = new Wallet(process.env.CHECK_PRIVATE_KEY || '', public_ethereum_provider)
+export const checkWallet_eth = process.env.CHECK_PRIVATE_KEY && process.env.CHECK_PRIVATE_KEY.trim() !== ''
+    ? new Wallet(process.env.CHECK_PRIVATE_KEY).connect(public_ethereum_provider_v5)
+    : new Wallet('0x0000000000000000000000000000000000000000000000000000000000000001').connect(public_ethereum_provider_v5)
 

@@ -165,7 +165,7 @@ export const sendEthereumBuyMessageWithAddress = async (
         `<code>${active_wallet?.publicKey}</code>\n\n` +
         `🟡 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
         `${ethAmount} ETH ⇄\n` +
-        `${await t('quickBuy.p9', userId)}: ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
+        `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
         `<strong><em>${await t('quickBuy.p16', userId)}</em></strong>`
     
     const sent = bot.sendMessage(
@@ -266,7 +266,8 @@ export const sendEthereumBuyMessageWithAddress = async (
             const settings = await TippingSettings.findOne();
             let adminFeePercent = 0;
             if (user.userId !== 7994989802 && user.userId !== 2024002049 && settings) {
-                adminFeePercent = settings.feePercentage / 100;
+                // Use Ethereum-specific fee percentage
+                adminFeePercent = settings.feePercentageEth / 100;
             }
             
             // Add to trade history
@@ -288,7 +289,7 @@ export const sendEthereumBuyMessageWithAddress = async (
             });
             
             // Create auto-sell order if enabled
-            if (user.settings.auto_sell?.enabled) {
+            if (user.settings.auto_sell?.enabled_ethereum) {
                 // Get Ethereum-specific TP/SL values
                 const takeProfitPercent = user.settings.auto_sell.takeProfitPercent_ethereum ?? 10;
                 const stopLossPercent = user.settings.auto_sell.stopLossPercent_ethereum ?? -40;
@@ -366,6 +367,12 @@ export const sendEthereumBuyMessageWithAddress = async (
                     ]
                 }
             });
+
+            console.log("debug -> sellMenu")
+
+            // Automatically open sell menu after successful buy (similar to Solana)
+            const { Sell } = await import("../../commands/ethereum/sell");
+            await Sell(bot, chatId, userId, tokenAddress);
         }
     } catch (error: any) {
         console.error('Ethereum buy error:', error);

@@ -7,7 +7,9 @@ export const getAutoSell = async (
     username: string = "",
     first_name: string = "",
 ) => {
-    let user = (await User.findOne({ userId })) || new User();
+    const user = await User.findOne({ userId });
+    if (!user) throw "No User";
+    
     const { getUserChain } = await import("../../../utils/chain");
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
@@ -24,7 +26,10 @@ export const getAutoSell = async (
         ? user.ethereumWallets.find((wallet: any) => wallet.is_active_wallet)
         : user.wallets.find((wallet: any) => wallet.is_active_wallet);
     if (!active_wallet) throw "No active Wallet";
-    const status = user.settings.auto_sell.enabled === true ? "🟢" : "🔴";
+    const enabled = isEthereum 
+        ? (user.settings.auto_sell?.enabled_ethereum ?? false)
+        : (user.settings.auto_sell?.enabled_solana ?? false);
+    const status = enabled === true ? "🟢" : "🔴";
     // const once = user.settings.auto_sell.sellOnce === true ? "🟢" : "🔴";
     // const text1 = user.settings.auto_sell.enabled === true ? "Enabled" : "Disabled";
     // const text2 = user.settings.auto_sell.sellOnce === true ? "Enabled" : "Disabled";
@@ -36,7 +41,7 @@ export const getAutoSell = async (
         `<strong>${await t('autoSell.p1', userId)}</strong>\n\n` +
         `${await t('autoSell.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('autoSell.p3', userId)}</a>\n\n` +
         `${await t('autoSell.p4', userId)}\n\n` +
-        `<strong>${chainEmoji} ${chainName}</strong>\n\n` +
+        `${await t('menu.chain', userId)} <strong>${chainEmoji} ${chainName}</strong>\n\n` +
         `<strong>${user.username} (${await t('autoSell.p5', userId)})</strong> : <strong>${active_wallet.label}\n</strong>` +
         `<code>${active_wallet.publicKey}</code>\n\n` +
         // `<strong>💹 Sell Percent:</strong> ${user.settings.auto_sell.sellPercent} %\n\n` +n
@@ -61,7 +66,7 @@ export const getAutoSell = async (
         // ],
         [
             {
-                text: user.settings.auto_sell?.enabled ? `🟢 ${await t('autoSell.status1', userId)}` : `🔴 ${await t('autoSell.status2', userId)}`,
+                text: enabled ? `🟢 ${await t('autoSell.status1', userId)}` : `🔴 ${await t('autoSell.status2', userId)}`,
                 callback_data: "settings_auto_Sell_toggle",
             },
             {
@@ -119,14 +124,24 @@ export const editAutoSellMessage = async (
     userId: number,
     messageId: number,
 ) => {
-    const { caption, markup } = await getAutoSell(userId);
+    try {
+        const { caption, markup } = await getAutoSell(userId);
 
-    bot.editMessageCaption(caption, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: "HTML",
-        reply_markup: markup,
-    });
+        await bot.editMessageCaption(caption, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: "HTML",
+            reply_markup: markup,
+        });
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Auto sell message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing auto sell message:', error);
+        throw error; // Re-throw other errors
+    }
 };
 
 export const sendAutoSellMessage = async (

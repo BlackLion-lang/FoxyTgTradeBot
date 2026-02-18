@@ -35,7 +35,7 @@ export const newTokenRegistered = async (tokenAddress: string) => {
                 "function transfer(address to, uint256 amount) public returns (bool)",
                 "function decimals() view returns (uint8)",
             ];            
-            const tokenContract = new Contract(tokenAddress, ERC20_ABI, checkWallet_eth);
+            const tokenContract = new Contract(tokenAddress, ERC20_ABI, checkWallet_eth as any);
             const decimals = Number(await tokenContract.decimals()) || 18;
 
             if(pairInfo?.liquidity?.usd > 5) {

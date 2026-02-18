@@ -52,17 +52,27 @@ export const editSlippageMessage = async (
     userId: number,
     messageId: number,
 ) => {
-    const { caption, markup } = await getSlippage(userId);
+    try {
+        const { caption, markup } = await getSlippage(userId);
 
-    // console.log('debug editSlippageMessage', caption, markup);
+        // console.log('debug editSlippageMessage', caption, markup);
 
-    bot.editMessageCaption(caption, {
-        chat_id: chatId,
-        message_id: messageId,
-        parse_mode: "HTML",
-        reply_markup: markup,
-    });
-    // console.log('debug editSlippageMessage done', caption, markup);
+        await bot.editMessageCaption(caption, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: "HTML",
+            reply_markup: markup,
+        });
+        // console.log('debug editSlippageMessage done', caption, markup);
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Slippage message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing slippage message:', error);
+        throw error; // Re-throw other errors
+    }
 };
 
 export const sendSlippageMessage = async (

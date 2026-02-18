@@ -613,7 +613,8 @@ bot.on("callback_query", async (callbackQuery) => {
         if (navigationActions.includes(sel_action || "")) {
             cleanupUserTextHandler(userId);
         }
-        const users = (await User.findOne({ userId })) || new User();
+        const users = await User.findOne({ userId });
+        if (!users) return; // Skip if user doesn't exist
         let tokenBalance: any;
         if (users.language === "en") {
             tokenBalance = text.match(
@@ -994,6 +995,54 @@ bot.on("callback_query", async (callbackQuery) => {
                             });
                         } else {
                             settings.feePercentage = date;
+                            await settings.save();
+                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 2000);
+                    }),
+                );
+            });
+        }
+
+        if (sel_action === "admin_tip_percentage_eth") {
+            const sent = bot.sendMessage(
+                chatId,
+                `${await t('messages.entertip', userId)}`,
+            ).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const date = Number(reply.text || "");
+                        if (isNaN(date) || date < 0 || date > 100) {
+                            bot.sendMessage(
+                                chatId,
+                                `${await t('errors.iinvalidtip', userId)}`,
+                            ).then((newSentMessage) => {
+                                setTimeout(() => {
+                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
+                                }, 3000);
+                                bot.once('text',
+                                    createUserTextHandler(userId, async (newReply) => {
+                                        const newdate = Number(newReply.text || "");
+                                        if (isNaN(newdate) || newdate < 1 || newdate > 100) {
+                                            bot.sendMessage(
+                                                chatId,
+                                                `${await t('errors.invalidtip', userId)}`,
+                                                // { reply_markup: { force_reply: true } },
+                                            );
+                                        } else {
+                                            settings.feePercentageEth = newdate;
+                                            await settings.save();
+                                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                                        }
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
+                                );
+                            });
+                        } else {
+                            settings.feePercentageEth = date;
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
@@ -4025,7 +4074,15 @@ ${await t('privateKey.p7', userId)}`,
             await safeDeleteMessage(bot, chatId, messageId);
         }
         if (sel_action === "settings_auto_Sell_toggle") {
-            user.settings.auto_sell.enabled = !user.settings.auto_sell.enabled;
+            const { getUserChain } = await import("./utils/chain");
+            const userChain = await getUserChain(userId);
+            const isEthereum = userChain === "ethereum";
+            
+            if (isEthereum) {
+                user.settings.auto_sell.enabled_ethereum = !(user.settings.auto_sell?.enabled_ethereum ?? false);
+            } else {
+                user.settings.auto_sell.enabled_solana = !(user.settings.auto_sell?.enabled_solana ?? false);
+            }
             await user.save();
             editMessageReplyMarkup(bot, chatId, userId, messageId);
         }

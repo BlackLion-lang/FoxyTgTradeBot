@@ -5,7 +5,6 @@ import { getTokenBalancWithContract } from "../../services/ethereum/contract";
 import { getPairInfoWithTokenAddress } from "../../services/ethereum/dexscreener";
 import { formatNumberStyle, formatWithSuperscript, getLastUpdatedTime } from "../../services/other";
 import { t } from "../../locales";
-import { TippingSettings } from "../../models/tipSettings";
 import { Token } from "../../models/token";
 
 export const getEthereumPositions = async (
@@ -16,14 +15,7 @@ export const getEthereumPositions = async (
 ) => {
     const user = await User.findOne({ userId });
     if (!user) throw "No User";
-    const settings = await TippingSettings.findOne();
-    if (!settings) throw new Error("Tipping settings not found!");
-    let adminFeePercent;
-    if (user.userId === 7994989802 || user.userId === 2024002049) {
-        adminFeePercent = 0;
-    } else {
-        adminFeePercent = settings.feePercentage / 100;
-    }
+    // Admin fee removed from profit calculations
 
     const wallets = user?.ethereumWallets || [];
 
@@ -136,7 +128,7 @@ export const getEthereumPositions = async (
     if (balanceGroup.length === 0) {
         const caption = `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
             `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('positions.p3', userId)}</a>\n\n` +
-            `No active positions found. All tokens have been sold or have zero balance.\n\n` +
+            `${await t('positions.p8', userId)}\n\n` +
             `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
         
         const options: TelegramBot.InlineKeyboardButton[][] = [
@@ -178,6 +170,8 @@ export const getEthereumPositions = async (
     let index = -1;
     
     const eth_price = await getEtherPrice();
+    const estimatedGasFeeEth = 0.0004; // Estimated gas fee per transaction
+    const estimatedGasFeeUsd = estimatedGasFeeEth * eth_price;
     
     for (let [token, trades] of balanceGroup) {
         index++;
@@ -221,15 +215,18 @@ export const getEthereumPositions = async (
         for (const trade of trades) {
             if (trade.transaction_type === "buy") {
                 // For buy: amount is USD spent, token_price is price per token
+                // Subtract gas fee from buy amount (actual cost = amount + gas fee)
+                const actualCost = trade.amount - estimatedGasFeeUsd;
                 tolCap += (trade.amount / (trade.token_price || 1)) * (trade.mc || 0);
-                profit -= trade.amount; // usd spent
-                usd += trade.amount;
+                profit -= actualCost; // usd spent including gas
+                usd += trade.amount; // Track invested amount without gas for percentage calculation
             } else if (trade.transaction_type === "sell") {
                 // For sell: amount is percentage (0-100), token_amount is token amount sold, token_price is price per token
-                // Calculate USD received: token_amount * (amount/100) * token_price * (1 + adminFeePercent)
-                // This matches Solana's calculation: trade.token_amount * trade.amount * trade.token_price * (adminFeePercent + 1) / 100
-                const usdReceived = (trade.token_amount || 0) * (trade.amount || 0) * (trade.token_price || 0) * (adminFeePercent + 1) / 100;
-                profit += usdReceived; // usd received
+                // Calculate USD received: token_amount * (amount/100) * token_price
+                // Subtract gas fee from sell amount (actual received = usdReceived - gas fee)
+                const usdReceived = (trade.token_amount || 0) * (trade.amount || 0) * (trade.token_price || 0) / 100;
+                const actualReceived = usdReceived - estimatedGasFeeUsd;
+                profit += actualReceived; // usd received after gas
                 // Calculate market cap reduction: (token_amount * amount / 100) * mc
                 tolCap -= ((trade.token_amount || 0) * (trade.amount || 0) / 100) * (trade.mc || 0);
             }
@@ -277,7 +274,7 @@ export const getEthereumPositions = async (
         tokenBalanceMap[token] = tokenInfo.priceUsd * tokenBalance;
 
         const balance = await getBalance(currentWallet.publicKey);
-        totalprofit = profit + tokenBalance * tokenInfo.priceUsd * (adminFeePercent + 1);
+        totalprofit = profit + tokenBalance * tokenInfo.priceUsd;
 
         if (index < start || index >= end) continue;
         
@@ -368,6 +365,10 @@ export const editEthereumPositionsMessage = async (
     page: number,
     label: string,
 ) => {
+    // Small delay to ensure timestamp is always different
+    await new Promise(resolve => setTimeout(resolve, 10));
+    
+    // Get positions data with fresh timestamp
     const { caption, markup } = await getEthereumPositions(
         userId,
         current_wallet,
@@ -390,6 +391,34 @@ export const editEthereumPositionsMessage = async (
                 message_id: messageId,
                 reply_markup: markup,
             });
+        } else if (error.message && error.message.includes('message is not modified')) {
+            // If message is not modified, regenerate with fresh timestamp and retry
+            await new Promise(resolve => setTimeout(resolve, 50));
+            const { caption: freshCaption, markup: freshMarkup } = await getEthereumPositions(
+                userId,
+                current_wallet,
+                page,
+                label,
+            );
+            try {
+                await bot.editMessageCaption(freshCaption, {
+                    parse_mode: "HTML",
+                    chat_id: chatId,
+                    message_id: messageId,
+                    reply_markup: freshMarkup,
+                });
+            } catch (retryError: any) {
+                if (retryError.message && retryError.message.includes('there is no text in the message to edit')) {
+                    await bot.editMessageText(freshCaption, {
+                        parse_mode: "HTML",
+                        chat_id: chatId,
+                        message_id: messageId,
+                        reply_markup: freshMarkup,
+                    });
+                } else if (!retryError.message || !retryError.message.includes('message is not modified')) {
+                    throw retryError;
+                }
+            }
         } else {
             throw error;
         }

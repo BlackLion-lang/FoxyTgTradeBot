@@ -180,11 +180,9 @@ export const getSell = async (userId: number, address: string) => {
     // console.log("marketcap", MarketC)
 
     const icon = totalprofit < 0 ? "🔴" : "🟢";
-    const status = user.settings.auto_sell.enabled ? "🟢" : "🔴";
-    const text = user.settings.auto_sell.enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
-
-    const p1 = user.settings.mev ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
-    const p2 = user.settings.mev ? "🟢" : "🔴";
+    const enabled = user.settings.auto_sell?.enabled_solana ?? false;
+    const status = enabled ? "🟢" : "🔴";
+    const text = enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
 
     const feeSpeed = (() => {
         switch (user.settings.auto_tip) {
@@ -204,22 +202,15 @@ export const getSell = async (userId: number, address: string) => {
         `${await t('sell.p2', userId)} <strong>$${formatWithSuperscript(pair.priceUsd)}</strong> - ` +
         `${await t('sell.p3', userId)} <strong>$${formatNumberStyle(liquidity)}</strong> - ` +
         `${await t('sell.p4', userId)} <strong>$${formatNumberStyle(market_cap)}</strong>\n\n` +
-        // `👤 Renounced: <strong>Freeze ✅ | Mint ✅</strong>\n` +
         `<strong>${renounceStatus}</strong> ${await t('sell.p5', userId)}\n` +
         `<strong>${freezeStatus}</strong> ${await t('sell.p6', userId)}\n` +
         `<strong>${mintStatus}</strong> ${await t('sell.p7', userId)}\n\n` +
-        // `💸 Price: <strong>${formatWithSuperscript(priceNative)} | $${formatWithSuperscript(pair.priceUsd)}</strong>\n` +
-        // `📈 Market Cap: <strong>$${formatNumberStyle(market_cap)}</strong>\n` +
-        // `🏦 Liquidity: <strong>$${formatNumberStyle(liquidity)}</strong>\n\n` +
         `💳 <strong>${user.username} (${await t('buy.default', userId)})</strong> : ${balance.toFixed(2)} SOL ($${(balance * sol_price).toFixed(2)} USD)\n` +
         `<code>${active_wallet.publicKey}</code>\n\n` +
-        `<strong>${await t('settings.mev', userId)} : </strong>${p2} ${p1}\n\n` +
         `<strong>${await t('sell.p13', userId)}</strong> ${status} ${text}\n\n` +
         `${await t('sell.p8', userId)} <strong>${tokenBalance} ${symbol} | $${(tokenBalance * priceUsd).toFixed(2)}</strong>\n` +
-        // `<code>${active_wallet.publicKey}</code>\n\n` +
         `${icon} ${await t('sell.p9', userId)} : ${(totalprofit / sol_price).toFixed(6)} SOL (${(totalprofit * 100 / sendUsd).toFixed(2)}%)\n` +
         `${await t('sell.p10', userId)} $ ${formatNumberStyle(MarketC)}\n\n` +
-        // `💼 Wallet Balance: <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
         `${await t('sell.p11', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
         `<strong>${await t('sell.p12', userId)}</strong>`;
 

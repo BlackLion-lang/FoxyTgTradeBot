@@ -22,7 +22,7 @@ export const getProfitLevel = async (userId: number) => {
         `<strong>${await t('TpSl.p1', userId)}</strong>\n\n` +
         `${await t('TpSl.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('TpSl.p3', userId)}</a>\n\n` +
         `${await t('TpSl.p4', userId)}\n\n` +
-        `<strong>${chainEmoji} ${chainName}</strong>\n\n` +
+        `<strong>${await t('menu.chain', userId)} ${chainEmoji} ${chainName}</strong>\n\n` +
         `<strong>${await t('TpSl.p5', userId)}</strong>${takeProfitPercent} %\n` +
         `<strong>${await t('TpSl.p6', userId)}</strong>${stopLossPercent}%\n\n` +
         // `<strong>${status} Status</strong>\n\n` +
@@ -119,11 +119,21 @@ export const editProfitlevelMessageReplyMarkup = async (
     userId: number,
     messageId: number
 ) => {
-    const { caption, markup } = await getProfitLevel(userId);
-    await bot.editMessageCaption (caption, {
-        parse_mode: "HTML",
-        reply_markup: markup,
-        chat_id: chatId,
-        message_id: messageId
-    });
+    try {
+        const { caption, markup } = await getProfitLevel(userId);
+        await bot.editMessageCaption(caption, {
+            parse_mode: "HTML",
+            reply_markup: markup,
+            chat_id: chatId,
+            message_id: messageId
+        });
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Profit level message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing profit level message:', error);
+        throw error; // Re-throw other errors
+    }
 };

@@ -75,6 +75,47 @@ export const getPositions = async (
         let trades = obj[1];
         return trades[trades.length - 1]?.token_balance > 0.00001
     })
+    
+    // If no tokens with balance found, return empty positions message
+    if (balanceGroup.length === 0) {
+        const caption = `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
+            `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('positions.p3', userId)}</a>\n\n` +
+            `${await t('positions.p8', userId)}\n\n` +
+            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
+        
+        const options: TelegramBot.InlineKeyboardButton[][] = [
+            [
+                {
+                    text: "⬅️",
+                    callback_data: `positions_wallet_left_${current_wallet}`,
+                },
+                {
+                    text: label,
+                    callback_data: `positions_wallet_current_${current_wallet}`,
+                },
+                {
+                    text: "➡️",
+                    callback_data: `positions_wallet_right_${current_wallet}`,
+                },
+            ],
+            [
+                {
+                    text: `🆕 ${await t('positions.importPosition', userId)}`,
+                    callback_data: `positions_import_${current_wallet}_${page}`,
+                },
+            ],
+            [
+                { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
+                {
+                    text: `${await t('refresh', userId)}`,
+                    callback_data: `positions_refresh_${current_wallet}`,
+                },
+            ],
+        ];
+        
+        return { caption, markup: { inline_keyboard: options } };
+    }
+    
     const chunkGroup = balanceGroup.slice(start, end);
     const tokens = balanceGroup.map(obj => obj[0]);
     const tokenNames: Record<string, string> = {};

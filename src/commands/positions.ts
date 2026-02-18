@@ -13,7 +13,11 @@ export const positions = async (
     const chain = await getUserChain(userId);
     
     if (chain === "ethereum") {
-        const user = (await User.findOne({ userId })) || new User();
+        const user = await User.findOne({ userId });
+        if (!user) {
+            await bot.sendMessage(msg.chat.id, "❌ User not found. Please use /start first.");
+            return;
+        }
         const wallets = user.ethereumWallets || [];
         sendEthereumPositionsMessageWithImage(
             bot,
@@ -26,7 +30,11 @@ export const positions = async (
         );
     } else {
         console.log('debug bot position')
-        const user = (await User.findOne({ userId })) || new User();
+        const user = await User.findOne({ userId });
+        if (!user) {
+            await bot.sendMessage(msg.chat.id, "❌ User not found. Please use /start first.");
+            return;
+        }
         const wallets = user.wallets;
         sendPositionsMessageWithImage(
             bot,

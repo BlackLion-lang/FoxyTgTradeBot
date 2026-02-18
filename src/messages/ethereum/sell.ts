@@ -236,7 +236,8 @@ export const sendEthereumSellMessageWithAddress = async (
             const settings = await TippingSettings.findOne();
             let adminFeePercent = 0;
             if (user.userId !== 7994989802 && user.userId !== 2024002049 && settings) {
-                adminFeePercent = settings.feePercentage / 100;
+                // Use Ethereum-specific fee percentage
+                adminFeePercent = settings.feePercentageEth / 100;
             }
             
             // Add to trade history
@@ -361,7 +362,7 @@ export const sendEthereumSellMessageWithAddress = async (
                 `${await t('quickSell.p13', userId)} ${remainingTokenBalance.toFixed(2)} ${tokenInfo.symbol}\n` +
                 `${await t('quickSell.p14', userId)} ${tokenAmountSold.toFixed(2)} ${tokenInfo.symbol} ⇄ ${tokenSoldUsd.toFixed(2)} USD\n` +
                 `${await t('quickSell.p15', userId)} ${formatNumberStyle(tokenInfo.marketCap || 0)}\n\n` +
-                `<strong><em>${await t('quickSell.p19', userId)}</em></strong> - <a href="${walletScanTxUrl(txHash)}">${await t('quickSell.p17', userId)}</a>`
+                `<strong><em>${await t('quickSell.p19', userId)}</em></strong> - <a href="${walletScanTxUrl(txHash)}">${await t('quickSell.p19', userId)}</a>`
             
             await bot.sendMessage(chatId, caption_finish, {
                 parse_mode: 'HTML',

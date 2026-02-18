@@ -112,8 +112,9 @@ export const getBuy = async (userId: number, address: string) => {
         warning = `${await t('buy.p3', userId)}`;
     }
 
-    const text = user.settings.auto_sell.enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
-    const status = user.settings.auto_sell.enabled ? "🟢" : "🔴";
+    const enabled = user.settings.auto_sell?.enabled_solana ?? false;
+    const text = enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
+    const status = enabled ? "🟢" : "🔴";
 
     const p1 = user.settings.mev ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
     const p2 = user.settings.mev ? "🟢" : "🔴";
@@ -311,8 +312,16 @@ export const sendBuyMessageWithAddress = async (
         (wallet) => wallet.is_active_wallet,
     );
 
+    // Validate active wallet exists and has a valid public key
+    if (!active_wallet || !active_wallet.publicKey || active_wallet.publicKey.trim() === "") {
+        bot.sendMessage(chatId, `${await t('errors.activeWalletNotConfigured', userId)}`, {
+            parse_mode: "HTML"
+        });
+        return;
+    }
+
     const sol_price = getSolPrice();
-    const balance = await getBalance(active_wallet?.publicKey || "");
+    const balance = await getBalance(active_wallet.publicKey);
     // Send a message confirming the token swap and display the token address
     const text = `${await t('quickBuy.p7', userId)}\n\n` +
         `Token : <code>${tokenAddress}</code>\n\n` +
@@ -320,7 +329,7 @@ export const sendBuyMessageWithAddress = async (
         `<code>${active_wallet?.publicKey}</code>\n\n` +
         `🟡 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
         `${solAmount} SOL ⇄\n` +
-        `${await t('quickBuy.p9', userId)}: ${user.settings.slippage.buy_slippage} % \n\n` +
+        `${await t('quickBuy.p9', userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
         `<strong><em>${await t('quickBuy.p10', userId)}</em></strong>`
     const sent = bot.sendMessage(
         chatId,
@@ -354,7 +363,7 @@ export const sendBuyMessageWithAddress = async (
     // Perform the token swap using the swapToken01 function
     await swapToken(
         userId,
-        active_wallet?.publicKey || "",
+        active_wallet.publicKey,
         tokenAddress,
         solAmount, // Amount to swap
         "buy", // Action type
@@ -404,7 +413,7 @@ export const sendBuyMessageWithAddress = async (
                 pnl: true
             });
             await user.save();
-            if (user.settings.auto_sell.enabled || user.sniper.allowAutoSell) {
+            if ((user.settings.auto_sell?.enabled_solana ?? false) || user.sniper.allowAutoSell) {
                 // Get Solana-specific TP/SL values
                 const takeProfitPercent = user.settings.auto_sell.takeProfitPercent_solana ?? 10;
                 const stopLossPercent = user.settings.auto_sell.stopLossPercent_solana ?? -40;

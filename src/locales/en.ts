@@ -33,7 +33,8 @@ export const en: Translations = {
         removeUser: "Remove user",
         addSniperUser: "Add Sniper User",
         removeSniperUser: "Remove Sniper User",
-        tipPercentage: "💰 Tip Percentage",
+        tipPercentage: "💰 Tip Percentage (Solana)",
+        tipPercentageEth: "💰 Tip Percentage (Ethereum)",
         adminWallet: "💼 Admin wallet",
         adminWalletName: "📝 Admin wallet name",
         solanaPrice: "Solana Price",
@@ -175,6 +176,7 @@ export const en: Translations = {
         p5: "📉 Profit :",
         p6: "💹 Avg. Entry (MC) :",
         p7: "🕒 Last Updated (UTC) :",
+        p8: "No active positions found. All tokens have been sold or have zero balance.",
         importPosition: "Import Position",
         noPositionsFound: "No positions found. Start trading to see your positions here."
     },

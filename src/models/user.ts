@@ -165,10 +165,10 @@ const userSchema = new mongoose.Schema(
                 },
                 slippage: {
                     type: {
-                        buy_slippage: { type: Number, default: 0.5 },
+                        buy_slippage: { type: Number, default: 1 },
                         sell_slippage: {
                             type: Number,
-                            default: 0.5,
+                            default: 1,
                         },
                     },
                     default: {},
@@ -218,7 +218,8 @@ const userSchema = new mongoose.Schema(
                 },
                 auto_sell: {
                     type: {
-                        enabled: { type: Boolean, default: false },
+                        enabled_solana: { type: Boolean, default: false },
+                        enabled_ethereum: { type: Boolean, default: false },
                         // sellOnce: { type: Boolean, default: true},
                         sellPercent: { type: Number, default: 100 },
                         // Chain-specific TP/SL settings
@@ -317,7 +318,7 @@ const userSchema = new mongoose.Schema(
                 buy_limit: { type: Number, default: 1 },
                 buy_tip: { type: Number, default: null },
                 sell_tip: { type: Number, default: null },
-                slippage: { type: Number, default: 0.5 },
+                slippage: { type: Number, default: 1 },
                 mev: { type: Boolean, default: true },
                 auto_sell: { type: Boolean, default: false },
                 take_profit: { type: Number, default: 20 },
@@ -340,7 +341,7 @@ const userSchema = new mongoose.Schema(
                     value: { type: Number, default: 0 },
                     initial_marketcap: { type: Number, default: 0 },
                     gas_amount: { type: Number, default: 0 },
-                    slippage: { type: Number, default: 0.5 },
+                    slippage: { type: Number, default: 1 },
                     start_time: { type: Number, default: 0 },
                     expiration_time: { type: Number, default: 0 },
                     is_take_profit: { type: Boolean, default: true },

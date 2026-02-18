@@ -1,6 +1,7 @@
 import TelegramBot from 'node-telegram-bot-api';
-import { Contract, ethers, Wallet } from "ethers";
-import { ethereum_provider } from "../../config/ethereum";
+import { Contract, ethers } from "ethers";
+import { Wallet } from '@ethersproject/wallet';
+import { ethereum_provider, ethereum_provider_v5 } from "../../config/ethereum";
 import { User } from '../../models/user';
 import { walletScanTxUrl } from '../../utils/ethereum';
 import { decryptSecretKey } from '../../config/security';
@@ -43,7 +44,7 @@ export const transferETH = async (bot: TelegramBot, chatId: number, userId: numb
         if (!wallet) throw "Ethereum wallet not found"
         // Decrypt the private key before using it
         const decryptedPrivateKey = decryptSecretKey(wallet.secretKey);
-        const senderWallet = new Wallet(decryptedPrivateKey, ethereum_provider);
+        const senderWallet = new Wallet(decryptedPrivateKey).connect(ethereum_provider_v5);
         const to_wallet = to_address;
 
         const tx = await senderWallet.sendTransaction({
@@ -70,14 +71,14 @@ export const transferToken = async (bot: TelegramBot, chatId: number, userId: nu
         if (!wallet) throw "Ethereum wallet not found"
         // Decrypt the private key before using it
         const decryptedPrivateKey = decryptSecretKey(wallet.secretKey);
-        const senderWallet = new Wallet(decryptedPrivateKey, ethereum_provider);
+        const senderWallet = new Wallet(decryptedPrivateKey).connect(ethereum_provider_v5);
 
         const ERC20_ABI = [
             "function transfer(address to, uint256 amount) public returns (bool)",
             "function decimals() view returns (uint8)",
         ];
 
-        const tokenContract = new Contract(token_address, ERC20_ABI, senderWallet);
+        const tokenContract = new Contract(token_address, ERC20_ABI, senderWallet as any);
         const decimals = await tokenContract.decimals();
         const tokenAmount = ethers.parseUnits(`${token_amount}`, decimals);
         const to_wallet = to_address;

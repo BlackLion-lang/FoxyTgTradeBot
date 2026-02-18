@@ -6,7 +6,8 @@ const tippingSettingsSchema = new mongoose.Schema({
   referralReward: { type: Number, default: 0.01 }, // Reward per referral in SOL
   BotStatus: { type: Date, default: Date.now },
   WhiteListUser: { type : Boolean, default: false},
-  feePercentage: { type: Number, default: 1.5 },
+  feePercentage: { type: Number, default: 1.5 }, // Fee percentage for Solana
+  feePercentageEth: { type: Number, default: 1.5 }, // Fee percentage for Ethereum
   wallets: { type: Number, default: 5 },
   referralSettings: { type: Number, default: 10},
   subscriptionPriceWeek: { type: Number, default: 0.3 }, // Subscription price for 1 week in SOL

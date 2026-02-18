@@ -8,7 +8,8 @@ export const getSettings = async (
     username: string = "",
     first_name: string = "",
 ) => {
-    const user = (await User.findOne({ userId })) || new User();
+    const user = await User.findOne({ userId });
+    if (!user) throw "No User";
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
 

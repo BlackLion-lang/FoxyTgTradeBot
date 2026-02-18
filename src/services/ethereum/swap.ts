@@ -131,6 +131,8 @@ export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface
         let expectedAmountOut = 0n
         let amountOutMin = 0n
         let feeTier = 0n
+        // Track actual DEX being used (may fallback to V2)
+        let actualDexId = dexId
 
         // Calculate realBuyAmount: 90% of amount, but ensure it's never negative
         // For small amounts, use a smaller deduction or skip it
@@ -139,32 +141,75 @@ export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface
         const realBuyAmount = ninetyPercent > deduction ? ninetyPercent - deduction : ninetyPercent
 
         if(dexId === 'Uniswap V2') {
-            const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)
-            const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(
-                BigInt(realBuyAmount),
-                [WETH, token_address]
-            )
-            expectedAmountOut = amountsOut[1]; // The expected token output
-            amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);  
+            try {
+                const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)
+                const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(
+                    BigInt(realBuyAmount),
+                    [WETH, token_address]
+                )
+                expectedAmountOut = amountsOut[1]; // The expected token output
+                
+                if (!expectedAmountOut || expectedAmountOut === 0n) {
+                    throw new Error('Invalid swap: expected output amount is 0. Token may have no liquidity or the pool does not exist.')
+                }
+                
+                amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
+            } catch (v2Error: any) {
+                // Handle V2 errors with user-friendly messages
+                const errorMsg = v2Error?.message || v2Error?.toString() || 'Unknown error';
+                if (errorMsg.includes('execution reverted') || v2Error?.code === 'CALL_EXCEPTION') {
+                    throw new Error(`Unable to get swap quote from Uniswap V2. The token may have no liquidity pool or the trading pair does not exist on Uniswap.`);
+                }
+                throw new Error(`Failed to get swap quote: ${errorMsg}`);
+            }
         }
         else {
-            const poolABI = ["function fee() external view returns (uint24)"]; 
-            const poolContract = new ethers.Contract(pair_address, poolABI, wallet);
-            feeTier = await poolContract.fee();
-            
-            const quoter = new ethers.Contract(ETH_UNISWAP_QUOTER, quoterABI, wallet)
+            // Try V3 first, fallback to V2 if it fails
+            try {
+                const poolABI = ["function fee() external view returns (uint24)"]; 
+                const poolContract = new ethers.Contract(pair_address, poolABI, wallet);
+                feeTier = await poolContract.fee();
+                
+                const quoter = new ethers.Contract(ETH_UNISWAP_QUOTER, quoterABI, wallet)
 
-            const params = {
-                tokenIn: WETH, 
-                tokenOut: token_address,
-                fee: feeTier,
-                amountIn: realBuyAmount, 
-                sqrtPriceLimitX96: 0
-            }            
+                const params = {
+                    tokenIn: WETH, 
+                    tokenOut: token_address,
+                    fee: feeTier,
+                    amountIn: realBuyAmount, 
+                    sqrtPriceLimitX96: 0
+                }            
 
-            const [amountOut,,,] = await quoter.quoteExactInputSingle.staticCall(params);
-            expectedAmountOut = amountOut; // The expected token output
-            amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);  
+                const [amountOut,,,] = await quoter.quoteExactInputSingle.staticCall(params);
+                expectedAmountOut = amountOut; // The expected token output
+                amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
+            } catch (v3Error: any) {
+                // If V3 fails (pool doesn't exist, wrong DEX, etc.), fallback to V2
+                console.warn(`V3 pool/quoter failed for ${dexId} (${v3Error?.message || v3Error}), falling back to Uniswap V2`);
+                actualDexId = 'Uniswap V2';
+                try {
+                    const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)
+                    const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(
+                        BigInt(realBuyAmount),
+                        [WETH, token_address]
+                    )
+                    expectedAmountOut = amountsOut[1]; // The expected token output
+                    
+                    if (!expectedAmountOut || expectedAmountOut === 0n) {
+                        throw new Error('Invalid swap: expected output amount is 0. Token may have no liquidity or the pool does not exist.')
+                    }
+                    
+                    amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
+                    feeTier = 0n; // V2 doesn't use fee tiers
+                } catch (v2Error: any) {
+                    // If V2 also fails, throw a user-friendly error
+                    const errorMsg = v2Error?.message || v2Error?.toString() || 'Unknown error';
+                    if (errorMsg.includes('execution reverted') || v2Error?.code === 'CALL_EXCEPTION') {
+                        throw new Error(`Unable to get swap quote from Uniswap V2. The token may have no liquidity pool or the trading pair does not exist on Uniswap.`);
+                    }
+                    throw new Error(`Failed to get swap quote: ${errorMsg}`);
+                }
+            }
         }   
         
         // Use ETH_SWAP_ROUTER instead of direct Uniswap router
@@ -176,7 +221,7 @@ export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface
         console.log('Buy Params', gas_amount, ethers.parseUnits(`${gas_amount}`, 'gwei'), amountOutMin,
             feeTier,
             [WETH, token_address], // Path: ETH -> Token
-            dexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
+            actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
             wallet.address, // Recipient address
             ref_address)  
         try {
@@ -199,7 +244,7 @@ export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface
                 amountOutMin,
                 feeTier,
                 [WETH, token_address], // Path: ETH -> Token
-                dexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
+                actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
                 wallet.address, // Recipient address
                 ref_address,
                 simTxOptions
@@ -226,7 +271,7 @@ export const swapExactETHForTokensUsingUniswapV2_ = async (params: swapInterface
                 0n, // Use 0n for amountOutMin in actual call (as per reference)
                 feeTier,
                 [WETH, token_address], // Path: ETH -> Token
-                dexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
+                actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
                 wallet.address, // Recipient address
                 ref_address,
                 txOptions
@@ -383,41 +428,82 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
         let amountOutMin = 0n;
         let expectedAmountOut = 0n;
         let feeTier = 0n;
+        // Track actual DEX being used (may fallback to V2)
+        let actualDexId = dexId;
 
         // Recalculate amounts using actualAmount (in case it was adjusted)
         if(dexId === 'Uniswap V2') {
-            const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)            
-            const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [token_address, WETH]);
-            expectedAmountOut = amountsOut[1];
-            
-            if (!expectedAmountOut || expectedAmountOut === 0n) {
-                throw new Error('Invalid swap: expected output amount is 0. Token may have no liquidity.')
-            }
-            
-            amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
-            
-            if (amountOutMin <= 0n) {
-                throw new Error('Invalid slippage: minimum output amount would be 0 or negative. Try reducing slippage tolerance.')
+            try {
+                const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)            
+                const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [token_address, WETH]);
+                expectedAmountOut = amountsOut[1];
+                
+                if (!expectedAmountOut || expectedAmountOut === 0n) {
+                    throw new Error('Invalid swap: expected output amount is 0. Token may have no liquidity or the pool does not exist.')
+                }
+                
+                amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
+                
+                if (amountOutMin <= 0n) {
+                    throw new Error('Invalid slippage: minimum output amount would be 0 or negative. Try reducing slippage tolerance.')
+                }
+            } catch (v2Error: any) {
+                // Handle V2 errors with user-friendly messages
+                const errorMsg = v2Error?.message || v2Error?.toString() || 'Unknown error';
+                if (errorMsg.includes('execution reverted') || v2Error?.code === 'CALL_EXCEPTION') {
+                    throw new Error(`Unable to get swap quote from Uniswap V2. The token may have no liquidity pool or the trading pair does not exist on Uniswap.`);
+                }
+                throw new Error(`Failed to get swap quote: ${errorMsg}`);
             }
         }
         else {
-            const poolABI = ["function fee() external view returns (uint24)"];            
-            const poolContract = new ethers.Contract(pair_address, poolABI, wallet);
-            feeTier = await poolContract.fee();
-        
-            const quoter = new ethers.Contract(ETH_UNISWAP_QUOTER, quoterABI, wallet)
+            // Try V3 first, fallback to V2 if it fails
+            try {
+                const poolABI = ["function fee() external view returns (uint24)"];            
+                const poolContract = new ethers.Contract(pair_address, poolABI, wallet);
+                feeTier = await poolContract.fee();
+            
+                const quoter = new ethers.Contract(ETH_UNISWAP_QUOTER, quoterABI, wallet)
 
-            const params = {
-                tokenIn: token_address, 
-                tokenOut: WETH,
-                fee: feeTier,
-                amountIn: actualAmount, 
-                sqrtPriceLimitX96: 0
+                const params = {
+                    tokenIn: token_address, 
+                    tokenOut: WETH,
+                    fee: feeTier,
+                    amountIn: actualAmount, 
+                    sqrtPriceLimitX96: 0
+                }
+
+                const [amountOut,,,] = await quoter.quoteExactInputSingle.staticCall(params);        
+                expectedAmountOut = amountOut; // The expected token output
+                amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
+            } catch (v3Error: any) {
+                // If V3 fails (pool doesn't exist, wrong DEX, etc.), fallback to V2
+                console.warn(`V3 pool/quoter failed for ${dexId} (${v3Error?.message || v3Error}), falling back to Uniswap V2`);
+                actualDexId = 'Uniswap V2';
+                feeTier = 0n;
+                try {
+                    const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)            
+                    const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [token_address, WETH]);
+                    expectedAmountOut = amountsOut[1];
+                    
+                    if (!expectedAmountOut || expectedAmountOut === 0n) {
+                        throw new Error('Invalid swap: expected output amount is 0. Token may have no liquidity.')
+                    }
+                    
+                    amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);
+                    
+                    if (amountOutMin <= 0n) {
+                        throw new Error('Invalid slippage: minimum output amount would be 0 or negative. Try reducing slippage tolerance.')
+                    }
+                } catch (v2Error: any) {
+                    // If V2 also fails, throw a user-friendly error
+                    const errorMsg = v2Error?.message || v2Error?.toString() || 'Unknown error';
+                    if (errorMsg.includes('execution reverted') || v2Error?.code === 'CALL_EXCEPTION') {
+                        throw new Error(`Unable to get swap quote from Uniswap V2. The token may have no liquidity pool or the trading pair does not exist on Uniswap.`);
+                    }
+                    throw new Error(`Failed to get swap quote: ${errorMsg}`);
+                }
             }
-
-            const [amountOut,,,] = await quoter.quoteExactInputSingle.staticCall(params);        
-            expectedAmountOut = amountOut; // The expected token output
-            amountOutMin = expectedAmountOut - expectedAmountOut * slippage / BigInt(1e7);    
         }        
 
         // Use ETH_SWAP_ROUTER instead of direct Uniswap router
@@ -445,7 +531,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
             amountOutMin, // Accept any amount of ETH
             feeTier,
             [token_address, WETH], // Path: Token -> WETH
-            dexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
+            actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
             wallet.address, // Recipient address
             ref_address, gas_amount)
         try {
@@ -468,7 +554,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
                 amountOutMin, // Accept any amount of ETH
                 feeTier,
                 [token_address, WETH], // Path: Token -> WETH
-                dexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
+                actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
                 wallet.address, // Recipient address
                 ref_address,
                 simTxOptions
@@ -505,7 +591,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
                 0n, // Use 0n for amountOutMin in actual call (as per reference)
                 feeTier,
                 [token_address, WETH], // Path: Token -> WETH
-                dexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
+                actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
                 wallet.address, // Recipient address
                 ref_address,
                 txOptions
@@ -682,7 +768,8 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
                     if (user.userId === 7994989802 || user.userId === 2024002049) {
                         adminFeePercent = 0;
                     } else {
-                        adminFeePercent = settings.feePercentage / 100;
+                        // Use Ethereum-specific fee percentage
+                        adminFeePercent = settings.feePercentageEth / 100;
                     }
                     
                     if (active_wallet) {
@@ -899,7 +986,8 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
                     if (user.userId === 7994989802 || user.userId === 2024002049) {
                         adminFeePercent = 0;
                     } else {
-                        adminFeePercent = settings.feePercentage / 100;
+                        // Use Ethereum-specific fee percentage
+                        adminFeePercent = settings.feePercentageEth / 100;
                     }
                     
                     if (active_wallet) {
@@ -979,4 +1067,3 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
         })
     }
 }
-

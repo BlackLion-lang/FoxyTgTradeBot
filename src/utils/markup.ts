@@ -44,6 +44,9 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.tipPercentage', userId)} : ${settings.feePercentage} %`, callback_data: "admin_tip_percentage" },
             ],
             [
+                { text: `${await t('admin.tipPercentageEth', userId)} : ${settings.feePercentageEth} %`, callback_data: "admin_tip_percentage_eth" },
+            ],
+            [
                 { text: `${await t('admin.wallet', userId)} : ${settings.wallets}`, callback_data: "admin_wallets" },
             ],
             [

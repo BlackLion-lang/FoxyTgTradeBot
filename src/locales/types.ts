@@ -33,6 +33,7 @@ export interface Translations {
         addUser: string;
         removeUser: string;
         tipPercentage: string;
+        tipPercentageEth: string;
         adminWallet: string;
         solanaPrice: string;
         addSniperUser: string;
@@ -119,6 +120,7 @@ export interface Translations {
         p5: string;
         p6: string;
         p7: string;
+        p8: string;
         importPosition: string;
         noPositionsFound: string;
     }

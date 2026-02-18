@@ -72,11 +72,11 @@ export const getTokenPrice = async (total_token_amount: bigint, token_address: s
         "function decimals() view returns (uint8)",
     ];
 
-    const tokenContract = new Contract(token_address, tokenABI, check_wallet)
+    const tokenContract = new Contract(token_address, tokenABI, check_wallet as any)
     const decimals = await tokenContract.decimals();      
     if(dex_name === 'Uniswap V2') {
         try {
-            const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, check_wallet)
+            const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, check_wallet as any)
             const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(
                 total_token_amount,
                 [token_address, WETH]
@@ -88,10 +88,10 @@ export const getTokenPrice = async (total_token_amount: bigint, token_address: s
     } else {
         try {
             const poolABI = ["function fee() external view returns (uint24)"];            
-            const poolContract = new Contract(pair_address, poolABI, check_wallet);
+            const poolContract = new Contract(pair_address, poolABI, check_wallet as any);
             const feeTier = await poolContract.fee();
     
-            const quoter = new Contract(ETH_UNISWAP_QUOTER, quoterABI, check_wallet)
+            const quoter = new Contract(ETH_UNISWAP_QUOTER, quoterABI, check_wallet as any)
     
             const params = {
                 tokenIn: token_address, 

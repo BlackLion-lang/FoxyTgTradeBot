@@ -132,8 +132,9 @@ export async function Buy(bot: TelegramBot, chatId: number, userId: number, addr
             warning = `${await t('buy.p3', userId)}`
         }
         
-        const text = user.settings.auto_sell?.enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
-        const status = user.settings.auto_sell?.enabled ? "🟢" : "🔴"
+        const enabled = user.settings.auto_sell?.enabled_ethereum ?? false;
+        const text = enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
+        const status = enabled ? "🟢" : "🔴"
         const p1 = user.settings.mev ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
         const p2 = user.settings.mev ? "🟢" : "🔴"
 
@@ -299,8 +300,9 @@ export async function BuyEdit(bot: TelegramBot, chatId: number, userId: number, 
             warning = `${await t('buy.p3', userId)}`
         }
         
-        const text = user.settings.auto_sell?.enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
-        const status = user.settings.auto_sell?.enabled ? "🟢" : "🔴"
+        const enabled = user.settings.auto_sell?.enabled_ethereum ?? false;
+        const text = enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
+        const status = enabled ? "🟢" : "🔴"
         const p1 = user.settings.mev ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
         const p2 = user.settings.mev ? "🟢" : "🔴"
 

@@ -61,6 +61,7 @@ export const getAdminMenu = async (
         `${await t('admin.p2', userId)}\n\n` +
         // `${await t('Whitelist Setting', userId)} : ${status}\n\n` +
         `${await t('admin.tipPercentage', userId)} : ${settings.feePercentage}%\n` +
+        `${await t('admin.tipPercentageEth', userId)} : ${settings.feePercentageEth}%\n` +
         `${await t('admin.solanaPrice', userId)} : ${sol_price} $\n\n` +
         `${await t('admin.adminWallet', userId)} : <strong>${settings.adminSolAddress.label ? settings.adminSolAddress.label : `${await t('admin.walletName', userId)}`}</strong>\n\n` +
         `${await t('admin.p3', userId)} : <code>${settings.adminSolAddress.publicKey ? settings.adminSolAddress.publicKey : `${await t('admin.walletName', userId)}`}</code>\n\n` +

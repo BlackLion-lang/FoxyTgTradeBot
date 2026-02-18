@@ -56,7 +56,12 @@ export async function getUserLanguage(userId: number): Promise<SupportedLanguage
 
 // This should update the user's language in DB (you can wire it later)
 export async function setUserLanguage(userId: number, language: SupportedLanguage): Promise<void> {
-    const user = await User.findOne({ userId }) || new User({ userId });
+    const user = await User.findOne({ userId });
+    if (!user) {
+        // Don't create new users just to set language - user must exist first
+        console.warn(`Cannot set language for non-existent user: ${userId}`);
+        return;
+    }
     user.language = language;
     await user.save();
 }

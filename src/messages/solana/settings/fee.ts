@@ -159,13 +159,21 @@ export const editFeeMessage = async (
     try {
         const { caption, markup } = await getFee(userId);
 
-        bot.editMessageCaption(caption, {
+        await bot.editMessageCaption(caption, {
             chat_id: chatId,
             message_id: messageId,
             parse_mode: "HTML",
             reply_markup: markup
         });
-    } catch (errorMessage) { console.log('Error editing fee message:', errorMessage); }
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Fee message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing fee message:', error);
+        throw error; // Re-throw other errors
+    }
 };
 
 export const sendFeeMessage = async (
@@ -189,41 +197,42 @@ export const editFeeAutoMessage = async (
     userId: number,
     messageId: number,
 ) => {
-    const user = (await User.findOne({ userId })) || new User();
-    const result = await getRecommendedMEVTip(user.settings.auto_tip);
-    const newMarkup: TelegramBot.InlineKeyboardMarkup = {
-        inline_keyboard: [
-            [
-                {
-                    text: user.settings.auto_tip === "medium" ? `🟢 🐢 ${await t('feeSettings.p8', userId)}` : `🔘 🐢 ${await t('feeSettings.p8', userId)}`,
-                    callback_data: "speed_low",
-                }
+    try {
+        const user = (await User.findOne({ userId })) || new User();
+        const result = await getRecommendedMEVTip(user.settings.auto_tip);
+        const newMarkup: TelegramBot.InlineKeyboardMarkup = {
+            inline_keyboard: [
+                [
+                    {
+                        text: user.settings.auto_tip === "medium" ? `🟢 🐢 ${await t('feeSettings.p8', userId)}` : `🔘 🐢 ${await t('feeSettings.p8', userId)}`,
+                        callback_data: "speed_low",
+                    }
+                ],
+                [
+                    {
+                        text: user.settings.auto_tip === "high" ? `🟢 ⚡️ ${await t('feeSettings.p9', userId)}` : `🔘 ⚡️ ${await t('feeSettings.p9', userId)}`,
+                        callback_data: "speed_medium",
+                    }
+                ],
+                [
+                    {
+                        text: user.settings.auto_tip === "veryHigh" ? `🟢 🚀 ${await t('feeSettings.p10', userId)}` : `🔘 🚀 ${await t('feeSettings.p10', userId)}`,
+                        callback_data: "speed_high",
+                    }
+                ],
+                // [
+                // { text: "🚀 Fast", callback_data: "speed_high" },
+                // { text: "⚡️ Normal", callback_data: "speed_medium" },
+                // { text: "🐢 Slow", callback_data: "speed_low" },
+                // ],
+                [
+                    { text: `${await t('back', userId)}`, callback_data: "settings_fee_back" },
+                    { text: `${await t('refresh', userId)}`, callback_data: "autotip_refresh" },
+                ]
             ],
-            [
-                {
-                    text: user.settings.auto_tip === "high" ? `🟢 ⚡️ ${await t('feeSettings.p9', userId)}` : `🔘 ⚡️ ${await t('feeSettings.p9', userId)}`,
-                    callback_data: "speed_medium",
-                }
-            ],
-            [
-                {
-                    text: user.settings.auto_tip === "veryHigh" ? `🟢 🚀 ${await t('feeSettings.p10', userId)}` : `🔘 🚀 ${await t('feeSettings.p10', userId)}`,
-                    callback_data: "speed_high",
-                }
-            ],
-            // [
-            // { text: "🚀 Fast", callback_data: "speed_high" },
-            // { text: "⚡️ Normal", callback_data: "speed_medium" },
-            // { text: "🐢 Slow", callback_data: "speed_low" },
-            // ],
-            [
-                { text: `${await t('back', userId)}`, callback_data: "settings_fee_back" },
-                { text: `${await t('refresh', userId)}`, callback_data: "autotip_refresh" },
-            ]
-        ],
-    };
-    bot.editMessageCaption(
-        `<strong>${await t('feeSettings.p11', userId)}</strong>
+        };
+        await bot.editMessageCaption(
+            `<strong>${await t('feeSettings.p11', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} 
 <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
@@ -231,13 +240,22 @@ ${await t('feeSettings.p12', userId)}
 ${await t('feeSettings.p14', userId)} ${result / 10 ** 9} SOL
 
 <strong>${await t('feeSettings.p15', userId)}</strong>`,
-        {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: "HTML",
-            reply_markup: newMarkup
-        },
-    );
+            {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: "HTML",
+                reply_markup: newMarkup
+            },
+        );
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Fee auto message is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing fee auto message:', error);
+        throw error; // Re-throw other errors
+    }
 };
 
 export const sendFeeAutoMessage = async (
@@ -374,40 +392,41 @@ export const editFeeAutoMessageEth = async (
             break;
     }
     
-    const newMarkup: TelegramBot.InlineKeyboardMarkup = {
-        inline_keyboard: [
-            [
-                {
-                    text: currentGasSpeed === "low" ? `🟢 🐢 ${await t('feeSettings.p8', userId)}` : `🔘 🐢 ${await t('feeSettings.p8', userId)}`,
-                    callback_data: "speed_gas_low",
-                }
+    try {
+        const newMarkup: TelegramBot.InlineKeyboardMarkup = {
+            inline_keyboard: [
+                [
+                    {
+                        text: currentGasSpeed === "low" ? `🟢 🐢 ${await t('feeSettings.p8', userId)}` : `🔘 🐢 ${await t('feeSettings.p8', userId)}`,
+                        callback_data: "speed_gas_low",
+                    }
+                ],
+                [
+                    {
+                        text: currentGasSpeed === "medium" ? `🟢 ⚡️ ${await t('feeSettings.p9', userId)}` : `🔘 ⚡️ ${await t('feeSettings.p9', userId)}`,
+                        callback_data: "speed_gas_medium",
+                    }
+                ],
+                [
+                    {
+                        text: currentGasSpeed === "high" ? `🟢 🚀 ${await t('feeSettings.p10', userId)}` : `🔘 🚀 ${await t('feeSettings.p10', userId)}`,
+                        callback_data: "speed_gas_high",
+                    }
+                ],
+                [
+                    {
+                        text: currentGasSpeed === "veryHigh" ? `🟢 ⚡⚡ ${await t('feeSettings.p17', userId)}` : `🔘 ⚡⚡ ${await t('feeSettings.p17', userId)}`,
+                        callback_data: "speed_gas_veryHigh",
+                    }
+                ],
+                [
+                    { text: `${await t('back', userId)}`, callback_data: "settings_fee_back" },
+                    { text: `${await t('refresh', userId)}`, callback_data: "autogas_refresh" },
+                ]
             ],
-            [
-                {
-                    text: currentGasSpeed === "medium" ? `🟢 ⚡️ ${await t('feeSettings.p9', userId)}` : `🔘 ⚡️ ${await t('feeSettings.p9', userId)}`,
-                    callback_data: "speed_gas_medium",
-                }
-            ],
-            [
-                {
-                    text: currentGasSpeed === "high" ? `🟢 🚀 ${await t('feeSettings.p10', userId)}` : `🔘 🚀 ${await t('feeSettings.p10', userId)}`,
-                    callback_data: "speed_gas_high",
-                }
-            ],
-            [
-                {
-                    text: currentGasSpeed === "veryHigh" ? `🟢 ⚡⚡ ${await t('feeSettings.p17', userId)}` : `🔘 ⚡⚡ ${await t('feeSettings.p17', userId)}`,
-                    callback_data: "speed_gas_veryHigh",
-                }
-            ],
-            [
-                { text: `${await t('back', userId)}`, callback_data: "settings_fee_back" },
-                { text: `${await t('refresh', userId)}`, callback_data: "autogas_refresh" },
-            ]
-        ],
-    };
-    bot.editMessageCaption(
-        `<strong>${await t('feeSettings.p11', userId)}</strong>
+        };
+        await bot.editMessageCaption(
+            `<strong>${await t('feeSettings.p11', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} 
 <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
@@ -417,11 +436,20 @@ ${await t('feeSettings.p12', userId)}
 ${await t('feeSettings.p14', userId)} ${result.toFixed(1)} Gwei
 
 <strong>${await t('feeSettings.autoCalculateGasPrice', userId)}</strong>`,
-        {
-            chat_id: chatId,
-            message_id: messageId,
-            parse_mode: "HTML",
-            reply_markup: newMarkup
-        },
-    );
+            {
+                chat_id: chatId,
+                message_id: messageId,
+                parse_mode: "HTML",
+                reply_markup: newMarkup
+            },
+        );
+    } catch (error: any) {
+        // Handle the "message is not modified" error gracefully
+        if (error?.message && error.message.includes('message is not modified')) {
+            console.log('Fee auto message (Ethereum) is already up to date');
+            return; // Silent return, this is not an error
+        }
+        console.error('Error editing fee auto message (Ethereum):', error);
+        throw error; // Re-throw other errors
+    }
 };
