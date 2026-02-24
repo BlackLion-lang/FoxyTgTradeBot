@@ -24,6 +24,7 @@ export const getTrendingPage = async (
     let tokenCaptions = await Promise.all(
         pageTokens.map(async (token: any) => {
             const rankEmojis = ["🥇", "🥈", "🥉"];
+            const dexscreenerUrl = `https://dexscreener.com/solana/${token.address}`;
             return (
                 `${token.rank == 1 ? rankEmojis[0] : token.rank == 2 ? rankEmojis[1] : token.rank == 3 ? rankEmojis[2] : ""}${await t('trending.p3', userId)} : ${token.rank}\n` +
                 `${await t('trending.p4', userId)} : <code>${token.name}</code>\n` +
@@ -31,7 +32,8 @@ export const getTrendingPage = async (
                 `${await t('trending.p6', userId)} : $${formatNumber(token.liquidity || 0)}\n` +
                 `${await t('trending.p7', userId)} : $${formatNumber(token.volume24hUSD || 0)}\n` +
                 `${await t('trending.p8', userId)} : ${token.volume24hChangePercent?.toFixed(3) || "---"} %\n` +
-                `${await t('trending.p9', userId)} : $${token.price?.toFixed(5)}\n\n` +
+                `${await t('trending.p9', userId)} : $${token.price?.toFixed(5)}\n` +
+                `<a href="${dexscreenerUrl}">${await t('trending.viewOnDexscreener', userId)}</a>\n\n` +
                 `-----------------------------------------\n\n`
             );
         })
@@ -64,10 +66,6 @@ export const getTrendingPage = async (
                     text: `${await t('backMenu', userId)}`,
                     callback_data: "menu_back"
                 },
-                {
-                    text: `${await t('refresh', userId)}`,
-                    callback_data: `refresh_trending_${safePage}`
-                },
             ],
         ],
     };
@@ -86,6 +84,7 @@ export const sendTrendingPageMessage = async (
     return bot.sendMessage(chatId, caption, {
         parse_mode: "HTML",
         reply_markup: reply_markup,
+        disable_web_page_preview: true,
     });
 };
 
@@ -102,6 +101,7 @@ export const editTrendingPageMessage = async (
         message_id: messageId,
         parse_mode: "HTML",
         reply_markup: reply_markup,
+        disable_web_page_preview: true,
     });
 };
 

@@ -39,6 +39,8 @@ export interface Translations {
         addSniperUser: string;
         removeSniperUser: string
         adminWalletName: string;
+        walletSolanaLimit: string;
+        walletEthereumLimit: string;
         wallet: string;
         p3: string;
         p4: string;
@@ -514,6 +516,7 @@ export interface Translations {
         p7: string;
         p8: string;
         p9: string;
+        viewOnDexscreener: string;
         next: string;
         previous: string;
     };
@@ -640,6 +643,10 @@ export interface Translations {
         year: string;
         subscriptionRequirement: string;
         manageDescription: string;
+        enterSubscriptionPriceWeek: string;
+        enterSubscriptionPriceMonth: string;
+        enterSubscriptionPriceYear: string;
+        invalidSubscriptionPrice: string;
     }
 
     //Messages
@@ -681,6 +688,8 @@ export interface Translations {
         useradd: string;
         pnl: string;
         walletLimits: string;
+        walletLimitSolana: string;
+        walletLimitEthereum: string;
         importwallet1: string;
         importwallet2: string;
         importwallet3: string;
@@ -748,6 +757,8 @@ export interface Translations {
         insufficientFundsSimple: string;
         invalidtip: string;
         walletLimit: string;
+        walletLimitSolana: string;
+        walletLimitEthereum: string;
         invalidwallets: string;
         invalidsettings: string;
     };

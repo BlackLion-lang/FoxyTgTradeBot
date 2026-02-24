@@ -122,7 +122,7 @@ export const getSniper = async (
             // Token Status selector - show before bonding curve settings
             [
                 { 
-                    text: `${await t('sniper.tokenStatus', userId)}: ${
+                    text: `${await t('sniper.tokenStatus', userId)} : ${
                         user.sniper.token_status === 'migrated' 
                             ? await t('sniper.tokenStatusMigrated', userId)
                             : user.sniper.token_status === 'on_bonding'

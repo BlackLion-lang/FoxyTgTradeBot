@@ -14,6 +14,7 @@ import { limitOrderData } from "../../models/limitOrder"
 import { formatNumberStyle, getCurrentTime, getFrenchTime, getlocationTime } from "../../services/other"
 import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
 import { getImage } from "../Image/image"
+import { getCloseButton } from "../../utils/markup"
 
 export const editEthereumSellMessageWithAddress = async (
     bot: TelegramBot,
@@ -140,7 +141,7 @@ export const sendEthereumSellMessageWithAddress = async (
                         { text: `${await t('quickSell.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
                     ],
                     [
-                        { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                        await getCloseButton(userId)
                     ]
                 ]
             },
@@ -375,7 +376,7 @@ export const sendEthereumSellMessageWithAddress = async (
                             { text: `${await t('quickSell.buy', userId)}`, callback_data: `buyToken_eth_${tokenAddress}` },
                         ],
                         [
-                            { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                            await getCloseButton(userId)
                         ]
                     ]
                 }

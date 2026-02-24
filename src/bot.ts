@@ -40,7 +40,7 @@ import {
     hasSpecialCharacters,
     isMEVProtect,
 } from "./services/other";
-import { walletBackButton, walletsBackMarkup } from "./utils/markup";
+import { walletBackButton, walletsBackMarkup, getCloseButton } from "./utils/markup";
 import { getUserChain } from "./utils/chain";
 import { User } from "./models/user";
 import { PendingUser } from "./models/pendingUser";
@@ -1055,42 +1055,33 @@ bot.on("callback_query", async (callbackQuery) => {
             });
         }
 
-        if (sel_action === "admin_wallets") {
-            const sent = bot.sendMessage(
-                chatId,
-                `${await t('messages.walletLimits', userId)}`,
-            ).then((sentMessage) => {
+        const setWalletLimit = async (
+            promptKey: 'messages.walletLimitSolana' | 'messages.walletLimitEthereum',
+            field: 'walletsSolana' | 'walletsEthereum',
+        ) => {
+            const sent = bot.sendMessage(chatId, `${await t(promptKey, userId)}`).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
                         const date = Number(reply.text || "");
                         if (isNaN(date) || date < 1 || date > 100) {
-                            bot.sendMessage(
-                                chatId,
-                                `${await t('errors.invalidwallets', userId)}`,
-                            ).then((newSentMessage) => {
-                                setTimeout(() => {
-                                    safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
-                                }, 3000);
+                            bot.sendMessage(chatId, `${await t('errors.invalidwallets', userId)}`).then((newSentMessage) => {
+                                setTimeout(() => safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { }), 3000);
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
                                         const newdate = Number(newReply.text || "");
                                         if (isNaN(newdate) || newdate < 1 || newdate > 100) {
-                                            bot.sendMessage(
-                                                chatId,
-                                                `${await t('errors.invalidwallets', userId)}`,
-                                                // { reply_markup: { force_reply: true } },
-                                            );
+                                            bot.sendMessage(chatId, `${await t('errors.invalidwallets', userId)}`);
                                         } else {
-                                            settings.wallets = newdate;
+                                            (settings as unknown as Record<string, number>)[field] = newdate;
                                             await settings.save();
-                                            editSettingsMessage(bot, chatId, userId, messageId);
+                                            editAdminPanelMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
                                     }),
                                 );
                             });
                         } else {
-                            settings.wallets = date;
+                            (settings as unknown as Record<string, number>)[field] = date;
                             await settings.save();
                             editAdminPanelMessage(bot, chatId, userId, messageId);
                         }
@@ -1101,12 +1092,18 @@ bot.on("callback_query", async (callbackQuery) => {
                     }),
                 );
             });
+        };
+        if (sel_action === "admin_wallets_solana") {
+            await setWalletLimit('messages.walletLimitSolana', 'walletsSolana');
+        }
+        if (sel_action === "admin_wallets_ethereum") {
+            await setWalletLimit('messages.walletLimitEthereum', 'walletsEthereum');
         }
 
         if (sel_action === "admin_subscription_price_week") {
             const sent = bot.sendMessage(
                 chatId,
-                `Enter the subscription price for 1 Week (in SOL):`,
+                await t('snippingSettings.enterSubscriptionPriceWeek', userId),
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -1114,7 +1111,7 @@ bot.on("callback_query", async (callbackQuery) => {
                         if (isNaN(price) || price < 0) {
                             bot.sendMessage(
                                 chatId,
-                                `❌ Invalid price. Please enter a valid number (e.g., 0.3)`,
+                                await t('snippingSettings.invalidSubscriptionPrice', userId),
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
                                     safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
@@ -1125,7 +1122,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                         if (isNaN(newPrice) || newPrice < 0) {
                                             bot.sendMessage(
                                                 chatId,
-                                                `❌ Invalid price. Please enter a valid number.`,
+                                                await t('snippingSettings.invalidSubscriptionPrice', userId),
                                             );
                                         } else {
                                             settings.subscriptionPriceWeek = newPrice;
@@ -1153,7 +1150,7 @@ bot.on("callback_query", async (callbackQuery) => {
         if (sel_action === "admin_subscription_price_month") {
             const sent = bot.sendMessage(
                 chatId,
-                `Enter the subscription price for 1 Month (in SOL):`,
+                await t('snippingSettings.enterSubscriptionPriceMonth', userId),
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -1161,7 +1158,7 @@ bot.on("callback_query", async (callbackQuery) => {
                         if (isNaN(price) || price < 0) {
                             bot.sendMessage(
                                 chatId,
-                                `❌ Invalid price. Please enter a valid number (e.g., 0.5)`,
+                                await t('snippingSettings.invalidSubscriptionPrice', userId),
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
                                     safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
@@ -1172,7 +1169,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                         if (isNaN(newPrice) || newPrice < 0) {
                                             bot.sendMessage(
                                                 chatId,
-                                                `❌ Invalid price. Please enter a valid number.`,
+                                                await t('snippingSettings.invalidSubscriptionPrice', userId),
                                             );
                                         } else {
                                             settings.subscriptionPriceMonth = newPrice;
@@ -1200,7 +1197,7 @@ bot.on("callback_query", async (callbackQuery) => {
         if (sel_action === "admin_subscription_price_year") {
             const sent = bot.sendMessage(
                 chatId,
-                `Enter the subscription price for 1 Year (in SOL):`,
+                await t('snippingSettings.enterSubscriptionPriceYear', userId),
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -1208,7 +1205,7 @@ bot.on("callback_query", async (callbackQuery) => {
                         if (isNaN(price) || price < 0) {
                             bot.sendMessage(
                                 chatId,
-                                `❌ Invalid price. Please enter a valid number (e.g., 5)`,
+                                await t('snippingSettings.invalidSubscriptionPrice', userId),
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
                                     safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
@@ -1219,7 +1216,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                         if (isNaN(newPrice) || newPrice < 0) {
                                             bot.sendMessage(
                                                 chatId,
-                                                `❌ Invalid price. Please enter a valid number.`,
+                                                await t('snippingSettings.invalidSubscriptionPrice', userId),
                                             );
                                         } else {
                                             settings.subscriptionPriceYear = newPrice;
@@ -1516,7 +1513,7 @@ bot.on("callback_query", async (callbackQuery) => {
                             text: `${await t('referral.share1', userId)}`,
                             switch_inline_query: message
                         },
-                        { text: `${await t('close', userId)}`, callback_data: "menu_close" },
+                        await getCloseButton(userId),
                     ]
                 ]
             };
@@ -2661,9 +2658,21 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "wallets_create") {
             const userChain = await getUserChain(userId);
+            const maxSolana = (settings as { walletsSolana?: number }).walletsSolana ?? settings.wallets;
+            const maxEthereum = (settings as { walletsEthereum?: number }).walletsEthereum ?? settings.wallets;
             if (userChain === "ethereum") {
+                const count = (user.ethereumWallets || []).length;
+                if (count >= maxEthereum) {
+                    await bot.sendMessage(chatId, `${await t('errors.walletLimitEthereum', userId)} ${maxEthereum} Ethereum wallets.`);
+                    return;
+                }
                 getCreateEthereumWallet(bot, chatId, userId);
             } else {
+                const count = (user.wallets || []).length;
+                if (count >= maxSolana) {
+                    await bot.sendMessage(chatId, `${await t('errors.walletLimitSolana', userId)} ${maxSolana} Solana wallets.`);
+                    return;
+                }
                 getCreateWallet(bot, chatId, userId);
             }
             return;
@@ -2671,9 +2680,21 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === 'wallets_import') {
             const userChain = await getUserChain(userId);
+            const maxSolana = (settings as { walletsSolana?: number }).walletsSolana ?? settings.wallets;
+            const maxEthereum = (settings as { walletsEthereum?: number }).walletsEthereum ?? settings.wallets;
             if (userChain === "ethereum") {
+                const count = (user.ethereumWallets || []).length;
+                if (count >= maxEthereum) {
+                    await bot.sendMessage(chatId, `${await t('errors.walletLimitEthereum', userId)} ${maxEthereum} Ethereum wallets.`);
+                    return;
+                }
                 getImportEthereumWallet(bot, chatId, userId);
             } else {
+                const count = (user.wallets || []).length;
+                if (count >= maxSolana) {
+                    await bot.sendMessage(chatId, `${await t('errors.walletLimitSolana', userId)} ${maxSolana} Solana wallets.`);
+                    return;
+                }
                 getImportWallet(bot, chatId, userId);
             }
             return;

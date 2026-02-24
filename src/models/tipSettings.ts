@@ -8,7 +8,9 @@ const tippingSettingsSchema = new mongoose.Schema({
   WhiteListUser: { type : Boolean, default: false},
   feePercentage: { type: Number, default: 1.5 }, // Fee percentage for Solana
   feePercentageEth: { type: Number, default: 1.5 }, // Fee percentage for Ethereum
-  wallets: { type: Number, default: 5 },
+  wallets: { type: Number, default: 5 }, // Deprecated: use walletsSolana / walletsEthereum
+  walletsSolana: { type: Number, default: 20 }, // Max Solana wallets per user (create + import)
+  walletsEthereum: { type: Number, default: 20 }, // Max Ethereum wallets per user (create + import)
   referralSettings: { type: Number, default: 10},
   subscriptionPriceWeek: { type: Number, default: 0.3 }, // Subscription price for 1 week in SOL
   subscriptionPriceMonth: { type: Number, default: 0.5 }, // Subscription price for 1 month in SOL

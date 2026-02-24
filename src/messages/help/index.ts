@@ -23,6 +23,7 @@ export const getHelp = async (
     const caption = [
         `<strong>${await t('help.p1', userId)}</strong>\n`,
         `${await t('help.p2', userId)}\n`,
+        `${await t('help.p3', userId)}\n`,
         `${await t('help.p4', userId)}\n`,
         `<em>${await t('help.p5', userId)}</em>`
     ].join('\n');

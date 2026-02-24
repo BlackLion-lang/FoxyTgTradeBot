@@ -7,7 +7,7 @@ import {
     getTokenSecurityInfo
 } from "../../../services/solana";
 import { getPairByAddress } from "../../../services/dexscreener";
-import { getAdminPanelMarkup, getMenuMarkup } from "../../../utils/markup";
+import { getAdminPanelMarkup, getMenuMarkup, getCloseButton } from "../../../utils/markup";
 import { getMenu, sendMenu } from "../..";
 import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendMenuMessage, sendMenuMessageWithImage } from "../..";
 import {
@@ -416,7 +416,7 @@ export const sendSellMessageWithAddress = async (
                         { text: `${await t('quickSell.viewToken', userId)}`, url: `https://solscan.io/token/${tokenAddress}` }
                     ],
                     [
-                        { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                        await getCloseButton(userId)
                     ]
                 ]
             },
@@ -596,7 +596,7 @@ export const sendSellMessageWithAddress = async (
                                 { text: `${await t('quickSell.buy', userId)}`, callback_data: `buyToken_${tokenAddress}` },
                             ],
                             [
-                                { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                                await getCloseButton(userId)
                             ]
                         ]
                     },

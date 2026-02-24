@@ -13,6 +13,7 @@ import { TippingSettings } from "../../models/tipSettings"
 import { limitOrderData } from "../../models/limitOrder"
 import { formatNumberStyle } from "../../services/other"
 import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
+import { getCloseButton } from "../../utils/markup"
 
 export const sendEthereumBuyMessage = async (
     bot: TelegramBot,
@@ -179,7 +180,7 @@ export const sendEthereumBuyMessageWithAddress = async (
                         { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
                     ],
                     [
-                        { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                        await getCloseButton(userId)
                     ]
                 ]
             },
@@ -362,7 +363,7 @@ export const sendEthereumBuyMessageWithAddress = async (
                             { text: `${await t('quickBuy.sell', userId)}`, callback_data: `sellToken_eth_${tokenAddress}` },
                         ],
                         [
-                            { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                            await getCloseButton(userId)
                         ]
                     ]
                 }

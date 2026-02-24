@@ -29,7 +29,7 @@ export const dismissOptions: TelegramBot.SendMessageOptions = {
     reply_markup: {
         inline_keyboard: [
             [
-                { text: '❌ Close', callback_data: 'menu_close' }
+                { text: '❌ Close', callback_data: 'menu_close', style: 'danger' } as TelegramBot.InlineKeyboardButton & { style?: string }
             ]
         ]
     }

@@ -70,11 +70,25 @@ export const getPositions = async (
 
     const start = page * 2;
     const end = page * 2 + 2;
-    // console.log("page", page)
-    const balanceGroup = Object.entries(grouped).filter(obj => {
-        let trades = obj[1];
-        return trades[trades.length - 1]?.token_balance > 0.00001
-    })
+    // Only include tokens that still have balance (exclude sold positions) – verify with on-chain balance
+    const balanceGroup: Array<[string, any[]]> = [];
+    for (const [tokenAddress, trades] of Object.entries(grouped)) {
+        const lastTrade = trades[trades.length - 1];
+        const lastBalance = lastTrade?.token_balance ?? 0;
+        if (lastBalance > 0.00001) {
+            try {
+                const onChainBalance = await getTokenBalance(
+                    new PublicKey(currentWallet.publicKey),
+                    new PublicKey(tokenAddress),
+                );
+                if (onChainBalance > 0.00001) {
+                    balanceGroup.push([tokenAddress, trades]);
+                }
+            } catch {
+                balanceGroup.push([tokenAddress, trades]);
+            }
+        }
+    }
     
     // If no tokens with balance found, return empty positions message
     if (balanceGroup.length === 0) {
@@ -191,7 +205,7 @@ export const getPositions = async (
         tokenContents += `💎 ${name} - (<strong>${symbol}</strong>) - <strong>$${formatNumberStyle(market_cap)}</strong>\n` +
             `${await t('positions.p4', userId)} <strong>${tokenBalance} ${symbol} </strong>(<strong>${(tokenBalance * priceUsd).toFixed(2)} USD</strong>)\n` +
             `<code>${token}</code>\n` +
-            `${await t('positions.p5', userId)} ${(totalprofit).toFixed(2)} USD - (${(totalprofit * 100 / (usdMap[token])).toFixed(2)}%)\n` +
+            `${totalprofit >= 0 ? '🟢' : '🔴'} ${await t('positions.p5', userId)} ${(totalprofit).toFixed(2)} USD - (${(totalprofit * 100 / (usdMap[token])).toFixed(2)}%)\n` +
             `${await t('positions.p6', userId)} $${formatNumberStyle(tolCap / tokenBalance)}\n\n\n`;
         // }
     }

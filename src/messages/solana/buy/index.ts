@@ -36,6 +36,7 @@ import { t } from "../../../locales";
 import { sendMenu, sendMenuMessage } from "../..";
 import { TippingSettings } from "../../../models/tipSettings";
 import { settings } from "../../../commands/settings";
+import { getCloseButton } from "../../../utils/markup";
 
 // let invest = 0;
 
@@ -342,7 +343,7 @@ export const sendBuyMessageWithAddress = async (
                         { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://solscan.io/token/${tokenAddress}` },
                     ],
                     [
-                        { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                        await getCloseButton(userId)
                     ]
                 ]
             },
@@ -508,7 +509,7 @@ export const sendBuyMessageWithAddress = async (
                                 { text: `${await t('quickBuy.sell', userId)}`, callback_data: `sellToken_${tokenAddress}` },
                             ],
                             [
-                                { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                                await getCloseButton(userId)
                             ]
                         ]
                     },

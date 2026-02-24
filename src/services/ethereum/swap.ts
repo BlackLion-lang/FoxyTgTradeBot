@@ -22,6 +22,7 @@ import { t } from '../../locales'
 import { formatNumberStyle } from '../other'
 import { getPairInfoWithTokenAddress } from './dexscreener'
 import { TippingSettings } from '../../models/tipSettings'
+import { getCloseButton } from '../../utils/markup'
 
 interface swapInterface {
     index: number,
@@ -822,7 +823,7 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
                                     { text: `${await t('quickBuy.sell', userId)}`, callback_data: `sellToken_eth_${token_address}` },
                                 ],
                                 [
-                                    { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                                    await getCloseButton(userId)
                                 ]
                             ]
                         }
@@ -1047,7 +1048,7 @@ Block: <strong>${currentBlock?.number}</strong> | <strong>${(currentBlock?.gasUs
                                     { text: `${await t('quickSell.buy', userId)}`, callback_data: `buyToken_eth_${token_address}` },
                                 ],
                                 [
-                                    { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                                    await getCloseButton(userId)
                                 ]
                             ]
                         }

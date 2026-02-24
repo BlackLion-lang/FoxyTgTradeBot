@@ -131,16 +131,20 @@ export const getFee = async (
                 callback_data: "settings_fee_sell_fee",
             },
         ],
-        ...(isEthereum ? [] : [[
-            {
-                text: `${await t('feeSettings.p11', userId)}`,
-                callback_data: "settings_fee_auto",
-            },
-        ]]),
+        ...(isEthereum ? [] : [
+            [
+                {
+                    text: `${await t('feeSettings.p11', userId)}`,
+                    callback_data: "settings_fee_auto",
+                },
+            ],
+        ]),
+        [
+            { text: `${await t('refresh', userId)}`, callback_data: "settings_refresh" },
+        ],
         [
             { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-            { text: `${await t('refresh', userId)}`, callback_data: "settings_refresh" },
-        ]
+        ],
     ];
 
     const walletsMarkup: TelegramBot.InlineKeyboardMarkup = {

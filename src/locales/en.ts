@@ -37,6 +37,8 @@ export const en: Translations = {
         tipPercentageEth: "💰 Tip Percentage (Ethereum)",
         adminWallet: "💼 Admin wallet",
         adminWalletName: "📝 Admin wallet name",
+        walletSolanaLimit: "Solana wallet limit (create + import)",
+        walletEthereumLimit: "Ethereum wallet limit (create + import)",
         solanaPrice: "Solana Price",
         wallet : "💼 Wallets",
         p3: "Adresse du portefeuille",
@@ -510,6 +512,7 @@ export const en: Translations = {
         p7: "💲24h Volume",
         p8: "💹Volume Change",
         p9: "💰Price",
+        viewOnDexscreener: "📊 View on Dexscreener",
         next: "⏭️ Next",
         previous: "⏮️ Previous"
     },
@@ -636,6 +639,10 @@ export const en: Translations = {
         year: "Year",
         subscriptionRequirement: "Subscription Requirement",
         manageDescription: "Manage snipping subscription settings and whitelist users.",
+        enterSubscriptionPriceWeek: "Enter the subscription price for 1 Week (in SOL):",
+        enterSubscriptionPriceMonth: "Enter the subscription price for 1 Month (in SOL):",
+        enterSubscriptionPriceYear: "Enter the subscription price for 1 Year (in SOL):",
+        invalidSubscriptionPrice: "❌ Invalid price. Please enter a valid number (e.g., 0.3)",
     },
 
     //Messages
@@ -682,6 +689,8 @@ export const en: Translations = {
         importwallet4: "Wallet with this private key already exists. Please try again.",
         importwallet5: "What would you like to name your new wallet?",
         walletLimits: "Please input the wallet limit!",
+        walletLimitSolana: "Enter the maximum number of Solana wallets per user (create + import), 1-100:",
+        walletLimitEthereum: "Enter the maximum number of Ethereum wallets per user (create + import), 1-100:",
         autoSell1: "🚀 Your position has been closed automatically.",
         autoSell2: "Token :",
         autoSell3: "💸 Take Profit hit :",
@@ -745,7 +754,9 @@ export const en: Translations = {
         invalidtip: "❌ Validation error: Invalid tip percentage. Please enter a value between 0 and 100.",
         invalidsettings: "❌ Validation error: Invalid referral settings. Please enter a value greater than 0.",
         invalidwallets: "❌ Validation error: Invalid wallet limits. Please enter a value between 1 and 100.",
-        walletLimit: "❌ Wallet limit reached. You cannot create more than"
+        walletLimit: "❌ Wallet limit reached. You cannot create more than",
+        walletLimitSolana: "❌ Solana wallet limit reached. You cannot create or import more than",
+        walletLimitEthereum: "❌ Ethereum wallet limit reached. You cannot create or import more than"
     },
 
     // Bundle Wallets

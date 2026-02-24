@@ -281,7 +281,7 @@ export const getEthereumPositions = async (
         tokenContents += `💎 ${tokenInfo.name} - (<strong>${tokenInfo.symbol}</strong>) - <strong>$${formatNumberStyle(tokenInfo.marketCap)}</strong>\n` +
             `${await t('positions.p4', userId)} <strong>${tokenBalance.toFixed(4)} ${tokenInfo.symbol} </strong>(<strong>${(tokenBalance * tokenInfo.priceUsd).toFixed(2)} USD</strong>)\n` +
             `<code>${token}</code>\n` +
-            `${await t('positions.p5', userId)} ${(totalprofit).toFixed(2)} USD - (${usdMap[token] > 0 ? (totalprofit * 100 / (usdMap[token])).toFixed(2) : '0.00'}%)\n` +
+            `${totalprofit >= 0 ? '🟢' : '🔴'} ${await t('positions.p5', userId)} ${(totalprofit).toFixed(2)} USD - (${usdMap[token] > 0 ? (totalprofit * 100 / (usdMap[token])).toFixed(2) : '0.00'}%)\n` +
             `${await t('positions.p6', userId)} $${formatNumberStyle(tokenBalance > 0 ? tolCap / tokenBalance : 0)}\n\n\n`;
     }
 

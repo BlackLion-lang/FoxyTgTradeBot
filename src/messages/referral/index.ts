@@ -101,6 +101,9 @@ export const getReferralsList = async (
     userId: number,
     page: number = 0,
 ): Promise<{ caption: string; reply_markup: TelegramBot.InlineKeyboardMarkup }> => {
+    const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
+    const SAFE_MAX_LENGTH = TELEGRAM_MAX_MESSAGE_LENGTH - 200; // reserve for header, footer, pagination
+
     const user = await User.findOne({ userId });
     if (!user) throw new Error("User not found");
 
@@ -113,6 +116,7 @@ export const getReferralsList = async (
     const endIndex = startIndex + itemsPerPage;
     const pageReferrals = referrals.slice(startIndex, endIndex);
 
+    const dateLabel = await t('referral.date', userId);
     let caption = `<strong>${await t('referral.listTitle', userId)}</strong>\n\n`;
     caption += `${await t('referral.totalReferrals', userId)} : <strong>${referrals.length}</strong>\n\n`;
 
@@ -121,19 +125,20 @@ export const getReferralsList = async (
     } else {
         caption += `<strong>${await t('referral.listHeader', userId)}</strong>\n\n`;
         
-        const dateLabel = await t('referral.date', userId);
-        pageReferrals.forEach((referral, index) => {
+        for (let index = 0; index < pageReferrals.length; index++) {
+            const referral = pageReferrals[index];
             const globalIndex = startIndex + index + 1;
-            const date = referral.date ? new Date(referral.date).toLocaleDateString() : 'N/A';
+            const date = referral.date ? new Date(referral.date).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'N/A';
             const referredName = referral.referredName || 'Unknown';
-            const referredId = referral.referredId || 'N/A';
-            
-            caption += `${globalIndex}. <strong>${referredName}</strong>\n`;
-            caption += `   ID: <code>${referredId}</code>\n`;
-            caption += `   ${dateLabel}: ${date}\n\n`;
-        });
+            const line = `${globalIndex}. <strong>${referredName}</strong> – ${dateLabel} ${date}\n`;
+            if (caption.length + line.length > SAFE_MAX_LENGTH) {
+                caption += `…\n${await t('referral.pageInfo', userId)}: ${currentPage + 1}/${totalPages}`;
+                break;
+            }
+            caption += line;
+        }
 
-        if (totalPages > 1) {
+        if (totalPages > 1 && !caption.includes('…')) {
             caption += `\n${await t('referral.pageInfo', userId)}: ${currentPage + 1}/${totalPages}`;
         }
     }

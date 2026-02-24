@@ -6,6 +6,10 @@ import { SniperWhitelist } from "../models/sniperWhitelist";
 import { SubscribeModel } from "../models/subscribe";
 import { getUserChain } from "./chain";
 
+/** Close button with red (danger) style for Telegram Bot API 9.4+ */
+export const getCloseButton = async (userId: number): Promise<TelegramBot.InlineKeyboardButton> =>
+    ({ text: `${await t('close', userId)}`, callback_data: "menu_close", style: "danger" } as TelegramBot.InlineKeyboardButton & { style?: string });
+
 
 const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
     const tippingSettings = await TippingSettings.findOne() || new TippingSettings();
@@ -47,7 +51,10 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.tipPercentageEth', userId)} : ${settings.feePercentageEth} %`, callback_data: "admin_tip_percentage_eth" },
             ],
             [
-                { text: `${await t('admin.wallet', userId)} : ${settings.wallets}`, callback_data: "admin_wallets" },
+                { text: `${await t('admin.walletSolanaLimit', userId)} : ${settings.walletsSolana ?? settings.wallets}`, callback_data: "admin_wallets_solana" },
+            ],
+            [
+                { text: `${await t('admin.walletEthereumLimit', userId)} : ${settings.walletsEthereum ?? settings.wallets}`, callback_data: "admin_wallets_ethereum" },
             ],
             [
                 { text: `${await t('admin.referral', userId)} : ${settings.referralReward} SOL`, callback_data: "admin_referral" },
@@ -67,7 +74,7 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
             ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
-                { text: `${await t('close', userId)}`, callback_data: "menu_close" },
+                await getCloseButton(userId),
                 { text: `${await t('refresh', userId)}`, callback_data: "admin_refresh" },
             ],
         ],
@@ -128,7 +135,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
 
         buttons.push([
             { text: `${await t('menu.adminPanel', userId)}`, callback_data: "admin_panel" },
-            { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+            await getCloseButton(userId)
         ]);
     } else {
         buttons = [
@@ -162,7 +169,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
                 { text: `${await t('menu.trendingCoin', userId)}`, callback_data: "trending_coin" },
             ],
             [
-                { text: `${await t('close', userId)}`, callback_data: "menu_close" }
+                await getCloseButton(userId)
             ],
         );
     }

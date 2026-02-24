@@ -89,7 +89,7 @@ export const getWallets = async (
         `${await t('wallets.p3', userId)}\n` +
         `<a href="https://the-cryptofox-learning.com/">${await t('wallets.p4', userId)}</a>\n\n` +
         `${await t('wallets.p5', userId)}\n\n` +
-        `⚠️ ${await t('wallets.p10', userId)} : ${settings.wallets}\n\n` +
+        `⚠️ ${await t('wallets.p10', userId)} : ${(settings as { walletsEthereum?: number }).walletsEthereum ?? settings.wallets}\n\n` +
         `<strong>${await t('wallets.p6_ethereum', userId)}</strong> : ${await t('totals', userId)} : ${ethereumWallets.length}\n\n` +
         `${await t('wallets.p7', userId)}\n\n` +
         `${await t('wallets.p8', userId)}\n\n` +

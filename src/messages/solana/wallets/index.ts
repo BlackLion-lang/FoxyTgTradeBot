@@ -112,7 +112,7 @@ export const getWallets = async (
         `${await t('wallets.p3', userId)}\n` +
         `<a href="https://the-cryptofox-learning.com/">${await t('wallets.p4', userId)}</a>\n\n` +
         `${await t('wallets.p5', userId)}\n\n` +
-        `⚠️ ${await t('wallets.p10', userId)} : ${settings.wallets}\n\n` +
+        `⚠️ ${await t('wallets.p10', userId)} : ${(settings as { walletsSolana?: number }).walletsSolana ?? settings.wallets}\n\n` +
         `<strong>${await t('wallets.p6_solana', userId)}</strong> : ${await t('totals', userId)} : ${user?.wallets.length || 0}\n\n` +
         `${await t('wallets.p7', userId)}\n\n` +
         `${await t('wallets.p8', userId)}\n\n` +

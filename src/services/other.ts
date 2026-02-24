@@ -92,16 +92,28 @@ export function getlocationTime(timestamp: number): string {
     return `${years}-${months}-${days}-${hours}-${minutes}-${seconds}`;
 }
 
-export function formatNumberStyle(num: number) {
-    if (num >= 1e9) {
-        return (num / 1e9).toFixed(2) + "B"; // Billion
-    } else if (num >= 1e6) {
-        return (num / 1e6).toFixed(2) + "M"; // Million
-    } else if (num >= 1e3) {
-        return (num / 1e3).toFixed(2) + "K"; // Thousand
-    } else {
-        return num; // Less than 1000
+export function formatNumberStyle(num: number): string {
+    if (num >= 1e15) {
+        const value = num / 1e15;
+        return (value >= 1000 ? (num / 1e18).toFixed(2) + "E" : value.toFixed(2) + "Q");
     }
+    if (num >= 1e12) {
+        const value = num / 1e12;
+        return (value >= 1000 ? (num / 1e15).toFixed(2) + "Q" : value.toFixed(2) + "T");
+    }
+    if (num >= 1e9) {
+        const value = num / 1e9;
+        return (value >= 1000 ? (num / 1e12).toFixed(2) + "T" : value.toFixed(2) + "B");
+    }
+    if (num >= 1e6) {
+        const value = num / 1e6;
+        return (value >= 1000 ? (num / 1e9).toFixed(2) + "B" : value.toFixed(2) + "M");
+    }
+    if (num >= 1e3) {
+        const value = num / 1e3;
+        return (value >= 1000 ? (num / 1e6).toFixed(2) + "M" : value.toFixed(2) + "K");
+    }
+    return String(num);
 }
 
 export function formatWithSuperscript(num: string): string {
