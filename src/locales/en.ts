@@ -23,7 +23,9 @@ export const en: Translations = {
         sniper: "Launch the Foxy sniper.",
         position: "View your token positions.",
         help: "Help Center",
-        chains: "Choose your preferred blockchain for trading."
+        chains: "Choose your preferred blockchain for trading.",
+        language: "Change bot language (English / French).",
+        copytrading: "Open copy trading (monitor wallets)."
     },
     //Admin
     admin: {
@@ -47,7 +49,10 @@ export const en: Translations = {
         whitelistInactive: "Whitelist Inactive",
         walletName: "None",
         referral: "Rewards per 10 referrals",
-        referralSettings: "Custom Referral settings"
+        referralSettings: "Custom Referral settings",
+        defaultLanguage: "Default language",
+        languageEn: "English",
+        languageFr: "French"
     },
 
     //welcome
@@ -83,6 +88,7 @@ export const en: Translations = {
         help: "🙋‍♂️ Help",
         adminPanel: "👑 Admin Panel",
         trendingCoin: "🥇 Trending Coin",
+        copyTrade: "📋 Monitor Wallets",
         chain: "Current Chain :",
         chainButton: "🔗 Chain",
         botVersion: "🤖 Bot Telegram Version :"
@@ -492,7 +498,8 @@ export const en: Translations = {
         p10: "Amount : ",
         p11: "💡 Would you like to confirm this withdrawal?",
         confirm: "✅ Confirm",
-        view: "View Transaction"
+        view: "View Transaction",
+        withdraw100: "100% removal"
     },
 
     image: {
@@ -643,6 +650,69 @@ export const en: Translations = {
         enterSubscriptionPriceMonth: "Enter the subscription price for 1 Month (in SOL):",
         enterSubscriptionPriceYear: "Enter the subscription price for 1 Year (in SOL):",
         invalidSubscriptionPrice: "❌ Invalid price. Please enter a valid number (e.g., 0.3)",
+    },
+
+    // Copy Trading / Monitor Wallets
+    copyTrade: {
+        title: "Monitor Wallets",
+        subtitle: "Copy trade when monitored wallets launch on Pump.fun",
+        enabledOn: "Copy trading : Enabled",
+        enabledOff: "Copy trading : Disabled",
+        currentlyMonitoring: "Currently monitoring",
+        wallets: "wallet(s)",
+        addWallet: "Add Wallet",
+        removeWallet: "Remove Wallet",
+        walletSettings: "Wallet Settings",
+        back: "Back",
+        noWallets: "You are not monitoring any wallets yet.",
+        noWalletsInSettings: "No wallets to configure. Add a wallet from the main screen.",
+        addFirst: "Add a target Solana address to detect their Pump.fun token launches and copy their buy.",
+        enterAddress: "Paste the Solana wallet address to monitor (target trader):",
+        invalidAddress: "❌ Invalid Solana address. Please paste a valid base58 address.",
+        confirmAdd: "Add this address to monitoring?",
+        addressDetected: "Wallet address detected",
+        yesAdd: "Yes, add",
+        no: "No",
+        cancel: "Cancel",
+        addedSuccess: "✅ Address added to your monitor list. The bot will detect their Pump.fun token launches.",
+        removedSuccess: "✅ Address removed from monitoring.",
+        settingsFor: "Settings for",
+        copyOnNewToken: "Copy buy on new token launch",
+        buyAmount: "Copy buy amount (SOL)",
+        minAmount: "Min SOL (filter)",
+        maxAmount: "Max SOL (filter)",
+        rename: "Rename",
+        remove: "Remove",
+        label: "Label",
+        enterBuyAmount: "Enter copy buy amount (SOL), e.g. 0.01:",
+        enterMinAmount: "Enter min SOL (filter):",
+        enterMaxAmount: "Enter max SOL (filter):",
+        enterLabel: "Enter new label for this wallet:",
+        invalidNumber: "Invalid number. Please try again.",
+        disclaimer: "▲ This is not financial advice. Always DYOR!",
+        newTokenDetected: "New token detected!",
+        targetBought: "Target wallet bought token!",
+        trackedWallet: "Tracked wallet",
+        attemptingBuy: "Attempting to buy...",
+        tapBuyToCopy: "Tap « Buy Token » to copy this trade.",
+        viewToken: "Token",
+        buyToken: "Buy Token",
+        copyBuySuccessLaunch: "✅ Copy buy executed (launch):",
+        copyBuySuccessPurchase: "✅ Copy buy executed (purchase):",
+        copyBuyFailedLaunch: "❌ Copy buy failed (launch):",
+        copyBuyFailedPurchase: "❌ Copy buy failed (purchase):",
+        copyBuySkippedBalance: "❌ Copy buy skipped: insufficient balance (need",
+        copyBuyPending: "⏳ Copy buy in progress...",
+        modeAuto: "Mode: Auto",
+        modeManual: "Mode: Manual",
+        tpSl: "TP / SL",
+        tpSlOn: "TP/SL: ON",
+        tpSlOff: "TP/SL: OFF",
+        takeProfit: "Take profit %",
+        stopLoss: "Stop loss %",
+        enterTakeProfitCopy: "Enter take profit % for copy trading (e.g. 10):",
+        enterStopLossCopy: "Enter stop loss % for copy trading (e.g. -40):",
+        tpSlOnlyCopy: "These apply only to copy-trade positions.",
     },
 
     //Messages

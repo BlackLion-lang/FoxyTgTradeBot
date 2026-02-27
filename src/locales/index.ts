@@ -2,6 +2,7 @@ import { en } from './en';
 import { fr } from './fr';
 import { Translations } from './types';
 import { User } from '../models/user';
+import { TippingSettings } from '../models/tipSettings';
 
 export type SupportedLanguage = 'en' | 'fr';
 
@@ -48,10 +49,16 @@ export class LanguageManager {
     }
 }
 
-// Helper function to get user-specific language
+// Helper function to get user-specific language (falls back to bot default from TippingSettings)
 export async function getUserLanguage(userId: number): Promise<SupportedLanguage> {
     const user = await User.findOne({ userId });
-    return (user?.language as SupportedLanguage) || 'fr';
+    if (user?.language && (user.language === 'en' || user.language === 'fr')) {
+        return user.language as SupportedLanguage;
+    }
+    const settings = await TippingSettings.findOne().lean();
+    const defaultLang = (settings as any)?.defaultLanguage;
+    if (defaultLang === 'en' || defaultLang === 'fr') return defaultLang;
+    return 'fr';
 }
 
 // This should update the user's language in DB (you can wire it later)

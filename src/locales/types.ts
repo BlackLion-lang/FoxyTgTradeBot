@@ -24,6 +24,8 @@ export interface Translations {
         sniper: string;
         help: string;
         chains: string;
+        language: string;
+        copytrading: string;
     };
 
     //Admin
@@ -49,6 +51,9 @@ export interface Translations {
         walletName: string;
         referral: string;
         referralSettings: string;
+        defaultLanguage: string;
+        languageEn: string;
+        languageFr: string;
     };
 
     //welcome
@@ -179,6 +184,7 @@ export interface Translations {
         referral: string;
         adminPanel: string;
         trendingCoin: string;
+        copyTrade: string;
         chain: string;
         chainButton: string;
         botVersion: string;
@@ -484,6 +490,7 @@ export interface Translations {
         p11: string;
         confirm: string;
         view: string;
+        withdraw100: string;
     }
 
     //Tp & Sl
@@ -647,6 +654,68 @@ export interface Translations {
         enterSubscriptionPriceMonth: string;
         enterSubscriptionPriceYear: string;
         invalidSubscriptionPrice: string;
+    }
+
+    copyTrade: {
+        title: string;
+        subtitle: string;
+        enabledOn: string;
+        enabledOff: string;
+        currentlyMonitoring: string;
+        wallets: string;
+        addWallet: string;
+        removeWallet: string;
+        walletSettings: string;
+        back: string;
+        noWallets: string;
+        noWalletsInSettings: string;
+        addFirst: string;
+        enterAddress: string;
+        invalidAddress: string;
+        confirmAdd: string;
+        addressDetected: string;
+        yesAdd: string;
+        no: string;
+        cancel: string;
+        addedSuccess: string;
+        removedSuccess: string;
+        settingsFor: string;
+        copyOnNewToken: string;
+        buyAmount: string;
+        minAmount: string;
+        maxAmount: string;
+        rename: string;
+        remove: string;
+        label: string;
+        enterBuyAmount: string;
+        enterMinAmount: string;
+        enterMaxAmount: string;
+        enterLabel: string;
+        invalidNumber: string;
+        disclaimer: string;
+        newTokenDetected: string;
+        targetBought: string;
+        trackedWallet: string;
+        attemptingBuy: string;
+        tapBuyToCopy: string;
+        viewToken: string;
+        buyToken: string;
+        copyBuySuccessLaunch: string;
+        copyBuySuccessPurchase: string;
+        copyBuyFailedLaunch: string;
+        copyBuyFailedPurchase: string;
+        copyBuySkippedBalance: string;
+        copyBuyPending: string;
+        modeAuto: string;
+        modeManual: string;
+        tpSl: string;
+        tpSlOn: string;
+        tpSlOff: string;
+        takeProfit: string;
+        stopLoss: string;
+        enterTakeProfitCopy: string;
+        enterStopLossCopy: string;
+        tpSlOnlyCopy: string;
     }
 
     //Messages

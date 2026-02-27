@@ -254,8 +254,8 @@ const userSchema = new mongoose.Schema(
                 },
                 slippage_eth: {
                     type: {
-                        buy_slippage_eth: { type: Number, default: 0.5 },
-                        sell_slippage_eth: { type: Number, default: 0.5 },
+                        buy_slippage_eth: { type: Number, default: 1 },
+                        sell_slippage_eth: { type: Number, default: 1 },
                     },
                     default: {},
                 },
@@ -350,6 +350,32 @@ const userSchema = new mongoose.Schema(
                 }
             ],
             default: []
+        },
+        // Copy Trading / Monitor Wallets: target Solana addresses to watch and copy on Pump.fun launches
+        copyTrade: {
+            type: {
+                enabled: { type: Boolean, default: true }, // on/off for the whole copy trading module
+                mode: { type: String, default: "auto", enum: ["auto", "manual"] }, // auto = bot buys on new token; manual = notify only, user clicks Buy
+                tpSlEnabled: { type: Boolean, default: true },     // on/off for TP/SL on copy-trade positions
+                takeProfitPercent: { type: Number, default: 10 },   // TP % for copy-trade positions only
+                stopLossPercent: { type: Number, default: -40 },    // SL % for copy-trade positions only
+                monitoredWallets: {
+                    type: [
+                        {
+                            address: { type: String, required: true },
+                            label: { type: String, default: "" },
+                            minAmountSol: { type: Number, default: 0 },
+                            maxAmountSol: { type: Number, default: 100 },
+                            copyOnNewToken: { type: Boolean, default: true },
+                            buyAmountSol: { type: Number, default: 0.01 },
+                        }
+                    ],
+                    default: [],
+                },
+                pendingAddAddress: { type: String, default: "" }, // temporary: address to confirm add
+                pendingAddLabel: { type: String, default: "" },   // temporary: label for the wallet being added
+            },
+            default: {},
         },
         // pending removed - no longer used
         // pending: {

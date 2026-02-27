@@ -1,38 +1,25 @@
 import TelegramBot from "node-telegram-bot-api";
-import { User } from "../../../models/user";
-import { settingsbackButton } from "../../../utils/markup";
+import { t } from "../../../locales";
 
-export const getLanguage = async (
-    userId: number
-) => {
-    const user = (await User.findOne({ userId })) || new User();
-
-    const caption =
-        `<strong>💦 Language Settings</strong>\n\n` +
-        `📚 Need more help?\n <a href="https://the-cryptofox-learning.com/">Click Here!</a>\n\n` +
-        `<strong>🌐 LANGUAGE: Select a language</strong>`;
-
-    const language = user.settings.language || "en";
-    const options: TelegramBot.InlineKeyboardButton[][] = [
+/** Same language menu as when clicking Language in Settings (caption + markup). */
+export const getLanguage = async (userId: number) => {
+    const caption = `${await t("language.p1", userId)}`;
+    const markup: TelegramBot.InlineKeyboardMarkup = {
+        inline_keyboard: [
         [
-            {
-                text: `🇺🇸 Language: English`,
-                callback_data: "settings_language_en",
-            },
-            {
-                text: `🇫🇷 Language: French`,
-                callback_data: "settings_language_fr",
-            },
+                { text: `🇺🇸 ${await t("language.english", userId)}`, callback_data: "settings_language_en" },
+                { text: `🇫🇷 ${await t("language.french", userId)}`, callback_data: "settings_language_fr" },
         ],
-        await settingsbackButton(userId),
-    ];
-
-    const walletsMarkup: TelegramBot.InlineKeyboardMarkup = {
-        inline_keyboard: options,
+            [
+                { text: `${await t("backSettings", userId)}`, callback_data: "settings_back" },
+                { text: `${await t("backMenu", userId)}`, callback_data: "menu_back" },
+            ],
+        ],
     };
-
-    return { caption, markup: walletsMarkup };
+    return { caption, markup };
 };
+
+const SETTINGS_IMAGE_PATH = "./src/assets/settings.jpg";
 
 export const editLanguageMessage = async (
     bot: TelegramBot,
@@ -50,17 +37,17 @@ export const editLanguageMessage = async (
     });
 };
 
+/** Sends the same language menu as Settings (photo + caption + keyboard). */
 export const sendLanguageMessage = async (
     bot: TelegramBot,
     chatId: number,
     userId: number,
-    messageId: number,
+    _messageId?: number,
 ) => {
     const { caption, markup } = await getLanguage(userId);
-
-    bot.sendMessage(chatId, caption, {
+    await bot.sendPhoto(chatId, SETTINGS_IMAGE_PATH, {
+        caption,
         parse_mode: "HTML",
-        disable_web_page_preview: true,
         reply_markup: markup,
     });
 };

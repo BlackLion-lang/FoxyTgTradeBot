@@ -23,7 +23,9 @@ export const fr: Translations = {
         sniper: "Lancer le module de snipping de FoxyBoTracker.",
         position: "Afficher vos positions sur FoxyBoTracker.",
         help: "Centre d'aide",
-        chains: "Choisissez votre Blockchain préférée pour le Trading avec FoxyBoTracker."
+        chains: "Choisissez votre Blockchain préférée pour le Trading avec FoxyBoTracker.",
+        language: "Changer la langue du bot (Anglais / Français).",
+        copytrading: "Ouvrir le copy trading (surveiller des wallets)."
     },
 
     // Admin
@@ -48,7 +50,10 @@ export const fr: Translations = {
         walletName: "Aucun",
         referral: "Récompense 10 parrainages",
         wallet: "💼 Limite de Wallet",
-        referralSettings: "Paramètres des parrainages"
+        referralSettings: "Paramètres des parrainages",
+        defaultLanguage: "Langue par défaut",
+        languageEn: "Anglais",
+        languageFr: "Français"
     },
 
     //welcome
@@ -118,6 +123,7 @@ export const fr: Translations = {
         help: "🙋‍♂️ Aide",
         adminPanel: "👑 Panneau Admin",
         trendingCoin: "🥇 Pièce tendance",
+        copyTrade: "📋 Portefeuilles surveillés",
         chain: "Chaîne actuelle :",
         chainButton: "🔗 Blockchain",
         botVersion: "🤖 Version du Bot Telegram :"
@@ -494,7 +500,8 @@ export const fr: Translations = {
         p10: "Montant :",
         p11: "💡 Souhaitez-vous confirmer ce retrait ?",
         confirm: "✅ Confirmer",
-        view: "Voir la transaction"
+        view: "Voir la transaction",
+        withdraw100: "100 % retrait"
     },
 
     image: {
@@ -645,6 +652,69 @@ export const fr: Translations = {
         enterSubscriptionPriceMonth: "Saisissez le prix d'abonnement pour 1 Mois (en SOL) :",
         enterSubscriptionPriceYear: "Saisissez le prix d'abonnement pour 1 An (en SOL) :",
         invalidSubscriptionPrice: "❌ Prix invalide. Veuillez saisir un nombre valide (ex. : 0,3)",
+    },
+
+    // Copy Trading / Monitor Wallets
+    copyTrade: {
+        title: "Portefeuilles surveillés",
+        subtitle: "Copiez les trades quand les portefeuilles surveillés lancent ou achètent sur Pump.fun",
+        enabledOn: "Copy trading : Enabled",
+        enabledOff: "Copy trading : Disabled",
+        currentlyMonitoring: "Vous surveillez actuellement",
+        wallets: "portefeuille(s)",
+        addWallet: "Ajouter un portefeuille",
+        removeWallet: "Retirer un portefeuille",
+        walletSettings: "Paramètres du portefeuille",
+        back: "Retour",
+        noWallets: "Vous ne surveillez encore aucun portefeuille.",
+        noWalletsInSettings: "Aucun portefeuille à configurer. Ajoutez-en un depuis l'écran principal.",
+        addFirst: "Ajoutez une adresse Solana cible pour détecter leurs lancements de jetons Pump.fun.",
+        enterAddress: "Collez l'adresse du portefeuille Solana à surveiller (trader cible) :",
+        invalidAddress: "❌ Adresse Solana invalide. Collez une adresse base58 valide.",
+        confirmAdd: "Ajouter cette adresse à la surveillance ?",
+        addressDetected: "Adresse détectée",
+        yesAdd: "Oui, ajouter",
+        no: "Non",
+        cancel: "Annuler",
+        addedSuccess: "✅ Adresse ajoutée à votre liste. Le bot détectera leurs lancements Pump.fun.",
+        removedSuccess: "✅ Adresse retirée de la surveillance.",
+        settingsFor: "Paramètres pour",
+        copyOnNewToken: "Copier l'achat au lancement d'un nouveau jeton",
+        buyAmount: "Montant d'achat copié (SOL)",
+        minAmount: "SOL min (filtre)",
+        maxAmount: "SOL max (filtre)",
+        rename: "Renommer",
+        remove: "Retirer",
+        label: "Libellé",
+        enterBuyAmount: "Entrez le montant d'achat copié (SOL), ex. 0,01 :",
+        enterMinAmount: "Entrez le SOL min (filtre) :",
+        enterMaxAmount: "Entrez le SOL max (filtre) :",
+        enterLabel: "Entrez le nouveau libellé pour ce portefeuille :",
+        invalidNumber: "Nombre invalide. Veuillez réessayer.",
+        disclaimer: "▲ Ceci n'est pas un conseil financier. Faites vos propres recherches (DYOR) !",
+        newTokenDetected: "Nouveau jeton détecté !",
+        targetBought: "Wallet cible a acheté le jeton !",
+        trackedWallet: "Portefeuille suivi",
+        attemptingBuy: "Tentative d'achat...",
+        tapBuyToCopy: "Appuyez sur « Acheter le jeton » pour copier ce trade.",
+        viewToken: "Jeton",
+        buyToken: "Acheter le jeton",
+        copyBuySuccessLaunch: "✅ Copie achat exécuté (lancement) :",
+        copyBuySuccessPurchase: "✅ Copie achat exécuté (achat cible) :",
+        copyBuyFailedLaunch: "❌ Copie achat échoué (lancement) :",
+        copyBuyFailedPurchase: "❌ Copie achat échoué (achat cible) :",
+        copyBuySkippedBalance: "❌ Copie achat annulée : solde insuffisant (il faut",
+        copyBuyPending: "⏳ Copie achat en cours...",
+        modeAuto: "Mode : Auto",
+        modeManual: "Mode : Manuel",
+        tpSl: "TP / SL",
+        tpSlOn: "TP/SL : ON",
+        tpSlOff: "TP/SL : OFF",
+        takeProfit: "Take profit %",
+        stopLoss: "Stop loss %",
+        enterTakeProfitCopy: "Entrez le take profit % pour le copy trading (ex. 10) :",
+        enterStopLossCopy: "Entrez le stop loss % pour le copy trading (ex. -40) :",
+        tpSlOnlyCopy: "Ils s'appliquent uniquement aux positions copy-trade.",
     },
 
     // Messages

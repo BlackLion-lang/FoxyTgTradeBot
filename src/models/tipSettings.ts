@@ -24,7 +24,8 @@ const tippingSettingsSchema = new mongoose.Schema({
       label: { type: String, default: "" },
     },
     default: {}
-  }
+  },
+  defaultLanguage: { type: String, default: "fr", enum: ["fr", "en"] } // Bot default language for users who have not set one
 })
 
 export const TippingSettings = mongoConnection.model("TippingSettings", tippingSettingsSchema)

@@ -215,6 +215,33 @@ export const getPairByAddress = async (tokenAddress: string) => {
         });
 };
 
+/** Fetch Pump.fun coin and return creator/launcher wallet address if present (for copy-trade detection). */
+export const getPumpFunCoinCreator = async (mint: string): Promise<string | null> => {
+    try {
+        const pumpUrl = `https://frontend-api-v3.pump.fun/coins/${mint}`;
+        const res = await fetch(pumpUrl);
+        const data = await res.json();
+        if (!data) return null;
+        const creator = data.creator ?? data.creator_address ?? data.authority ?? data.bonding_curve_authority ?? null;
+        return typeof creator === "string" ? creator : null;
+    } catch {
+        return null;
+    }
+};
+
+/** Fetch Pump.fun coin name/symbol for a mint (for copy-trade notifications). Returns null on error. */
+export const getPumpFunCoinInfo = async (mint: string): Promise<{ name?: string; symbol?: string } | null> => {
+    try {
+        const pumpUrl = `https://frontend-api-v3.pump.fun/coins/${mint}`;
+        const res = await fetch(pumpUrl);
+        const data = await res.json();
+        if (!data) return null;
+        return { name: data.name, symbol: data.symbol };
+    } catch {
+        return null;
+    }
+};
+
 export const fetchPumpFunData = async (tokenAddress: string) => {
     const pumpUrl = `https://frontend-api-v3.pump.fun/coins/${tokenAddress}`;
     const res = await fetch(pumpUrl);

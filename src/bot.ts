@@ -37,10 +37,11 @@ import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUser
 import {
     extractTokenAddress,
     extractTokenAddress_,
+    formatNumberStyle,
     hasSpecialCharacters,
     isMEVProtect,
 } from "./services/other";
-import { walletBackButton, walletsBackMarkup, getCloseButton } from "./utils/markup";
+import { walletBackButton, walletsBackMarkup, getCloseButton, getCancelButton } from "./utils/markup";
 import { getUserChain } from "./utils/chain";
 import { User } from "./models/user";
 import { PendingUser } from "./models/pendingUser";
@@ -52,7 +53,7 @@ import {
 } from "./messages/solana/wallets/withdraw";
 import { editSwitchWalletsMessage, sendSwitchWalletsMessage } from "./messages/solana/wallets/switch";
 import { editHelpMessage, sendHelpMessageWithImage } from "./messages/help";
-import { getPairByAddress, getTokenInfo, getTokenPrice, setTokenPrice } from "./services/dexscreener";
+import { getPairByAddress, getPumpFunCoinInfo, getTokenInfo, getTokenPrice, setTokenPrice } from "./services/dexscreener";
 import {
     editBuyMessageWithAddress,
     getBuy,
@@ -78,6 +79,7 @@ import {
 } from './messages/solana/settings/auto_sell';
 import { swapToken } from "./services/jupiter";
 import { runSniper } from "./services/sniper";
+import { startCopyTradeDetectionLoop, runCopyTradeDetection } from "./services/copyTradeDetection";
 import { editPositionsMessage, sendPositionsMessageWithImage, getPositions } from './messages/solana/positions';
 import { editSettingsMessage, sendSettingsMessage, sendSettingsMessageWithImage } from "./messages/solana/settings";
 import { TokenAmount } from "@raydium-io/raydium-sdk-v2";
@@ -125,6 +127,18 @@ import { editReferralMessage, sendReferralMessage, sendReferralsListMessage, edi
 import { editTrendingPageMessage, sendTrendingPageMessage } from "./messages/solana/trendingCoins";
 import { editSniperMessage, sendSniperMessageeWithImage } from "./messages/solana/sniper/sniper";
 import { sendTokenListMessage, editTokenListMessage } from "./messages/solana/sniper/tokenDetection";
+import {
+    sendCopyTradeMessage,
+    editCopyTradeMessage,
+    editCopyTradeToMain,
+    editCopyTradeToRemoveMenu,
+    editCopyTradeToSettingsMenu,
+    editCopyTradeToTpSlMenu,
+    editCopyTradeWalletSettings,
+    getCopyTradeTpSlMenu,
+    sendCopyTradeWalletSettings,
+    sendCopyTradeWalletSettingsPhoto,
+} from "./messages/solana/copyTrade";
 import { handleSubscriptionAction, sendSubscriptionOptions } from "./subscribe";
 import { sendEthereumBuyMessageWithAddress } from "./messages/ethereum/buy";
 import { swapExactTokenForETHUsingUniswapV2_ } from "./services/ethereum/swap";
@@ -369,6 +383,49 @@ bot.onText(/\/menu/, async (msg, match) => {
         } else {
             await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
         }
+    }
+});
+
+bot.onText(/\/language/, async (msg) => {
+    const whiteListUsers = await WhiteListUser.find({});
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    if (!settings) throw new Error("Tipping settings not found!");
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+    const userId = Number(fromId);
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser || isWhitelisted) {
+        await sendLanguageMessage(bot, msg.chat.id, userId, 0);
+    } else {
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
+    }
+});
+
+bot.onText(/\/copytrading/, async (msg) => {
+    const whiteListUsers = await WhiteListUser.find({});
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    if (!settings) throw new Error("Tipping settings not found!");
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+    const userId = Number(fromId);
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser || isWhitelisted) {
+        const userCheck = await User.findOne({ userId });
+        if (userCheck && userCheck.chain === "ethereum") {
+            await bot.sendMessage(msg.chat.id, await t("copyTrade.title", userId) + " is only available for Solana.");
+            return;
+        }
+        await sendCopyTradeMessage(bot, msg.chat.id, userId);
+    } else {
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -639,6 +696,13 @@ bot.on("callback_query", async (callbackQuery) => {
             callbackQueryId,
         });
         if (subscriptionHandled) {
+            return;
+        }
+
+        if (sel_action === "menu_close") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            cleanupUserTextHandler(userId);
+            await safeDeleteMessage(bot, chatId, messageId);
             return;
         }
 
@@ -1249,6 +1313,19 @@ bot.on("callback_query", async (callbackQuery) => {
 
         if (sel_action === "admin_refresh") {
             editAdminPanelMessage(bot, chatId, userId, messageId);
+        }
+        if (sel_action === "admin_default_language") {
+            const settings = await TippingSettings.findOne() || new TippingSettings();
+            if (!settings) {
+                bot.sendMessage(chatId, "Settings not found.").catch(() => {});
+                return;
+            }
+            const current = (settings as any).defaultLanguage === "en" ? "en" : "fr";
+            (settings as any).defaultLanguage = current === "en" ? "fr" : "en";
+            await settings.save();
+            await editAdminPanelMessage(bot, chatId, userId, messageId);
+            const langLabel = (settings as any).defaultLanguage === "en" ? await t("admin.languageEn", userId) : await t("admin.languageFr", userId);
+            await bot.answerCallbackQuery(callbackQueryId, { text: `${await t("admin.defaultLanguage", userId)}: ${langLabel}` }).catch(() => {});
         }
 
         if (sel_action === "admin_wallet_name") {
@@ -2511,6 +2588,121 @@ ${amount} SOL ⇄ <code>${solToAddress}</code>
                 bot.sendMessage(chatId, `${await t('errors.invalidWithdrawal', userId)}`)
             }
 
+        } else if (sel_action?.startsWith('wallets_withdraw_100_')) {
+            const index = Number(sel_action.replace('wallets_withdraw_100_', ''));
+            if (isNaN(index)) return;
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const userChain = await getUserChain(userId);
+            const wallet = userChain === "ethereum" ? user.ethereumWallets?.[index] : user.wallets?.[index];
+            if (!wallet) {
+                bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                return;
+            }
+            if (userChain === "ethereum") {
+                const balance = await getEthereumBalance(wallet.publicKey);
+                const maxSendable = balance;
+                if (maxSendable <= 0) {
+                    bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientEth', userId)}`);
+                    return;
+                }
+                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
+                    .then((sentMessage2) => {
+                        bot.once('text', createUserTextHandler(userId, async (reply) => {
+                            const address = (reply.text || '').trim();
+                            await safeDeleteMessage(bot, chatId, reply.message_id);
+                            bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => {});
+                            if (!isEvmAddress(address)) {
+                                bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`);
+                                return;
+                            }
+                            const currencySymbol = await t('currencySymbol_ethereum', userId);
+                            await bot.sendMessage(chatId, `<strong>${await t('withdrawal.p7', userId)}
+${await t('messages.fee', userId)}
+
+• ${await t('withdrawal.p8', userId)} : <code>${wallet.publicKey.slice(0, 6)}...${wallet.publicKey.slice(-4)} — ${wallet.label}</code>
+• ${await t('withdrawal.p9', userId)} : <code>${address}</code>
+
+• ${await t('withdrawal.p10', userId)} <code>${maxSendable} ${currencySymbol}</code>
+
+${await t('withdrawal.p11', userId)}</strong>`, {
+                                parse_mode: 'HTML',
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [
+                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
+                                            { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' },
+                                        ],
+                                    ],
+                                },
+                            });
+                        }));
+                    });
+            } else {
+                let decrypted: string;
+                try {
+                    decrypted = decryptSecretKey(wallet.secretKey);
+                } catch (error: any) {
+                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${wallet.publicKey}:`, error.message);
+                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
+                    return;
+                }
+                let senderKeypair: Keypair;
+                try {
+                    senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted));
+                } catch (error: any) {
+                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to create keypair from decrypted key for wallet ${wallet.publicKey}:`, error.message);
+                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.invalidKeyFormat', userId) || 'Invalid key format. Please re-import this wallet.'}`);
+                    return;
+                }
+                let balance: number;
+                let rentExempt: number;
+                try {
+                    balance = await connection.getBalance(senderKeypair.publicKey);
+                    rentExempt = await connection.getMinimumBalanceForRentExemption(0);
+                } catch (err: any) {
+                    console.error('[Withdraw 100%] RPC error:', err?.message ?? err);
+                    bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientSol', userId)}`);
+                    return;
+                }
+                const maxSendableLamports = Math.max(balance - rentExempt - 10000, 0);
+                const maxSendable = maxSendableLamports / LAMPORTS_PER_SOL;
+                if (maxSendable <= 0) {
+                    bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientSol', userId)}`);
+                    return;
+                }
+                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
+                    .then((sentMessage2) => {
+                        bot.once('text', createUserTextHandler(userId, async (reply) => {
+                            const address = (reply.text || '').trim();
+                            await safeDeleteMessage(bot, chatId, reply.message_id);
+                            bot.deleteMessage(chatId, sentMessage2.message_id).catch(() => {});
+                            if (!isValidSolanaAddress(address)) {
+                                bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`);
+                                return;
+                            }
+                            const currencySymbol = await t('currencySymbol_solana', userId);
+                            await bot.sendMessage(chatId, `<strong>${await t('withdrawal.p7', userId)}
+${await t('messages.fee', userId)}
+
+• ${await t('withdrawal.p8', userId)} : <code>${wallet.publicKey.slice(0, 4)}...${wallet.publicKey.slice(-4)} — ${wallet.label}</code>
+• ${await t('withdrawal.p9', userId)} : <code>${address}</code>
+
+• ${await t('withdrawal.p10', userId)} <code>${maxSendable} ${currencySymbol}</code>
+
+${await t('withdrawal.p11', userId)}</strong>`, {
+                                parse_mode: 'HTML',
+                                reply_markup: {
+                                    inline_keyboard: [
+                                        [
+                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
+                                            { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' },
+                                        ],
+                                    ],
+                                },
+                            });
+                        }));
+                    });
+            }
         } else if (sel_action?.startsWith('wallets_withdraw_')) {
             const index = Number(sel_action.split('wallets_withdraw_')[1])
             if (!isNaN(index)) {
@@ -2525,10 +2717,20 @@ ${amount} SOL ⇄ <code>${solToAddress}</code>
                     return;
                 }
 
-                bot.sendMessage(chatId, withdrawMessage)
+                const withdraw100Text = await t('withdrawal.withdraw100', userId);
+                bot.sendMessage(chatId, withdrawMessage, {
+                    reply_markup: {
+                        inline_keyboard: [[{ text: withdraw100Text, callback_data: `wallets_withdraw_100_${index}` }]],
+                    },
+                })
                     .then((sentMessage1) => {
                         bot.once('text', createUserTextHandler(userId, async (reply) => {
-                            const amount = Number(reply.text || "");
+                            const text = (reply.text || '').trim();
+                            if (userChain === "ethereum" ? isEvmAddress(text) : isValidSolanaAddress(text)) {
+                                return;
+                            }
+                            const raw = text.replace(",", ".");
+                            const amount = Number(raw);
                             if (isNaN(amount) || amount <= 0) {
                                 bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
                                 return;
@@ -2569,7 +2771,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                     reply_markup: {
                                                         inline_keyboard: [
                                                             [
-                                                                { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}_${address}_${amount}` },
+                                                                { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
                                                                 { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' }
                                                             ]
                                                         ]
@@ -2601,8 +2803,12 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
                                 const balance = await connection.getBalance(senderKeypair.publicKey);
                                 const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
-                                const availableLamports = Math.max(amount * LAMPORTS_PER_SOL - rentExempt - 10000, 0);
-                                const maxSendable = (availableLamports / LAMPORTS_PER_SOL) > 0 ? availableLamports / LAMPORTS_PER_SOL : 0;
+                                const maxSendableLamports = Math.max(balance - rentExempt - 10000, 0);
+                                const maxSendable = maxSendableLamports / LAMPORTS_PER_SOL;
+                                if (amount > maxSendable || maxSendable <= 0) {
+                                    bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientSol', userId)}`);
+                                    return;
+                                }
 
                                 bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
                                     .then(sentMessage2 => {
@@ -2729,7 +2935,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            { text: `${await t('cancel', userId)}`, callback_data: "wallets_export_cancel" },
+                            await getCancelButton(userId, "wallets_export_cancel"),
                             { text: `${await t('dangerZoneMessage.exportPrivateKey', userId)}`, callback_data: "wallets_private_key" },
                         ],
                     ],
@@ -3202,7 +3408,7 @@ ${await t('privateKey.p7', userId)}`,
                     reply_markup: {
                         inline_keyboard: [
                             [
-                                { text: `${await t('cancel', userId)}`, callback_data: "wallets_delete_cancel" },
+                                await getCancelButton(userId, "wallets_delete_cancel"),
                                 { text: `${await t('deleteWallet.delete', userId)}`, callback_data: `wallets_delete_confirm_${index}` },
                             ],
                         ],
@@ -4237,115 +4443,88 @@ ${await t('privateKey.p7', userId)}`,
         }
 
         if (sel_action === "settings_language") {
-            try {
-                await bot.editMessageCaption(
-                    `${await t('language.p1', userId)}`,
-                    {
-                        chat_id: chatId,
-                        message_id: messageId,
-                        parse_mode: "HTML",
+            const langText = `${await t('language.p1', userId)}`;
+            const langMarkup = {
                         reply_markup: {
                             inline_keyboard: [
                                 [
-                                    {
-                                        text: `🇺🇸 ${await t('language.english', userId)}`,
-                                        callback_data: "settings_language_en",
-                                    },
-                                    {
-                                        text: `🇫🇷 ${await t('language.french', userId)}`,
-                                        callback_data: "settings_language_fr",
-                                    },
+                            { text: `🇺🇸 ${await t('language.english', userId)}`, callback_data: "settings_language_en" },
+                            { text: `🇫🇷 ${await t('language.french', userId)}`, callback_data: "settings_language_fr" },
                                 ],
                                 [
                                     { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-                                    { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
-                                ]
+                            { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
+                        ],
                             ],
                         },
-                    },
-                );
-            } catch (error: any) {
-                if (error?.message && error.message.includes('message is not modified')) {
-                    console.log('Language settings message is already up to date');
-                    return;
+            };
+            try {
+                await bot.editMessageCaption(langText, { chat_id: chatId, message_id: messageId, parse_mode: "HTML", ...langMarkup });
+            } catch (err: any) {
+                if (err?.message?.includes?.('message is not modified')) return;
+                if (err?.message?.includes?.('no caption')) {
+                    await bot.editMessageText(langText, { chat_id: chatId, message_id: messageId, parse_mode: "HTML", ...langMarkup });
+                } else {
+                    console.error("Error editing language message:", err);
                 }
-                console.error("Error editing message caption:", error);
             }
         }
 
         if (sel_action === "settings_language_en") {
             await setUserLanguage(userId, 'en');
-            try {
-                await bot.editMessageCaption(
-                    `${await t('language.p1', userId)}`,
-                    {
-                        chat_id: chatId,
-                        message_id: messageId,
-                        parse_mode: "HTML",
+            const langText = `${await t('language.p1', userId)}`;
+            const langMarkup = {
                         reply_markup: {
                             inline_keyboard: [
                                 [
-                                    {
-                                        text: `🇺🇸 ${await t('language.english', userId)}`,
-                                        callback_data: "settings_language_en",
-                                    },
-                                    {
-                                        text: `🇫🇷 ${await t('language.french', userId)}`,
-                                        callback_data: "settings_language_fr",
-                                    },
+                            { text: `🇺🇸 ${await t('language.english', userId)}`, callback_data: "settings_language_en" },
+                            { text: `🇫🇷 ${await t('language.french', userId)}`, callback_data: "settings_language_fr" },
                                 ],
                                 [
                                     { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-                                    { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
-                                ]
+                            { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
+                        ],
                             ],
                         },
-                    },
-                );
-            } catch (error: any) {
-                if (error?.message && error.message.includes('message is not modified')) {
-                    console.log('Language settings message is already up to date');
-                    return;
+            };
+            try {
+                await bot.editMessageCaption(langText, { chat_id: chatId, message_id: messageId, parse_mode: "HTML", ...langMarkup });
+            } catch (err: any) {
+                if (err?.message?.includes?.('message is not modified')) return;
+                if (err?.message?.includes?.('no caption')) {
+                    await bot.editMessageText(langText, { chat_id: chatId, message_id: messageId, parse_mode: "HTML", ...langMarkup });
+                } else {
+                    console.error("Error editing language message:", err);
                 }
-                console.error("Error editing message caption:", error);
             }
         }
 
         if (sel_action === "settings_language_fr") {
             await setUserLanguage(userId, 'fr');
-            try {
-                await bot.editMessageCaption(
-                    `${await t('language.p1', userId)}`,
-                    {
-                        chat_id: chatId,
-                        message_id: messageId,
-                        parse_mode: "HTML",
+            const langText = `${await t('language.p1', userId)}`;
+            const langMarkup = {
                         reply_markup: {
                             inline_keyboard: [
                                 [
-                                    {
-                                        text: `🇺🇸 ${await t('language.english', userId)}`,
-                                        callback_data: "settings_language_en",
-                                    },
-                                    {
-                                        text: `🇫🇷 ${await t('language.french', userId)}`,
-                                        callback_data: "settings_language_fr",
-                                    },
+                            { text: `🇺🇸 ${await t('language.english', userId)}`, callback_data: "settings_language_en" },
+                            { text: `🇫🇷 ${await t('language.french', userId)}`, callback_data: "settings_language_fr" },
                                 ],
                                 [
                                     { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-                                    { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }
-                                ]
+                            { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
+                        ],
                             ],
                         },
-                    },
-                );
-            } catch (error: any) {
-                if (error?.message && error.message.includes('message is not modified')) {
-                    console.log('Language settings message is already up to date');
-                    return;
+            };
+            try {
+                await bot.editMessageCaption(langText, { chat_id: chatId, message_id: messageId, parse_mode: "HTML", ...langMarkup });
+            } catch (err: any) {
+                if (err?.message?.includes?.('message is not modified')) return;
+                if (err?.message?.includes?.('no caption')) {
+                    await bot.editMessageText(langText, { chat_id: chatId, message_id: messageId, parse_mode: "HTML", ...langMarkup });
+                } else {
+                    console.error("Error editing language message:", err);
                 }
-                console.error("Error editing message caption:", error);
             }
         }
 
@@ -4404,6 +4583,572 @@ ${await t('privateKey.p7', userId)}`,
 
             sendSniperMessageeWithImage(bot, chatId, userId, messageId);
         }
+
+        // Copy Trading / Monitor Wallets (Solana only)
+        if (sel_action === "copyTrade") {
+            const userCheck = await User.findOne({ userId });
+            if (userCheck && userCheck.chain === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId, { text: await t("copyTrade.title", userId) + " is only available for Solana." });
+                return;
+            }
+            await safeDeleteMessage(bot, chatId, messageId);
+            await sendCopyTradeMessage(bot, chatId, userId);
+            return;
+        }
+        if (sel_action === "copyTrade_back") {
+            await editCopyTradeToMain(bot, chatId, userId, messageId);
+            return;
+        }
+        if (sel_action === "copyTrade_toggle_enabled") {
+            const u = await User.findOne({ userId });
+            if (u) {
+                if (!u.copyTrade) (u as any).copyTrade = { enabled: true, monitoredWallets: [], pendingAddAddress: "" };
+                (u.copyTrade as any).enabled = (u.copyTrade as any)?.enabled !== false ? false : true;
+                await u.save();
+                await runCopyTradeDetection();
+                await editCopyTradeToMain(bot, chatId, userId, messageId);
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: (u.copyTrade as any)?.enabled ? (await t("copyTrade.enabledOn", userId)) : (await t("copyTrade.enabledOff", userId)),
+                }).catch(() => {});
+            }
+            return;
+        }
+        if (sel_action === "copyTrade_toggle_mode") {
+            const u = await User.findOne({ userId });
+            if (u) {
+                if (!u.copyTrade) (u as any).copyTrade = { enabled: true, mode: "auto", monitoredWallets: [], pendingAddAddress: "" };
+                (u.copyTrade as any).mode = (u.copyTrade as any)?.mode === "manual" ? "auto" : "manual";
+                await u.save();
+                await runCopyTradeDetection();
+                await editCopyTradeToMain(bot, chatId, userId, messageId);
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: (u.copyTrade as any)?.mode === "auto" ? (await t("copyTrade.modeAuto", userId)) : (await t("copyTrade.modeManual", userId)),
+                }).catch(() => {});
+            }
+            return;
+        }
+        if (sel_action === "copyTrade_tp_sl") {
+            await editCopyTradeToTpSlMenu(bot, chatId, userId, messageId);
+            return;
+        }
+        if (sel_action === "copyTrade_toggle_tp_sl") {
+            const u = await User.findOne({ userId });
+            if (u) {
+                const current = (u.copyTrade as any)?.tpSlEnabled !== false;
+                await User.updateOne({ userId }, { $set: { "copyTrade.tpSlEnabled": !current } });
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: !current ? await t("copyTrade.tpSlOn", userId) : await t("copyTrade.tpSlOff", userId),
+                }).catch(() => {});
+            } else {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            }
+            await editCopyTradeToTpSlMenu(bot, chatId, userId, messageId);
+            return;
+        }
+        if (sel_action === "copyTrade_set_tp") {
+            const prompt = await t("copyTrade.enterTakeProfitCopy", userId);
+            const backBtn = await t("copyTrade.back", userId);
+            try {
+                await bot.editMessageCaption(prompt, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: "copyTrade_tp_sl" }]] },
+                });
+            } catch {
+                await bot.deleteMessage(chatId, messageId).catch(() => {});
+                await bot.sendMessage(chatId, prompt, {
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: "copyTrade_tp_sl" }]] },
+                });
+            }
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                const raw = (reply.text || "").trim().replace(",", ".");
+                const num = Number(raw);
+                if (isNaN(num) || num < 0 || num > 1000) {
+                    await bot.sendMessage(chatId, await t("copyTrade.invalidNumber", userId)).catch(() => {});
+                    return;
+                }
+                await User.findOneAndUpdate({ userId }, { $set: { "copyTrade.takeProfitPercent": num } });
+                try {
+                    await editCopyTradeToTpSlMenu(bot, chatId, userId, messageId);
+                } catch {
+                    const { caption, markup } = await getCopyTradeTpSlMenu(userId);
+                    await bot.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: markup });
+                }
+            }));
+            return;
+        }
+        if (sel_action === "copyTrade_set_sl") {
+            const prompt = await t("copyTrade.enterStopLossCopy", userId);
+            const backBtn = await t("copyTrade.back", userId);
+            try {
+                await bot.editMessageCaption(prompt, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: "copyTrade_tp_sl" }]] },
+                });
+            } catch {
+                await bot.deleteMessage(chatId, messageId).catch(() => {});
+                await bot.sendMessage(chatId, prompt, {
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: "copyTrade_tp_sl" }]] },
+                });
+            }
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                const raw = (reply.text || "").trim().replace(",", ".");
+                const num = Number(raw);
+                if (isNaN(num) || num > 0 || num < -100) {
+                    await bot.sendMessage(chatId, await t("copyTrade.invalidNumber", userId)).catch(() => {});
+                    return;
+                }
+                await User.findOneAndUpdate({ userId }, { $set: { "copyTrade.stopLossPercent": num } });
+                try {
+                    await editCopyTradeToTpSlMenu(bot, chatId, userId, messageId);
+                } catch {
+                    const { caption, markup } = await getCopyTradeTpSlMenu(userId);
+                    await bot.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: markup });
+                }
+            }));
+            return;
+        }
+        if (sel_action === "copyTrade_remove_menu") {
+            await editCopyTradeToRemoveMenu(bot, chatId, userId, messageId);
+            return;
+        }
+        if (sel_action === "copyTrade_settings_menu") {
+            await editCopyTradeToSettingsMenu(bot, chatId, userId, messageId);
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_buy_")) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const rest = sel_action.replace("copyTrade_buy_", "");
+            const lastUnderscore = rest.lastIndexOf("_");
+            if (lastUnderscore === -1) {
+                await bot.sendMessage(chatId, "❌ Invalid request. Try again.").catch(() => {});
+                return;
+            }
+            const mint = rest.slice(0, lastUnderscore);
+            const walletIndex = parseInt(rest.slice(lastUnderscore + 1), 10);
+            if (!mint || !isValidSolanaAddress(mint) || isNaN(walletIndex) || walletIndex < 0) {
+                await bot.sendMessage(chatId, "❌ Invalid token or wallet.").catch(() => {});
+                return;
+            }
+            const fullUser = await User.findOne({ userId });
+            if (!fullUser || fullUser.chain !== "solana") {
+                await bot.sendMessage(chatId, "❌ Copy trade is only available for Solana.").catch(() => {});
+                return;
+            }
+            const monitored = fullUser.copyTrade?.monitoredWallets?.[walletIndex];
+            if (!monitored) {
+                await bot.sendMessage(chatId, "❌ Monitored wallet not found.").catch(() => {});
+                return;
+            }
+            const buyAmountSol = Number(monitored.buyAmountSol ?? 0.01);
+            const activeWallet = fullUser.wallets?.find((w: any) => w.is_active_wallet);
+            if (!activeWallet?.publicKey) {
+                await bot.sendMessage(chatId, "❌ No active wallet set.").catch(() => {});
+                return;
+            }
+            const walletPubKey = typeof activeWallet.publicKey === "string" ? activeWallet.publicKey : String((activeWallet as any).publicKey);
+            const balance = await getBalance(walletPubKey).catch(() => 0);
+            if (balance < buyAmountSol * 1.05) {
+                await bot.sendMessage(chatId, `❌ ${await t("subscribe.insufficientSol", userId)}`).catch(() => {});
+                return;
+            }
+            const slippage = (fullUser as any).sniper?.slippage ?? (fullUser as any).settings?.fee_setting?.slippage?.buy_slippage ?? 50;
+            const fee = typeof (fullUser as any).settings?.mev === "number" ? (fullUser as any).settings.mev : 0;
+            const result = await swapToken(userId, walletPubKey, mint, buyAmountSol, "buy", slippage, fee).catch((err) => ({ success: false, error: String(err) }));
+            if (result?.success) {
+                const userDoc = await User.findOne({ userId });
+                const activeWalletDoc = userDoc?.wallets?.find((w: any) => w.is_active_wallet);
+                if (userDoc && activeWalletDoc) {
+                    const settings = await TippingSettings.findOne() || new TippingSettings();
+                    const sol_price = getSolPrice();
+                    let priceUsd = 0, market_cap = 0, symbol = "", name = "";
+                    try {
+                        const pairArray = await getPairByAddress(mint);
+                        const pair = pairArray?.[0];
+                        if (pair) {
+                            priceUsd = pair.priceUsd ?? 0;
+                            market_cap = pair?.marketCap ?? 0;
+                            symbol = pair?.baseToken?.symbol ?? "";
+                            name = pair?.baseToken?.name ?? "";
+                        }
+                    } catch (_) {}
+                    if (!name && !symbol) {
+                        const coinInfo = await getPumpFunCoinInfo(mint).catch(() => null);
+                        if (coinInfo) { name = coinInfo.name ?? ""; symbol = coinInfo.symbol ?? ""; }
+                    }
+                    const tokenBalance = await getTokenBalance(new PublicKey(walletPubKey), new PublicKey(mint)).catch(() => 0);
+                    let adminFeePercent = (settings?.feePercentage ?? 0) / 100;
+                    if (userId === 7994989802 || userId === 2024002049) adminFeePercent = 0;
+                    if (!activeWalletDoc.tradeHistory) (activeWalletDoc as any).tradeHistory = [];
+                    (activeWalletDoc.tradeHistory as any[]).push({
+                        transaction_type: "buy",
+                        token_address: mint,
+                        amount: buyAmountSol * sol_price,
+                        token_price: priceUsd,
+                        token_balance: tokenBalance,
+                        mc: market_cap,
+                        date: Date.now(),
+                        name: name || mint.slice(0, 8),
+                        tip: buyAmountSol * adminFeePercent,
+                        pnl: true,
+                    });
+                    await userDoc.save();
+
+                    const copyTpSlEnabled = (userDoc.copyTrade as any)?.tpSlEnabled !== false;
+                    if (copyTpSlEnabled && ((userDoc.settings?.auto_sell?.enabled_solana ?? false) || (userDoc.sniper as any)?.allowAutoSell)) {
+                        const takeProfitPercent = (userDoc.copyTrade as any)?.takeProfitPercent ?? 10;
+                        const stopLossPercent = (userDoc.copyTrade as any)?.stopLossPercent ?? -40;
+                        const existingOrder = await limitOrderData.findOne({
+                            user_id: userId,
+                            token_mint: mint,
+                            wallet: walletPubKey,
+                            status: "Pending",
+                        });
+                        const newTargetPrice1 = ((takeProfitPercent + 100) * priceUsd) / 100;
+                        const newTargetPrice2 = ((stopLossPercent + 100) * priceUsd) / 100;
+                        if (existingOrder) {
+                            const totalAmount = tokenBalance;
+                            const updatedTargetPrice1 = (existingOrder.token_amount * existingOrder.target_price1 + (tokenBalance - existingOrder.token_amount) * newTargetPrice1) / totalAmount;
+                            const updatedTargetPrice2 = (existingOrder.token_amount * existingOrder.target_price2 + (tokenBalance - existingOrder.token_amount) * newTargetPrice2) / totalAmount;
+                            await limitOrderData.updateOne(
+                                { _id: existingOrder._id },
+                                { $set: { token_amount: totalAmount, Tp: takeProfitPercent, Sl: stopLossPercent, target_price1: updatedTargetPrice1, targer_price2: updatedTargetPrice2, status: "Pending" } }
+                            );
+                        } else {
+                            await new limitOrderData({
+                                user_id: userId,
+                                wallet: walletPubKey,
+                                token_mint: mint,
+                                token_amount: tokenBalance,
+                                Tp: takeProfitPercent,
+                                Sl: stopLossPercent,
+                                target_price1: newTargetPrice1,
+                                target_price2: newTargetPrice2,
+                                status: "Pending",
+                            }).save();
+                        }
+                    }
+
+                    const balanceAfter = await getBalance(walletPubKey).catch(() => 0);
+                    const successText =
+                        `${await t("quickBuy.p7", userId)}\n\n` +
+                        `Token : <code>${mint}</code>\n\n` +
+                        `${await t("quickBuy.p14", userId)} : ${activeWalletDoc?.label ?? "Wallet"} - <strong>${balanceAfter.toFixed(2)} SOL</strong> ($${(balanceAfter * sol_price).toFixed(2)})\n` +
+                        `<code>${walletPubKey}</code>\n\n` +
+                        `🟢 <strong><em>${await t("quickBuy.p8", userId)}</em></strong>\n` +
+                        `${buyAmountSol} SOL ⇄ ${priceUsd > 0 ? (buyAmountSol * sol_price / priceUsd).toFixed(2) : "—"} ${symbol || "tokens"}\n` +
+                        `${await t("quickBuy.p11", userId)} ${formatNumberStyle(market_cap)}\n\n` +
+                        ((result as any).signature ? `<strong><em>${await t("quickBuy.p12", userId)}</em></strong> - <a href="https://solscan.io/tx/${(result as any).signature}">${await t("quickBuy.p13", userId)}</a>` : "");
+                    await bot.sendMessage(chatId, successText, {
+                        parse_mode: "HTML",
+                        disable_web_page_preview: true,
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    { text: await t("quickBuy.viewToken", userId), url: `https://solscan.io/token/${mint}` },
+                                    { text: await t("quickBuy.positions", userId), callback_data: "positions" },
+                                    { text: await t("quickBuy.sell", userId), callback_data: `sellToken_${mint}` },
+                                ],
+                                [await getCloseButton(userId)],
+                            ],
+                        },
+                    });
+                    const { caption, markup } = await getSell(userId, mint);
+                    await bot.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: markup });
+                } else {
+                    await bot.sendMessage(chatId, `✅ Copy buy executed — ${buyAmountSol} SOL`).catch(() => {});
+                }
+            } else {
+                await bot.sendMessage(chatId, `❌ Buy failed: ${(result as any)?.error || "Unknown error"}`).catch(() => {});
+            }
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_remove_") && !sel_action.includes("_menu")) {
+            const idx = parseInt(sel_action.replace("copyTrade_remove_", ""), 10);
+            if (!isNaN(idx) && idx >= 0 && user.copyTrade?.monitoredWallets?.length) {
+                const list = user.copyTrade.monitoredWallets;
+                if (idx < list.length) {
+                    list.splice(idx, 1);
+                    if (user.copyTrade) user.copyTrade.pendingAddAddress = "";
+                    await user.save();
+                    await editCopyTradeToMain(bot, chatId, userId, messageId);
+                    await bot.sendMessage(chatId, await t("copyTrade.removedSuccess", userId)).catch(() => {});
+                }
+            }
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_settings_") && !sel_action.includes("_menu")) {
+            const idx = parseInt(sel_action.replace("copyTrade_settings_", ""), 10);
+            if (!isNaN(idx) && idx >= 0) {
+                try {
+                await editCopyTradeWalletSettings(bot, chatId, userId, messageId, idx);
+                } catch {
+                    await bot.deleteMessage(chatId, messageId).catch(() => {});
+                    await sendCopyTradeWalletSettingsPhoto(bot, chatId, userId, idx);
+                }
+            }
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_toggle_")) {
+            const idx = parseInt(sel_action.replace("copyTrade_toggle_", ""), 10);
+            if (!isNaN(idx) && user.copyTrade?.monitoredWallets?.[idx]) {
+                user.copyTrade.monitoredWallets[idx].copyOnNewToken = !user.copyTrade.monitoredWallets[idx].copyOnNewToken;
+                await user.save();
+                await editCopyTradeWalletSettings(bot, chatId, userId, messageId, idx);
+            }
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_buyAmount_")) {
+            const idx = parseInt(sel_action.replace("copyTrade_buyAmount_", ""), 10);
+            if (isNaN(idx) || !user.copyTrade?.monitoredWallets?.[idx]) return;
+            const backBtn = await t("copyTrade.back", userId);
+            const prompt = await t("copyTrade.enterBuyAmount", userId);
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            const sent = await bot.sendMessage(chatId, prompt, {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+            });
+            const promptMsgId = sent.message_id;
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                const num = parseFloat((reply.text || "").replace(",", "."));
+                if (isNaN(num) || num < 0) {
+                    await bot.editMessageText(await t("copyTrade.invalidNumber", userId), {
+                        chat_id: chatId,
+                        message_id: promptMsgId,
+                        parse_mode: "HTML",
+                        reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+                    });
+                    return;
+                }
+                const u = await User.findOne({ userId });
+                if (!u?.copyTrade?.monitoredWallets?.[idx]) return;
+                u.copyTrade.monitoredWallets[idx].buyAmountSol = num;
+                await u.save();
+                await bot.deleteMessage(chatId, promptMsgId).catch(() => {});
+                await sendCopyTradeWalletSettingsPhoto(bot, chatId, userId, idx);
+            }));
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_minAmount_")) {
+            const idx = parseInt(sel_action.replace("copyTrade_minAmount_", ""), 10);
+            if (isNaN(idx) || !user.copyTrade?.monitoredWallets?.[idx]) return;
+            const backBtn = await t("copyTrade.back", userId);
+            const prompt = await t("copyTrade.enterMinAmount", userId);
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            const sent = await bot.sendMessage(chatId, prompt, {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+            });
+            const promptMsgId = sent.message_id;
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                const num = parseFloat((reply.text || "").replace(",", "."));
+                if (isNaN(num) || num < 0) {
+                    await bot.editMessageText(await t("copyTrade.invalidNumber", userId), {
+                        chat_id: chatId,
+                        message_id: promptMsgId,
+                        parse_mode: "HTML",
+                        reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+                    });
+                    return;
+                }
+                const u = await User.findOne({ userId });
+                if (!u?.copyTrade?.monitoredWallets?.[idx]) return;
+                u.copyTrade.monitoredWallets[idx].minAmountSol = num;
+                await u.save();
+                await bot.deleteMessage(chatId, promptMsgId).catch(() => {});
+                await sendCopyTradeWalletSettingsPhoto(bot, chatId, userId, idx);
+            }));
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_maxAmount_")) {
+            const idx = parseInt(sel_action.replace("copyTrade_maxAmount_", ""), 10);
+            if (isNaN(idx) || !user.copyTrade?.monitoredWallets?.[idx]) return;
+            const backBtn = await t("copyTrade.back", userId);
+            const prompt = await t("copyTrade.enterMaxAmount", userId);
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            const sent = await bot.sendMessage(chatId, prompt, {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+            });
+            const promptMsgId = sent.message_id;
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                const num = parseFloat((reply.text || "").replace(",", "."));
+                if (isNaN(num) || num < 0) {
+                    await bot.editMessageText(await t("copyTrade.invalidNumber", userId), {
+                        chat_id: chatId,
+                        message_id: promptMsgId,
+                        parse_mode: "HTML",
+                        reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+                    });
+                    return;
+                }
+                const u = await User.findOne({ userId });
+                if (!u?.copyTrade?.monitoredWallets?.[idx]) return;
+                u.copyTrade.monitoredWallets[idx].maxAmountSol = num;
+                await u.save();
+                await bot.deleteMessage(chatId, promptMsgId).catch(() => {});
+                await sendCopyTradeWalletSettingsPhoto(bot, chatId, userId, idx);
+            }));
+            return;
+        }
+        if (sel_action?.startsWith("copyTrade_rename_")) {
+            const idx = parseInt(sel_action.replace("copyTrade_rename_", ""), 10);
+            if (isNaN(idx) || !user.copyTrade?.monitoredWallets?.[idx]) return;
+            const backBtn = await t("copyTrade.back", userId);
+            const prompt = await t("copyTrade.enterLabel", userId);
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            const sent = await bot.sendMessage(chatId, prompt, {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: `copyTrade_settings_${idx}` }]] },
+            });
+            const promptMsgId = sent.message_id;
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                const label = (reply.text || "").trim().slice(0, 64);
+                const u = await User.findOne({ userId });
+                if (!u?.copyTrade?.monitoredWallets?.[idx]) return;
+                u.copyTrade.monitoredWallets[idx].label = label;
+                await u.save();
+                await bot.deleteMessage(chatId, promptMsgId).catch(() => {});
+                await sendCopyTradeWalletSettingsPhoto(bot, chatId, userId, idx);
+            }));
+            return;
+        }
+        if (sel_action === "copyTrade_add_confirm") {
+            const u = await User.findOne({ userId });
+            const pending = u?.copyTrade?.pendingAddAddress;
+            const pendingLabel = (u?.copyTrade as any)?.pendingAddLabel ?? "";
+            if (pending && isValidSolanaAddress(pending)) {
+                const newWallet = {
+                    address: pending,
+                    label: (pendingLabel || "").trim().slice(0, 64) || "",
+                    minAmountSol: 0,
+                    maxAmountSol: 100,
+                    copyOnNewToken: true,
+                    buyAmountSol: 0.01,
+                } as any;
+                const updated = await User.findOneAndUpdate(
+                    { userId, "copyTrade.pendingAddAddress": { $exists: true, $ne: "" } },
+                    {
+                        $push: { "copyTrade.monitoredWallets": newWallet },
+                        $set: { "copyTrade.pendingAddAddress": "", "copyTrade.pendingAddLabel": "" },
+                    },
+                    { new: true }
+                );
+                if (!updated) return;
+                await bot.sendMessage(chatId, await t("copyTrade.addedSuccess", userId));
+                await bot.deleteMessage(chatId, messageId).catch(() => {});
+                await sendCopyTradeMessage(bot, chatId, userId);
+            }
+            return;
+        }
+        if (sel_action === "copyTrade_add_cancel") {
+            await User.findOneAndUpdate(
+                { userId },
+                { $set: { "copyTrade.pendingAddAddress": "", "copyTrade.pendingAddLabel": "" } }
+            ).catch(() => {});
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            await sendCopyTradeMessage(bot, chatId, userId);
+            return;
+        }
+        if (sel_action === "copyTrade_add") {
+            const enterAddress = await t("copyTrade.enterAddress", userId);
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            const sent = await bot.sendMessage(chatId, enterAddress, {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: [[await getCancelButton(userId, "copyTrade_add_cancel")]] },
+            });
+            const addFlowMessageId = sent.message_id;
+            bot.once(
+                "text",
+                createUserTextHandler(userId, async (reply) => {
+                    const address = (reply.text || "").trim();
+                    if (!isValidSolanaAddress(address)) {
+                        const errText = await t("copyTrade.invalidAddress", userId);
+                        const backBtn = await t("copyTrade.back", userId);
+                        try {
+                            await bot.editMessageText(errText, {
+                            chat_id: chatId,
+                                message_id: addFlowMessageId,
+                            parse_mode: "HTML",
+                                reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: "copyTrade_add_cancel" }]] },
+                            });
+                        } catch {
+                            await bot.deleteMessage(chatId, addFlowMessageId).catch(() => {});
+                            await bot.sendMessage(chatId, errText, {
+                                parse_mode: "HTML",
+                                reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: "copyTrade_add_cancel" }]] },
+                        });
+                        }
+                        return;
+                    }
+                    setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                    const u = await User.findOneAndUpdate(
+                        { userId },
+                        { $set: { "copyTrade.pendingAddAddress": address } },
+                        { new: true }
+                    );
+                    if (!u?.copyTrade) return;
+                    const labelPrompt = await t("copyTrade.enterLabel", userId);
+                    const backBtnLabel = await t("copyTrade.back", userId);
+                    const sentLabel = await bot.sendMessage(chatId, labelPrompt, {
+                        parse_mode: "HTML",
+                        reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtnLabel}`, callback_data: "copyTrade_add_cancel" }]] },
+                    });
+                    const labelPromptMessageId = sentLabel.message_id;
+                    bot.once(
+                        "text",
+                        createUserTextHandler(userId, async (labelReply) => {
+                            setTimeout(() => safeDeleteMessage(bot, chatId, labelReply.message_id).catch(() => {}), 5000);
+                            const label = (labelReply.text || "").trim().slice(0, 64);
+                            const u2 = await User.findOneAndUpdate(
+                                { userId },
+                                { $set: { "copyTrade.pendingAddLabel": label } },
+                                { new: true }
+                            );
+                            if (!u2?.copyTrade) return;
+                            const shortAddr = (u2.copyTrade.pendingAddAddress || "").length > 16
+                                ? `${(u2.copyTrade.pendingAddAddress || "").slice(0, 8)}...${(u2.copyTrade.pendingAddAddress || "").slice(-8)}`
+                                : (u2.copyTrade.pendingAddAddress || "");
+                            const confirmText = `${await t("copyTrade.addressDetected", userId)}: <code>${shortAddr}</code>${label ? `\n${await t("copyTrade.label", userId)}: ${label}` : ""}\n\n${await t("copyTrade.confirmAdd", userId)}`;
+                    const yesAdd = await t("copyTrade.yesAdd", userId);
+                    const noBtn = await t("copyTrade.no", userId);
+                            const confirmMarkup = {
+                        reply_markup: {
+                            inline_keyboard: [
+                                [{ text: `✅ ${yesAdd}`, callback_data: "copyTrade_add_confirm" }],
+                                        [{ text: `❌ ${noBtn}`, callback_data: "copyTrade_add_cancel" }, await getCancelButton(userId, "copyTrade_add_cancel")],
+                                    ],
+                                },
+                            };
+                            try {
+                                await bot.editMessageText(confirmText, {
+                                    chat_id: chatId,
+                                    message_id: labelPromptMessageId,
+                                    parse_mode: "HTML",
+                                    ...confirmMarkup,
+                                });
+                            } catch {
+                                await bot.deleteMessage(chatId, labelPromptMessageId).catch(() => {});
+                                await bot.sendMessage(chatId, confirmText, { parse_mode: "HTML", ...confirmMarkup });
+                            }
+                        })
+                    );
+                })
+            );
+            return;
+        }
+
         if (sel_action === "sniper_refresh") {
             try {
                 await editTokenListMessage(bot, chatId, userId, messageId);
@@ -5583,6 +6328,8 @@ async function setBotCommands() {
         { command: "/positions", description: `${await t('commands.position', defaultUserId)}` },
         { command: "/sniper", description: `${await t('commands.sniper', defaultUserId)}` },
         { command: "/chains", description: `${await t('commands.chains', defaultUserId)}` },
+        { command: "/language", description: `${await t('commands.language', defaultUserId)}` },
+        { command: "/copytrading", description: `${await t('commands.copytrading', defaultUserId)}` },
         // { command: "/orders", description: "View limit orders." },
     ]).then(() => {
             console.log("Commands have been set successfully.");
@@ -5935,6 +6682,8 @@ const main = async () => {
             console.error("⚠️ Error in sniper script:", error);
         }
     }, 60000);
+
+    startCopyTradeDetectionLoop();
 
     const settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");

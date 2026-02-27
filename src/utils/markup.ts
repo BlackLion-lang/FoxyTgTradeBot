@@ -10,6 +10,10 @@ import { getUserChain } from "./chain";
 export const getCloseButton = async (userId: number): Promise<TelegramBot.InlineKeyboardButton> =>
     ({ text: `${await t('close', userId)}`, callback_data: "menu_close", style: "danger" } as TelegramBot.InlineKeyboardButton & { style?: string });
 
+/** Cancel button with same red (danger) style as close; callback_data is context-specific. */
+export const getCancelButton = async (userId: number, callback_data: string): Promise<TelegramBot.InlineKeyboardButton> =>
+    ({ text: `${await t('cancel', userId)}`, callback_data, style: "danger" } as TelegramBot.InlineKeyboardButton & { style?: string });
+
 
 const hasActiveSubscription = async (telegramId: number): Promise<boolean> => {
     const tippingSettings = await TippingSettings.findOne() || new TippingSettings();
@@ -70,6 +74,9 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.adminWalletName', userId)}`, callback_data: "admin_wallet_name" },
             ],
             [
+                { text: `${await t('admin.defaultLanguage', userId)} : ${(settings as any).defaultLanguage === 'en' ? await t('admin.languageEn', userId) : await t('admin.languageFr', userId)}`, callback_data: "admin_default_language" },
+            ],
+            [
                 { text: `🔫 ${await t('snippingSettings.title', userId)}`, callback_data: "snipping_settings" },
             ],
             [
@@ -119,6 +126,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
         if (!isEthereum) {
             buttons.push([
                 { text: sniperButtonText, callback_data: "sniper" },
+                { text: `${await t('menu.copyTrade', userId)}`, callback_data: "copyTrade" },
             ]);
         }
 
@@ -160,6 +168,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
         if (!isEthereum) {
             buttons.push([
                 { text: sniperButtonText, callback_data: "sniper" },
+                { text: `${await t('menu.copyTrade', userId)}`, callback_data: "copyTrade" },
             ]);
         }
 
