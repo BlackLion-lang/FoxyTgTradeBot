@@ -23,13 +23,9 @@ export const getSniper = async (
     }else{
         tokenlist = user.sniper.tokenlist || [];
     };
-    // console.log("User Token List:", tokenlist);
-
-    // Pre-translate common strings to avoid await in map
     const unknownTokenText = await t('sniper.unknownToken', userId);
     const viewText = await t('sniper.view', userId);
     
-    // Fetch token names for each address
     const tokenListWithNames = await Promise.all(
         (user.sniper.tokenlist || []).map(async (tokenAddress: any, index: number) => {
             try {
@@ -41,12 +37,10 @@ export const getSniper = async (
                     const tokenSymbol = pair.baseToken.symbol || 'N/A';
                     return `${index + 1}. <strong>${tokenName} (${tokenSymbol})</strong> - <a href="https://pump.fun/coin/${tokenAddress}">${viewText}</a>`;
                 } else {
-                    // Fallback if token info not found
                     return `${index + 1}. <code>${tokenAddress}</code> - <a href="https://pump.fun/coin/${tokenAddress}">${viewText}</a>`;
                 }
             } catch (error) {
                 console.error(`Error fetching token info for ${tokenAddress}:`, error);
-                // Fallback on error
                 return `${index + 1}. <code>${tokenAddress}</code> - <a href="https://pump.fun/coin/${tokenAddress}">${viewText}</a>`;
             }
         })
@@ -57,7 +51,8 @@ export const getSniper = async (
 
     const caption =
         `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n` +
-        `<a href="https://Google.fr">${await t('sniper.exampleLink', userId)}</a>\n\n` +
+        `${await t('settings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=snipping&sig=2Ov5gyDDfPN_hKi1MtPa5k3rJkVY77Ex
+">${await t('settings.p3', userId)}</a>\n\n` +
         `${await t('sniper.panelDescription', userId)}\n\n` +
         `${await t('sniper.panelDescription2', userId)} \n\n` +
         `<strong>${await t('sniper.important', userId)}</strong> ${await t('sniper.importantNote', userId)}\n\n`;
@@ -119,7 +114,6 @@ export const getSniper = async (
                     callback_data: "sniper_twitter",
                 },
             ],
-            // Token Status selector - show before bonding curve settings
             [
                 { 
                     text: `${await t('sniper.tokenStatus', userId)} : ${
@@ -132,8 +126,6 @@ export const getSniper = async (
                     callback_data: "sniper_tokenStatus" 
                 },
             ],
-            // Only show bonding curve settings if user selected "on_bonding" or "both"
-            // Migrated tokens don't have bonding curves (they're on Raydium)
             ...(user.sniper.token_status === 'migrated' ? [] : [
                 [
                     { text: `${await t('sniper.bondingCurveMin', userId)} : ${user.sniper.bonding_curve_min}%`, callback_data: "sniper_boundingMin" },
@@ -166,7 +158,6 @@ export const getSniper = async (
             ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
-                // { text: `${await t('refresh', userId)}`, callback_data: "sniper_refresh" },
             ],
         ]
         : [
@@ -213,7 +204,6 @@ export const getSniper = async (
             ],
             [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
-                // { text: `${await t('refresh', userId)}`, callback_data: "sniper_refresh" },
             ],
         ];
 
@@ -231,7 +221,7 @@ export const sendSniperMessageeWithImage = async (
     username?: any,
     first_name?: any,
 ) => {
-    const imagePath = "./src/assets/Snipping.jpg"; // Path to the image
+    const imagePath = "./src/assets/Snipping.jpg";
     const { caption, markup } = await getSniper(userId);
 
     await bot.sendPhoto(chatId, imagePath, {
@@ -259,7 +249,6 @@ export const editSniperMessage = async (
                 reply_markup: markup,
             });
         } catch (captionError: any) {
-            // If it fails because there's no caption, try editing as text
             if (captionError.message && captionError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageText(caption, {
                     chat_id: chatId,
@@ -272,10 +261,9 @@ export const editSniperMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error?.message && error.message.includes('message is not modified')) {
             console.log('Sniper message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing sniper message:', error);
     }

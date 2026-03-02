@@ -10,14 +10,13 @@ export const getTrendingPage = async (
 ) => {
     const tokens = await getTrendingTokens() || [];
 
-    // Split tokens into chunks of 3
     const chunkSize = 3;
     const chunks = [];
     for (let i = 0; i < tokens.length; i += chunkSize) {
         chunks.push(tokens.slice(i, i + chunkSize));
     }
 
-    const maxPage = Math.min(4, chunks.length); // Limit to 4 pages
+    const maxPage = Math.min(4, chunks.length);
     const safePage = Math.max(1, Math.min(page, maxPage));
     const pageTokens = chunks[safePage - 1] || [];
 

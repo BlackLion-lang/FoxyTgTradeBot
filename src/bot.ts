@@ -28,6 +28,7 @@ import {
     walletCreate,
     walletFromPrvKey,
 } from "./services/solana";
+import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './messages/solana/settings/profitLevel';
 import { editWalletsMessage, sendWalletsMessageWithImage, sendWalletsMessage } from "./messages/solana/wallets";
 import { editWalletsMessage as editEthereumWalletsMessage } from "./messages/ethereum/wallets";
 import { isEvmAddress } from "./utils/ethereum";
@@ -83,7 +84,6 @@ import { startCopyTradeDetectionLoop, runCopyTradeDetection } from "./services/c
 import { editPositionsMessage, sendPositionsMessageWithImage, getPositions } from './messages/solana/positions';
 import { editSettingsMessage, sendSettingsMessage, sendSettingsMessageWithImage } from "./messages/solana/settings";
 import { TokenAmount } from "@raydium-io/raydium-sdk-v2";
-import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './messages/solana/settings/profitLevel';
 import { editFeeAutoMessage, editFeeAutoMessageEth, editFeeMessage, sendFeeAutoMessage, sendFeeMessage } from './messages/solana/settings/fee';
 import { WhiteListUser } from "./models/whitelist";
 import { SniperWhitelist } from "./models/sniperWhitelist";
@@ -118,7 +118,6 @@ import { editLanguageMessage, sendLanguageMessage } from "./messages/solana/sett
 import { resourceLimits } from "worker_threads";
 import { isNamedTupleMember } from "typescript";
 import { settings } from "./commands/settings";
-import { sendProfitLevelMessage } from "./messages/solana/settings/profitLevel";
 import { updateTransferHookInstructionData } from "@solana/spl-token";
 import { setUserLanguage, t } from "./locales";
 import { error } from "console";
@@ -4368,7 +4367,7 @@ ${await t('privateKey.p7', userId)}`,
                                 user.settings.auto_sell.takeProfitPercent_solana = newTpPercent;
                             }
                             await user.save();
-                            editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
+                            editAutoSellMessage(bot, chatId, userId, messageId);
                         }
                     }));
                 } else {
@@ -4379,7 +4378,7 @@ ${await t('privateKey.p7', userId)}`,
                         user.settings.auto_sell.takeProfitPercent_solana = TpPercent;
                     }
                     await user.save();
-                    editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
+                    editAutoSellMessage(bot, chatId, userId, messageId);
                 }
             }));
 
@@ -4425,7 +4424,7 @@ ${await t('privateKey.p7', userId)}`,
                                 user.settings.auto_sell.stopLossPercent_solana = newSlPercent;
                             }
                             await user.save();
-                            editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
+                            editAutoSellMessage(bot, chatId, userId, messageId);
                         }
                     }));
                 } else {
@@ -4436,7 +4435,7 @@ ${await t('privateKey.p7', userId)}`,
                         user.settings.auto_sell.stopLossPercent_solana = SlPercent;
                     }
                     await user.save();
-                    editProfitlevelMessageReplyMarkup(bot, chatId, userId, messageId);
+                    editAutoSellMessage(bot, chatId, userId, messageId);
                 }
             }));
             return;

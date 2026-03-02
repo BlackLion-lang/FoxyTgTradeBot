@@ -2,7 +2,6 @@ import TelegramBot from "node-telegram-bot-api";
 import { getBalance, getSolPrice } from "../../../services/solana";
 import { User } from "../../../models/user";
 import { t } from "../../../locales";
-// import { userLocalData } from "../../../../bot";
 
 export const getSwitchWallet = async (userId: number) => {
     const user = await User.findOne({ userId });
@@ -33,9 +32,6 @@ export const getSwitchWallet = async (userId: number) => {
         `${await t('switch.p7', userId)}\n\n` +
         `${await t('switch.p8', userId)}`;
 
-    // const address = userLocalData[userId].withdraw.address;
-    // const amount = userLocalData[userId].withdraw.amount;
-
     const options: TelegramBot.InlineKeyboardButton[][] = [];
 
     const wallets = user.wallets;
@@ -52,22 +48,8 @@ export const getSwitchWallet = async (userId: number) => {
     }
 
     options.push(
-        // [
-        //     {
-        //         text: "⬇️ Import Wallet",
-        //         callback_data: "wallets_switch_import",
-        //     },
-        //     {
-        //         text: "➕ Generate Wallet",
-        //         callback_data: "wallets_switch_generate",
-        //     },
-        // ],
         [
             { text: `${await t('back', userId)}`, callback_data: "wallets_back" },
-            // {
-            //     text: "🔄 Refresh",
-            //     callback_data: "wallets_switch_refresh",
-            // },
         ],
     );
 
@@ -103,7 +85,6 @@ export const editSwitchWalletsMessage = async (
     try {
         const { caption, markup } = await getSwitchWallet(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -112,7 +93,6 @@ export const editSwitchWalletsMessage = async (
                 reply_markup: markup,
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -125,10 +105,9 @@ export const editSwitchWalletsMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Switch wallets message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing switch wallets message:', error);
     }

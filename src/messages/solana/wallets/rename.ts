@@ -42,23 +42,15 @@ export const sendRenameWalletMessage = async (
     try {
         const { caption, markup } = await getRenameWallet(userId);
 
-        // Try to edit as text message first
         try {
-            const imagePath = "./src/assets/Rename-wallet.jpg"; // Path to the image
+            const imagePath = "./src/assets/Rename-wallet.jpg";
 
             await bot.sendPhoto(chatId, imagePath, {
                 caption: caption,
                 parse_mode: "HTML",
                 reply_markup: markup,
             });
-            // await bot.sendPhoto(caption, {
-            //     chat_id: chatId,
-            //     message_id: messageId,
-            //     parse_mode: "HTML",
-            //     reply_markup: markup,
-            // });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('There is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -71,10 +63,9 @@ export const sendRenameWalletMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Rename wallet message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing rename wallet message:', error);
     }

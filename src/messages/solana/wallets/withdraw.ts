@@ -54,7 +54,6 @@ export const editWithdrawWalletsMessage = async (
     try {
         const { caption, markup } = await getWithdrawWallet(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -63,7 +62,6 @@ export const editWithdrawWalletsMessage = async (
                 reply_markup: markup,
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -76,10 +74,9 @@ export const editWithdrawWalletsMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Withdraw wallet message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing withdraw wallet message:', error);
     }
@@ -92,7 +89,7 @@ export const sendWithdrawWalletsMessage = async (
     username?: any,
     first_name?: any,
 ) => {
-    const imagePath = "./src/assets/withdraw.jpg"; // Path to the image
+    const imagePath = "./src/assets/withdraw.jpg";
     const { caption, markup } = await getWithdrawWallet(userId);
 
     bot.sendPhoto(chatId, imagePath, {

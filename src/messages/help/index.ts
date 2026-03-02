@@ -1,17 +1,4 @@
 import TelegramBot from "node-telegram-bot-api";
-import {
-    getBalance,
-    getSolPrice,
-    getTokenBalance,
-    isValidSolanaAddress,
-} from "../../services/solana";
-import { getPairByAddress } from "../../services/dexscreener";
-import {
-    formatNumberStyle,
-    getCurrentTime,
-    isMEVProtect,
-} from "../../services/other";
-import { User } from "../../models/user";
 import { t } from "../../locales";
 
 export const getHelp = async (
@@ -46,7 +33,7 @@ export const getHelp = async (
             [
                 {
                     text: `${await t('help.changelogs', userId)}`,
-                    url: "https://the-cryptofox-learning.com/_bot/wiki/changelog.php?token=F39kL1xQ7vP2sN8gR4tY0zC6wB5hJ3m",
+                    url: "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=log&section=changelog&sig=T8O1DkD_8BwYdi_JsbdCgYsY_ucAEAUe",
                 },
             ],
             [

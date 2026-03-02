@@ -24,7 +24,6 @@ export const getTokenlist = async (
         }
         const balance = await getBalance(active_wallet.publicKey);
 
-    // const tokenlist = user.sniper.tokenlist || [];
     let tokenlist: any[];
 
     if (!user.sniper.is_snipping){
@@ -32,9 +31,6 @@ export const getTokenlist = async (
     }else{
         tokenlist = user.sniper.tokenlist || [];
     };
-    // console.log("User Token List:", tokenlist);
-
-    // Pre-translate strings to avoid await in map
     const unknownTokenText = await t('sniper.unknownToken', userId);
     const detailsUnavailableText = await t('sniper.detailsUnavailable', userId);
     const priceLabel = await t('sniper.price', userId);
@@ -57,7 +53,6 @@ export const getTokenlist = async (
                 const liquidity = pair?.liquidity?.usd ? `$${formatNumberStyle(pair.liquidity.usd)}` : 'N/A';
                 const volume24h = pair?.volume24h ? `$${formatNumberStyle(pair.volume24h)}` : 'N/A';
                 
-                // Handle priceChange24h - it can be a number or an object with h24 property
                 let priceChange24h = 'N/A';
                 if (pair?.priceChange24h !== undefined && pair?.priceChange24h !== null) {
                     const changeValue = typeof pair.priceChange24h === 'object' && pair.priceChange24h.h24 !== undefined
@@ -77,8 +72,6 @@ export const getTokenlist = async (
                 return `<strong>${index + 1}. ${tokenName} (${tokenSymbol})</strong>\n` +
                        `<code>${tokenAddress}</code>\n` +
                        `💰 ${priceLabel} : <strong>$${priceUsd}</strong> | 📊 ${marketCapLabel} : <strong>${marketCap}</strong>\n`;
-                    //    `💧 Liq: <strong>${liquidity}</strong> | 📈 Vol24h: <strong>${volume24h}</strong>\n` +
-                    //    `📉 24h: <strong>${priceChange24h}</strong> | 🏦 DEX: <strong>${dexId}</strong>`;
             } catch (error) {
                 console.error(
                     "Failed to load token info for",
@@ -94,22 +87,9 @@ export const getTokenlist = async (
         `${await t('sniper.detectedActiveTokens', userId)}\n\n` +
         detectedTokens.filter(Boolean).join("\n");
 
-    // const pairArray = await getPairByAddress(tokenAddress ? tokenAddress[0] : "");
-    // const pair = pairArray[0];
-
-    // const symbol = pair.baseToken.symbol;
-    // const name = pair.baseToken.name;
-
-    // Get current timestamp for refresh display
     const refreshTime = getCurrentTime();
 
     const caption =
-        // `<strong>${await t('Wallet', userId)}</strong>\n` +
-        // `<code>${active_wallet.publicKey}</code>\n` +
-        // `${await t('Balance', userId)} ${balance}\n\n` +
-        // `${await t('Buy Tip', userId)}\n` +
-        // `${await t('Sell Tip', userId)}\n\n` +
-        // `<strong>${await t('settings.p5', userId)}</strong>`;
         `${await t('sniper.tokenDetectionList', userId)}\n\n` +
         `${await t('sniper.tokenInfoInstruction', userId)} \n\n` +
         `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n` +
@@ -117,7 +97,6 @@ export const getTokenlist = async (
 
     const options: TelegramBot.InlineKeyboardButton[][] = [];
     
-    // Dynamically create buttons based on actual token list length (max 5)
     if (tokenlist.length > 0) {
         const buttonLabels = [
             await t('sniper.buyToken1', userId),
@@ -135,7 +114,6 @@ export const getTokenlist = async (
             "sniper_buy_5",
         ];
         
-        // Create buttons only for available tokens
         const tokenButtons: TelegramBot.InlineKeyboardButton[] = [];
         for (let i = 0; i < tokenlist.length && i < 5; i++) {
             tokenButtons.push({
@@ -144,12 +122,9 @@ export const getTokenlist = async (
             });
         }
         
-        // Layout buttons: 2 buttons per row, then remaining buttons in next row
         if (tokenButtons.length > 0) {
-            // First row: up to 2 buttons
             options.push(tokenButtons.slice(0, 2));
             
-            // Second row: remaining buttons (if any)
             if (tokenButtons.length > 2) {
                 options.push(tokenButtons.slice(2));
             }
@@ -168,7 +143,6 @@ export const getTokenlist = async (
     return { caption, markup: newMarkup };
     } catch (error: any) {
         console.error("Error in getTokenlist:", error);
-        // Return a default safe response instead of crashing
         const refreshTime = getCurrentTime();
         const errorCaption = `${await t('sniper.tokenDetectionList', userId)}\n\n${await t('sniper.noDetectedTokens', userId)}\n\n${await t('sniper.lastRefreshed', userId)} <strong>${refreshTime}</strong>`;
         const errorMarkup: TelegramBot.InlineKeyboardMarkup = {
@@ -191,7 +165,7 @@ export const sendTokenListMessage = async (
     first_name?: any,
 ) => {
     try {
-        const imagePath = "./src/assets/Snipping.jpg"; // Path to the image
+        const imagePath = "./src/assets/Snipping.jpg";
         const { caption, markup } = await getTokenlist(userId);
 
         await bot.sendPhoto(chatId, imagePath, {
@@ -201,7 +175,6 @@ export const sendTokenListMessage = async (
         });
     } catch (error: any) {
         console.error("Error sending token list message:", error);
-        // Try to send a fallback message
         try {
             const { caption, markup } = await getTokenlist(userId);
             await bot.sendMessage(chatId, caption, {
@@ -224,7 +197,6 @@ export const editTokenListMessage = async (
         const { caption, markup } = await getTokenlist(userId);
         console.log("Edit Token List Message");
         
-        // Try editing as caption first (for photo messages)
         try {
             await bot.editMessageCaption(caption, {
                 chat_id: chatId,
@@ -233,7 +205,6 @@ export const editTokenListMessage = async (
                 reply_markup: markup,
             });
         } catch (captionError: any) {
-            // If it fails because there's no caption, try editing as text
             if (captionError.message && captionError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageText(caption, {
                     chat_id: chatId,
@@ -242,7 +213,6 @@ export const editTokenListMessage = async (
                     reply_markup: markup,
                 });
             } else if (captionError.message && captionError.message.includes('message is not modified')) {
-                // Silent return, this is not an error
                 return;
             } else {
                 throw captionError;
@@ -250,7 +220,6 @@ export const editTokenListMessage = async (
         }
     } catch (error: any) {
         console.error("Error editing token list message:", error);
-        // Don't throw - just log the error to prevent bot crash
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Token list message is already up to date');
             return;

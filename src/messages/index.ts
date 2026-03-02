@@ -27,30 +27,6 @@ export const getAdminMenu = async (
     const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
     if (!settings) throw new Error("Tipping settings not found!");
     const status = settings.WhiteListUser ? "🟢" : "🔴";
-    // if (!user) {
-    //     const newUser = new User();
-    //     newUser.userId = userId;
-    //     newUser.username = username;
-    //     newUser.first_name = first_name;
-    //     const { publicKey, secretKey } = walletCreate();
-    //     newUser.wallets.push({
-    //         publicKey,
-    //         secretKey,
-    //         is_active_wallet: true,
-    //     });
-    //     await newUser.save();
-    //     user = newUser;
-    // }
-
-    // const publicKey = user.wallets.find(
-    //     (wallet) => wallet.is_active_wallet,
-    // )?.publicKey;
-
-    // if (!publicKey) {
-    //     throw new Error("Active wallet not found");await swap 
-    // }
-
-    // const balance = await getBalance(publicKey);
     const sol_price = getSolPrice();
     const adminBalance = settings.adminSolAddress.publicKey ? await getBalance(settings.adminSolAddress.publicKey) : 0;
     settings.adminSolAddress.balance = adminBalance;
@@ -59,7 +35,6 @@ export const getAdminMenu = async (
     let caption =
         `<strong>${await t('admin.p1', userId)}</strong>\n\n` +
         `${await t('admin.p2', userId)}\n\n` +
-        // `${await t('Whitelist Setting', userId)} : ${status}\n\n` +
         `${await t('admin.tipPercentage', userId)} : ${settings.feePercentage}%\n` +
         `${await t('admin.tipPercentageEth', userId)} : ${settings.feePercentageEth}%\n` +
         `${await t('admin.solanaPrice', userId)} : ${sol_price} $\n\n` +
@@ -78,7 +53,6 @@ export const getWelcome = async (
     // Check if user is whitelisted by username or userId
     const whiteListUsers = await WhiteListUser.find({});
     const isWhitelisted = whiteListUsers.some((u) => {
-        // Handle username comparison (with and without @ prefix)
         const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
         const currentUsername = username.startsWith('@') ? username.slice(1) : username;
 
@@ -93,12 +67,8 @@ export const getWelcome = async (
         `${await t('welcome.p6', userId)} \n` +
         `${await t('welcome.p7', userId)}\n`;
 
-    // Custom inline keyboard
     let buttons: any[] = [];
-
-    // Build the inline keyboard buttons
     if (userId === 7994989802 || userId === 2024002049) {
-        // Admin user: show admin panel button
         buttons = [
             [
                 { text: `${await t('welcome.request', userId)}`, url: "https://the-cryptofox-learning.com/fonctions/__bot_trading_tcfl/request_access_bot_trading_form.php" },
@@ -128,14 +98,12 @@ export const getMenu = async (
     let user = await User.findOne({ userId });
     const userChain = await getUserChain(userId);
     
-    // console.log('user', user)
     if (!user) {
         const newUser = new User();
         newUser.userId = userId;
         newUser.username = username;
         newUser.first_name = first_name;
         
-        // Create wallet based on chain preference
         if (userChain === "ethereum") {
             const { publicKey, secretKey } = ethereumWalletCreate();
                     const balance = await getEthereumBalance(publicKey);
@@ -161,19 +129,15 @@ export const getMenu = async (
         user = newUser;
     }
 
-    // Get active wallet based on chain
     let publicKey: string | undefined;
     let balance: number;
     let currencySymbol: string;
     let price: number;
     
     if (userChain === "ethereum") {
-        // Ensure ethereumWallets array exists and has wallets
-        // Check if array is empty or doesn't exist
         const hasEthereumWallets = user.ethereumWallets && user.ethereumWallets.length > 0;
         
         if (!hasEthereumWallets) {
-            // No Ethereum wallets exist, create one
             const { publicKey: newPublicKey, secretKey: newSecretKey } = ethereumWalletCreate();
             balance = await getEthereumBalance(newPublicKey);
             user.ethereumWallets.push({
@@ -184,7 +148,7 @@ export const getMenu = async (
                 label: "Start Wallet"
             });
             await user.save();
-            return await getMenu(userId, username, first_name); // Re-run to use the new wallet
+            return await getMenu(userId, username, first_name);
         }
         
         const activeWallet = user.ethereumWallets.find(
@@ -202,7 +166,7 @@ export const getMenu = async (
                 label: "Start Wallet"
             });
             await user.save();
-            return await getMenu(userId, username, first_name); // Re-run to use the new wallet
+            return await getMenu(userId, username, first_name);
         }
         
         publicKey = activeWallet.publicKey;
@@ -210,7 +174,6 @@ export const getMenu = async (
         price = await getEtherPrice();
         currencySymbol = "ETH";
         
-        // Update balance in database
         const wallet = user.ethereumWallets.find(w => w.publicKey === publicKey);
         if (wallet) {
             wallet.balance = balance.toString();
@@ -231,7 +194,7 @@ export const getMenu = async (
                 balance: balance.toString()
         });
         await user.save();
-        return await getMenu(userId, username, first_name); // Re-run to use the new wallet
+        return await getMenu(userId, username, first_name);
     }
 
         publicKey = activeWallet.publicKey;
@@ -239,7 +202,6 @@ export const getMenu = async (
         price = getSolPrice();
         currencySymbol = "SOL";
 
-        // Update balance in database
         const wallet = user.wallets.find(w => w.publicKey === publicKey);
     if (wallet) {
         wallet.balance = balance.toString();
@@ -266,7 +228,6 @@ export const getMenu = async (
 
     let caption =
         `<strong>${await t('menu.p1', userId)}, ${user.username} !</strong>\n\n` +
-        // `${await t('menu.p2', userId)}\n` +
         `${menuP3}\n\n` +
         `<strong>${await t('menu.chain', userId)} ${userChain === "ethereum" ? "🟠 Ethereum" : "🟠 Solana"}</strong>\n\n` +
         `<strong>${menuP2}</strong>\n` +
@@ -274,9 +235,6 @@ export const getMenu = async (
         `<code>${publicKey}</code>\n\n` +
         `${menuP5}\n\n` +
         `${await t('menu.botVersion', userId)} <strong>${versionData.bot_telegram_version}</strong>\n` ;
-
-    // `${await t('menu.p6', userId)}\n\n`;
-    // `⚠️ Telegram ADs that might be displayed above are most likely a SCAM. We have no control over them. Please be cautious.`;
 
     return { caption, markup: getMenuMarkup(userId) };
 };
@@ -295,7 +253,7 @@ export const sendAdminPanelMessage = async (
             first_name,
         );
 
-        const imagePath = "./src/assets/Admin-panel.jpg"; // Ensure the image is in this path
+        const imagePath = "./src/assets/Admin-panel.jpg";
 
         await bot.sendPhoto(chatId, imagePath, {
             caption: caption,
@@ -669,7 +627,6 @@ export const sendMenuMessageWithImage = async (
                     await referuser.save();
                     await user.save();
                     
-                    // Notify referrer
                     try {
                         await bot.sendMessage(
                             referrerUserId,
@@ -686,7 +643,6 @@ export const sendMenuMessageWithImage = async (
             } catch (error) {
                 console.error("Error processing referral:", error);
             } finally {
-                // cleanup pending
                 await PendingUser.deleteOne({ userId: String(userId) });
             }
         }

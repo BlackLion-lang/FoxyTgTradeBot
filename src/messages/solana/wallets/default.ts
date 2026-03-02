@@ -43,7 +43,6 @@ export const editDefaultWalletMessage = async (
     try {
         const { caption, markup } = await getDefaultWallet(userId);
 
-        // Try to edit as text message first
         try {
             await bot.editMessageText(caption, {
                 chat_id: chatId,
@@ -52,7 +51,6 @@ export const editDefaultWalletMessage = async (
                 reply_markup: markup,
             });
         } catch (textError: any) {
-            // If it fails because there's no text to edit, try editing as caption (for photo messages)
             if (textError.message && textError.message.includes('there is no text in the message to edit')) {
                 await bot.editMessageCaption(caption, {
                     chat_id: chatId,
@@ -65,10 +63,9 @@ export const editDefaultWalletMessage = async (
             }
         }
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error.message && error.message.includes('message is not modified')) {
             console.log('Default wallet message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing default wallet message:', error);
     }

@@ -1,6 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../../../models/user";
 import { t } from "../../../locales";
+import { getUserChain } from "../../../utils/chain";
 
 export const getQuickBuy = async (
     userId: number,
@@ -11,7 +12,7 @@ export const getQuickBuy = async (
 
     const caption =
         `<strong>${await t('quickBuy.p1', userId)}</strong>\n\n` +
-        `${await t('quickBuy.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('quickBuy.p3', userId)}</a>\n\n` +
+        `${await t('quickBuy.p2', userId)}\n <a href="${(await getUserChain(userId)) === "ethereum" ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=achatrapide&sig=xQihetB-R9V7EfQ-eW-w4vKCo2nTYsMD" : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=achatrapide&sig=IWJhEfKF729Jzhi8wSAFYYuXaE3XJy7Y"}">${await t('quickBuy.p3', userId)}</a>\n\n` +
         `${await t('quickBuy.p4', userId)}\n\n` +
         `<strong>${await t('quickBuy.p5', userId)}</strong>\n\n` +
         `<code>• ${user.settings.quick_buy.buy_amount[0]} SOL\n` +
@@ -46,15 +47,6 @@ export const getQuickBuy = async (
                 callback_data: "settings_quick_buy_amount_4",
             },
         ],
-        // [
-        //     {
-        //         text: user.settings.quick_buy.is_auto_sell
-        //             ? "🟢 Auto-Sell on Dev Sell"
-        //             : "🔴 Auto-Sell on Dev Sell",
-        //         callback_data: "settings_quick_buy_auto_sell",
-        //     },
-        // ],
-        // [{ text: "💸 TP & SL", callback_data: "settings_quick_buy_tpsl" }],
         [
             { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
             { text: `${await t('backMenu', userId)}`, callback_data: "menu_back", }

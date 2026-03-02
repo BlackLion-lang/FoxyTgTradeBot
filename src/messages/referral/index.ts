@@ -1,17 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../../models/user";
-import { Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.js";
-import bs58 from "bs58";
-import { connection } from "../../config/connection";
-import { getBalance, getSolPrice, walletCreate, getSolanaPrice } from "../../services/solana";
-import { getWalletMessage } from "../../utils/config";
-import { getAdminPanelMarkup, getMenuMarkup } from "../../utils/markup";
-import { WhiteListUser } from "../../models/whitelist";
-import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "../../config/security";
-import { error } from "console";
-import { swapToken } from "../../services/jupiter";
+import { getSolPrice } from "../../services/solana";
 import { t } from "../../locales";
-import { settings } from "../../commands/settings";
 import { TippingSettings } from "../../models/tipSettings";
 
 export const getReferral = async (
@@ -34,6 +24,7 @@ export const getReferral = async (
         `${await t('referral.p5', userId)} :\n` +
         `<code> https://t.me/Tcfl_trade_bot?start=ref_${userId} </code>\n\n` +
         `${await t('referral.p6', userId)} : ${user?.referrer_wallet ? user.referrer_wallet : `${await t('admin.walletName', userId)}`}  \n\n` +
+        `${await t('settings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=parainage&sig=I1WBEcp42_mkHyDMiicdFI65hvRq38UE">${await t('settings.p3', userId)}</a>\n\n` +
         `${await t('referral.p7', userId)}\n`;
     const reply_markup: TelegramBot.InlineKeyboardMarkup = {
         inline_keyboard: [

@@ -54,12 +54,16 @@ export const showBundleWalletMenu = async (
     const bundleCount = freshUser?.bundleWallets?.length || 0;
 
     const imagePath = "./src/assets/Multiwallet.jpg";
+    const needHelp = await t('settings.p2', userId);
+    const clickHere = await t('settings.p3', userId);
     const caption = `👜 *${await t('bundleWallets.menuTitle', userId)}*\n\n` +
         `📦 *${await t('bundleWallets.safeBundler', userId)}*\n` +
         `• ${await t('bundleWallets.maxWallets', userId)}\n` +
         `• ${await t('bundleWallets.fasterExecution', userId)}\n` +
         `• ${await t('bundleWallets.bestForOperations', userId)}\n\n` +
         `${await t('bundleWallets.currentWallets', userId)} : *${bundleCount}*\n\n` +
+        `${needHelp}\n[${clickHere}](https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=walletbundle&sig=3w3CaHi7UZrXZuAMZB7xuKek6nKRC-bB
+)\n\n` +
         `${await t('bundleWallets.chooseOption', userId)}`;
 
     await bot.sendPhoto(chatId, imagePath, {

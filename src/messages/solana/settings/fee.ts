@@ -11,15 +11,13 @@ export const getFee = async (
     const user = (await User.findOne({ userId })) || new User();
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
-    
-    // For Ethereum, show gas fee settings instead of Solana fee settings
+
     if (isEthereum) {
         const gasValues = user.settings.gas_values_eth || [10, 50, 100];
         const currentGasSpeed = (user.settings as any).auto_gas_eth || "medium";
-        
-        // Get recommended gas price
+
         const recommendedGasPrice = await getRecommendedGasPrice(currentGasSpeed);
-        
+
         let feeSpeed: string;
         switch (currentGasSpeed) {
             case 'low':
@@ -38,10 +36,11 @@ export const getFee = async (
                 feeSpeed = await t('feeSettings.p9', userId);
                 break;
         }
-        
+
         const caption =
             `<strong>${await t('feeSettings.gasFeeSettingsEthereum', userId)}</strong>\n\n` +
-            `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p3', userId)}</a>\n\n` +
+            `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=frais&sig=B8wF2Jbu96_1e19FVno4c1ivttAqmiy_
+">${await t('feeSettings.p3', userId)}</a>\n\n` +
             `<strong>${await t('feeSettings.configureGasFeeEthereum', userId)}</strong>\n\n` +
             `<strong>${await t('feeSettings.p16', userId)}</strong> ${feeSpeed}\n\n` +
             `${await t('feeSettings.p14', userId)} ${recommendedGasPrice.toFixed(1)} Gwei\n\n` +
@@ -87,8 +86,7 @@ export const getFee = async (
 
         return { caption, markup: walletsMarkup };
     }
-    
-    // Solana fee settings
+
     const result = await getRecommendedMEVTip(user.settings.auto_tip);
 
     let feeSpeed: string;
@@ -109,10 +107,8 @@ export const getFee = async (
 
     const caption =
         `<strong>${await t('feeSettings.p1', userId)}</strong>\n\n` +
-        // `<strong>⛽️ Fee Settings</strong>\n\n` +
-        `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p3', userId)}</a>\n\n` +
-        // `${await t('feeSettings.p4', userId)}\n\n` +
-        // `${await t('feeSettings.p5', userId)}\n\n` +
+        `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=frais&sig=B8wF2Jbu96_1e19FVno4c1ivttAqmiy_
+">${await t('feeSettings.p3', userId)}</a>\n\n` +
         `<strong>${await t('feeSettings.p6', userId)}</strong>\n\n` +
         `<strong>${await t('feeSettings.p16', userId)}</strong> ${feeSpeed}\n\n` +
         `${await t('feeSettings.p14', userId)} ${result / 10 ** 9} SOL\n\n` +
@@ -170,13 +166,12 @@ export const editFeeMessage = async (
             reply_markup: markup
         });
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error?.message && error.message.includes('message is not modified')) {
             console.log('Fee message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing fee message:', error);
-        throw error; // Re-throw other errors
+        throw error;
     }
 };
 
@@ -239,7 +234,8 @@ export const editFeeAutoMessage = async (
             `<strong>${await t('feeSettings.p11', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} 
-<a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
+<a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
+">${await t('feeSettings.p13', userId)}</a>
 
 ${await t('feeSettings.p14', userId)} ${result / 10 ** 9} SOL
 
@@ -252,13 +248,12 @@ ${await t('feeSettings.p14', userId)} ${result / 10 ** 9} SOL
             },
         );
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error?.message && error.message.includes('message is not modified')) {
             console.log('Fee auto message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing fee auto message:', error);
-        throw error; // Re-throw other errors
+        throw error;
     }
 };
 
@@ -270,13 +265,12 @@ export const sendFeeAutoMessage = async (
 ) => {
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
-    
+
     if (isEthereum) {
-        // Ethereum recommended gas settings
         const result = await getRecommendedGasPrice("veryHigh");
         const user = (await User.findOne({ userId })) || new User();
         const currentGasSpeed = (user.settings as any).auto_gas_eth || "medium";
-        
+
         const newMarkup: TelegramBot.InlineKeyboardMarkup = {
             inline_keyboard: [
                 [
@@ -313,7 +307,8 @@ export const sendFeeAutoMessage = async (
             chatId,
             `<strong>${await t('feeSettings.recommendedGasFeeSettings', userId)}</strong>
 
-${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
+${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
+">${await t('feeSettings.p13', userId)}</a>
 
 ${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwei
 
@@ -325,36 +320,36 @@ ${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwe
             },
         );
     } else {
-        // Solana recommended fee settings
-    const result = await getRecommendedMEVTip("veryHigh");
-    const user = (await User.findOne({ userId })) || new User();
-    const newMarkup: TelegramBot.InlineKeyboardMarkup = {
-        inline_keyboard: [
-            [
-                { text: await t('feeSettings.slowButton', userId), callback_data: "speed_medium" },
-                { text: await t('feeSettings.fastButton', userId), callback_data: "speed_veryHigh" },
-                { text: await t('feeSettings.normalButton', userId), callback_data: "speed_high" },
-                { text: await t('feeSettings.slowButton2', userId), callback_data: "speed_medium" },
+        const result = await getRecommendedMEVTip("veryHigh");
+        const user = (await User.findOne({ userId })) || new User();
+        const newMarkup: TelegramBot.InlineKeyboardMarkup = {
+            inline_keyboard: [
+                [
+                    { text: await t('feeSettings.slowButton', userId), callback_data: "speed_medium" },
+                    { text: await t('feeSettings.fastButton', userId), callback_data: "speed_veryHigh" },
+                    { text: await t('feeSettings.normalButton', userId), callback_data: "speed_high" },
+                    { text: await t('feeSettings.slowButton2', userId), callback_data: "speed_medium" },
+                ],
+                [
+                    { text: await t('back', userId), callback_data: "settings_fee_back" },
+                    { text: await t('refresh', userId), callback_data: "autotip_refresh" },
+                ]
             ],
-            [
-                { text: await t('back', userId), callback_data: "settings_fee_back" },
-                { text: await t('refresh', userId), callback_data: "autotip_refresh" },
-            ]
-        ],
-    };
-    bot.sendMessage(
-        chatId,
-        `<strong>${await t('feeSettings.recommendedFeeSettings', userId)}</strong>
+        };
+        bot.sendMessage(
+            chatId,
+            `<strong>${await t('feeSettings.recommendedFeeSettings', userId)}</strong>
 
-${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
+${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
+">${await t('feeSettings.p13', userId)}</a>
 
 ${await t('feeSettings.currentRecommendedFee', userId)} ${result} SOL
 
 <strong>${await t('feeSettings.autoCalculateMEVTip', userId)}</strong>`,
-        {
-            parse_mode: "HTML",
-            reply_markup: newMarkup,
-            disable_web_page_preview: true
+            {
+                parse_mode: "HTML",
+                reply_markup: newMarkup,
+                disable_web_page_preview: true
             },
         );
     }
@@ -368,34 +363,32 @@ export const editFeeAutoMessageEth = async (
 ) => {
     const user = (await User.findOne({ userId })) || new User();
     const currentGasSpeed = (user.settings as any).auto_gas_eth || "medium";
-    
+
     console.log(`[editFeeAutoMessageEth] User ${userId}, currentGasSpeed: ${currentGasSpeed}`);
-    
-    // Get recommended gas price based on current speed setting
+
     const result = await getRecommendedGasPrice(currentGasSpeed);
-    
+
     console.log(`[editFeeAutoMessageEth] Recommended gas price for speed ${currentGasSpeed}: ${result} Gwei`);
-    
-    // Get speed label for display
+
     let feeSpeed: string;
     switch (currentGasSpeed) {
         case 'low':
-            feeSpeed = await t('feeSettings.p8', userId); // Slow
+            feeSpeed = await t('feeSettings.p8', userId);
             break;
         case 'medium':
-            feeSpeed = await t('feeSettings.p9', userId); // Normal
+            feeSpeed = await t('feeSettings.p9', userId);
             break;
         case 'high':
-            feeSpeed = await t('feeSettings.p10', userId); // Fast
+            feeSpeed = await t('feeSettings.p10', userId);
             break;
         case 'veryHigh':
-            feeSpeed = await t('feeSettings.p10', userId); // Fast (Very Fast)
+            feeSpeed = await t('feeSettings.p10', userId);
             break;
         default:
-            feeSpeed = await t('feeSettings.p9', userId); // Normal
+            feeSpeed = await t('feeSettings.p9', userId);
             break;
     }
-    
+
     try {
         const newMarkup: TelegramBot.InlineKeyboardMarkup = {
             inline_keyboard: [
@@ -433,7 +426,8 @@ export const editFeeAutoMessageEth = async (
             `<strong>${await t('feeSettings.p11', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} 
-<a href="https://the-cryptofox-learning.com/">${await t('feeSettings.p13', userId)}</a>
+<a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
+">${await t('feeSettings.p13', userId)}</a>
 
 <strong>${await t('feeSettings.p16', userId)}</strong> ${feeSpeed}
 
@@ -448,12 +442,11 @@ ${await t('feeSettings.p14', userId)} ${result.toFixed(1)} Gwei
             },
         );
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error?.message && error.message.includes('message is not modified')) {
             console.log('Fee auto message (Ethereum) is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing fee auto message (Ethereum):', error);
-        throw error; // Re-throw other errors
+        throw error;
     }
 };

@@ -4,8 +4,6 @@ import { t } from "../../../locales";
 
 export const getAutoSell = async (
     userId: number,
-    username: string = "",
-    first_name: string = "",
 ) => {
     const user = await User.findOne({ userId });
     if (!user) throw "No User";
@@ -14,7 +12,6 @@ export const getAutoSell = async (
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
     
-    // Get chain-specific TP/SL values
     const takeProfitPercent = isEthereum 
         ? (user.settings.auto_sell.takeProfitPercent_ethereum ?? 10)
         : (user.settings.auto_sell.takeProfitPercent_solana ?? 10);
@@ -30,40 +27,25 @@ export const getAutoSell = async (
         ? (user.settings.auto_sell?.enabled_ethereum ?? false)
         : (user.settings.auto_sell?.enabled_solana ?? false);
     const status = enabled === true ? "🟢" : "🔴";
-    // const once = user.settings.auto_sell.sellOnce === true ? "🟢" : "🔴";
-    // const text1 = user.settings.auto_sell.enabled === true ? "Enabled" : "Disabled";
-    // const text2 = user.settings.auto_sell.sellOnce === true ? "Enabled" : "Disabled";
 
     const chainName = isEthereum ? "Ethereum" : "Solana";
     const chainEmoji = isEthereum ? "🟠" : "🟠";
+    const autoSellHelpUrl = isEthereum
+        ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=venteauto&sig=WO31GUxNRLMuWWA7TesQ_ynvgtV13XZK"
+        : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=venteauto&sig=scUK6DZdM5KF7JMttGwra126UBqUZYgN";
 
     const caption =
         `<strong>${await t('autoSell.p1', userId)}</strong>\n\n` +
-        `${await t('autoSell.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('autoSell.p3', userId)}</a>\n\n` +
+        `${await t('autoSell.p2', userId)}\n <a href="${autoSellHelpUrl}">${await t('autoSell.p3', userId)}</a>\n\n` +
         `${await t('autoSell.p4', userId)}\n\n` +
         `${await t('menu.chain', userId)} <strong>${chainEmoji} ${chainName}</strong>\n\n` +
         `<strong>${user.username} (${await t('autoSell.p5', userId)})</strong> : <strong>${active_wallet.label}\n</strong>` +
         `<code>${active_wallet.publicKey}</code>\n\n` +
-        // `<strong>💹 Sell Percent:</strong> ${user.settings.auto_sell.sellPercent} %\n\n` +n
         `<strong>${await t('autoSell.p6', userId)}</strong> ${takeProfitPercent}%\n` +
         `<strong>${await t('autoSell.p7', userId)}</strong> ${stopLossPercent}%\n\n` +
-        // `<strong>${status} Status</strong>\n\n` +
-        // `<strong>${once} Sell Once</strong>\n\n` +
-        // `<strong>⚙️ Auto Sell Rules</strong>\n\n` +
-        // `<code>• No rules set.</code>\n\n` +
         `<strong>${await t('autoSell.p8', userId)}</strong>`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
-        // [
-        //     {
-        //         text: `🆕 Sell ${user.settings.auto_sell.sellPercent}%`,
-        //         callback_data: "settings_auto_Sell_add_rule",
-        //     },
-        //     // {
-        //     //     text: "🗑 Delete Rule",
-        //     //     callback_data: "settings_auto_Sell_delete_rule",
-        //     // },
-        // ],
         [
             {
                 text: enabled ? `🟢 ${await t('autoSell.status1', userId)}` : `🔴 ${await t('autoSell.status2', userId)}`,
@@ -79,22 +61,9 @@ export const getAutoSell = async (
                 text: `${await t('autoSell.wallet', userId)} ${active_wallet.label}`,
                 callback_data: "settings_auto_Sell_wallets",
             },
-            
-            //   {
-            //     text: `🆕 Sell ${user.settings.auto_sell.sellPercent}%`,
-            //     callback_data: "settings_auto_Sell_add_rule",
-            // }
-            // {
-            //     text: user.settings.auto_sell.sellOnce ? "🟢 Sell Once" : "🔴 Sell Once",
-            //     callback_data: "settings_auto_Sell_Sell_once",
-            // }
         ],
         [
              { text: `${await t('backSettings', userId)}`, callback_data: "settings_back" },
-            // {
-            //     text: "🔄 Refresh",
-            //     callback_data: "settings_auto_Sell_refresh",
-            // },
         ],
     ];
 
@@ -134,13 +103,12 @@ export const editAutoSellMessage = async (
             reply_markup: markup,
         });
     } catch (error: any) {
-        // Handle the "message is not modified" error gracefully
         if (error?.message && error.message.includes('message is not modified')) {
             console.log('Auto sell message is already up to date');
-            return; // Silent return, this is not an error
+            return;
         }
         console.error('Error editing auto sell message:', error);
-        throw error; // Re-throw other errors
+        throw error;
     }
 };
 
@@ -152,7 +120,7 @@ export const sendAutoSellMessage = async (
 ) => {
     const { caption, markup } = await getAutoSell(userId);
 
-    const imagePath = "./src/assets/Auto-sell.jpg"; // Path to the image 
+    const imagePath = "./src/assets/Auto-sell.jpg";
 
     bot.sendPhoto(chatId, imagePath, {
         caption,
