@@ -323,6 +323,7 @@ bot.onText(/\/wallets/, async (msg, match) => {
         }
     }
 });
+
 bot.onText(/\/settings/, async (msg, match) => {
     const whiteListUsers = await WhiteListUser.find({});
 
@@ -426,6 +427,99 @@ bot.onText(/\/copytrading/, async (msg) => {
     } else {
         await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
+});
+
+const AUTH_COOLDOWN_MS = 3000;
+const lastAuthIssuedAtByUser = new Map<number, number>();
+
+function formatAuthExpiryParis(expiresAtUnix: number | undefined): string {
+    if (!expiresAtUnix) return "";
+    const d = new Date(expiresAtUnix * 1000);
+    const s = new Intl.DateTimeFormat("fr-FR", {
+        timeZone: "Europe/Paris",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+    }).format(d);
+    return s;
+}
+
+async function sendAuthenticateVerifyMessage(bot: TelegramBot, chatId: number, userId: number): Promise<void> {
+    const last = lastAuthIssuedAtByUser.get(userId) ?? 0;
+    const now = Date.now();
+    if (now - last < AUTH_COOLDOWN_MS) {
+        await bot.sendMessage(chatId, await t("authenticate.cooldown", userId)).catch(() => {});
+        return;
+    }
+    lastAuthIssuedAtByUser.set(userId, now);
+    if (!process.env.ISSUE_LINK_URL || !process.env.ISSUER_API_KEY) {
+        await bot.sendMessage(chatId, await t("authenticate.error", userId)).catch(() => {});
+        return;
+    }
+    try {
+        const { link, expiresAt } = await issueVerifyLink();
+        const expiryStr = formatAuthExpiryParis(expiresAt);
+        const text =
+            `${await t("authenticate.title", userId)}\n\n` +
+            `${await t("authenticate.singleUseWarning", userId)}\n\n` +
+            `${await t("authenticate.clickButton", userId)}\n\n` +
+            (expiryStr ? `${await t("authenticate.validUntil", userId)} ${expiryStr}` : "");
+        const cancelBtn = await getCancelButton(userId, "authenticate_cancel");
+        await bot.sendMessage(chatId, text.trim(), {
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: [
+                    [{ text: await t("authenticate.verifyButton", userId), url: link }],
+                    [cancelBtn, { text: `${await t("backMenu", userId)}`, callback_data: "menu_back" }]
+                ]
+            }
+        });
+    } catch (err) {
+        console.error("AUTH ERROR:", err instanceof Error ? err.message : err);
+        await bot.sendMessage(chatId, await t("authenticate.error", userId)).catch(() => {});
+    }
+}
+
+async function issueVerifyLink(): Promise<{ link: string; expiresAt?: number }> {
+    const ISSUE_LINK_URL = process.env.ISSUE_LINK_URL;
+    const ISSUER_API_KEY = process.env.ISSUER_API_KEY;
+    const HTTP_TIMEOUT_MS = Number(process.env.HTTP_TIMEOUT_MS || "8000");
+    if (!ISSUE_LINK_URL || !ISSUER_API_KEY) {
+        throw new Error("ISSUE_LINK_URL or ISSUER_API_KEY not configured");
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), HTTP_TIMEOUT_MS);
+    try {
+        const response = await fetch(ISSUE_LINK_URL, {
+            method: "GET",
+            headers: { "X-API-KEY": ISSUER_API_KEY },
+            signal: controller.signal
+        });
+        const text = await response.text();
+        let data: { ok?: boolean; link?: string; expires_at?: number; error?: string };
+        try {
+            data = JSON.parse(text);
+        } catch {
+            throw new Error("Non-JSON response");
+        }
+        if (!response.ok || !data.ok) {
+            throw new Error(data.error || "API error");
+        }
+        return { link: data.link!, expiresAt: data.expires_at };
+    } finally {
+        clearTimeout(timeoutId);
+    }
+}
+
+bot.onText(/\/authenticate/, async (msg) => {
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+    const userId = Number(fromId);
+    const chatId = msg.chat.id;
+    await sendAuthenticateVerifyMessage(bot, chatId, userId);
 });
 
 bot.onText(/\/positions/, async (msg, match) => {
@@ -665,7 +759,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
         const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back",
             "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions",
-            "help", "sniper", "trending_coin", "referral_system"];
+            "help", "sniper", "trending_coin", "referral_system", "authenticate", "wallets_withdraw_cancel"];
         if (navigationActions.includes(sel_action || "")) {
             cleanupUserTextHandler(userId);
         }
@@ -1161,6 +1255,41 @@ bot.on("callback_query", async (callbackQuery) => {
         }
         if (sel_action === "admin_wallets_ethereum") {
             await setWalletLimit('messages.walletLimitEthereum', 'walletsEthereum');
+        }
+        if (sel_action === "admin_copy_trade_limit") {
+            const sent = bot.sendMessage(chatId, `${await t('messages.copyTradeWalletLimit', userId)}`).then((sentMessage) => {
+                bot.once('text',
+                    createUserTextHandler(userId, async (reply) => {
+                        const num = Number(reply.text || "");
+                        if (isNaN(num) || num < 1 || num > 100) {
+                            bot.sendMessage(chatId, `${await t('errors.invalidwallets', userId)}`).then((newSentMessage) => {
+                                setTimeout(() => safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { }), 3000);
+                                bot.once('text',
+                                    createUserTextHandler(userId, async (newReply) => {
+                                        const newnum = Number(newReply.text || "");
+                                        if (isNaN(newnum) || newnum < 1 || newnum > 100) {
+                                            bot.sendMessage(chatId, `${await t('errors.invalidwallets', userId)}`);
+                                        } else {
+                                            (settings as any).copyTradeMonitoredWalletsLimit = newnum;
+                                            await settings.save();
+                                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                                        }
+                                        await safeDeleteMessage(bot, chatId, newReply.message_id);
+                                    }),
+                                );
+                            });
+                        } else {
+                            (settings as any).copyTradeMonitoredWalletsLimit = num;
+                            await settings.save();
+                            editAdminPanelMessage(bot, chatId, userId, messageId);
+                        }
+                        setTimeout(() => {
+                            safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => { });
+                            safeDeleteMessage(bot, chatId, reply.message_id).catch(() => { });
+                        }, 2000);
+                    }),
+                );
+            });
         }
 
         if (sel_action === "admin_subscription_price_week") {
@@ -2604,7 +2733,9 @@ ${amount} SOL ⇄ <code>${solToAddress}</code>
                     bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientEth', userId)}`);
                     return;
                 }
-                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
+                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`, {
+                    reply_markup: { inline_keyboard: [[await getCancelButton(userId, "wallets_withdraw_cancel")]] },
+                })
                     .then((sentMessage2) => {
                         bot.once('text', createUserTextHandler(userId, async (reply) => {
                             const address = (reply.text || '').trim();
@@ -2631,6 +2762,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                             { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
                                             { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' },
                                         ],
+                                        [await getCancelButton(userId, "wallets_withdraw_cancel")],
                                     ],
                                 },
                             });
@@ -2719,7 +2851,10 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 const withdraw100Text = await t('withdrawal.withdraw100', userId);
                 bot.sendMessage(chatId, withdrawMessage, {
                     reply_markup: {
-                        inline_keyboard: [[{ text: withdraw100Text, callback_data: `wallets_withdraw_100_${index}` }]],
+                        inline_keyboard: [
+                            [{ text: withdraw100Text, callback_data: `wallets_withdraw_100_${index}` }],
+                            [await getCancelButton(userId, "wallets_withdraw_cancel")],
+                        ],
                     },
                 })
                     .then((sentMessage1) => {
@@ -2747,7 +2882,9 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                     return;
                                 }
 
-                                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`)
+                                bot.sendMessage(chatId, `${await t('messages.withdraw2', userId)}`, {
+                                    reply_markup: { inline_keyboard: [[await getCancelButton(userId, "wallets_withdraw_cancel")]] },
+                                })
                                     .then(sentMessage2 => {
                                         bot.once('text', createUserTextHandler(userId, async neewReply => {
                                             const address = neewReply.text?.trim() || '';
@@ -2772,7 +2909,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                             [
                                                                 { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
                                                                 { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' }
-                                                            ]
+                                                            ],
+                                                            [await getCancelButton(userId, "wallets_withdraw_cancel")],
                                                         ]
                                                     }
                                                 })
@@ -2950,6 +3088,19 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 sendEthereumWalletsMessageWithImage(bot, chatId, userId, messageId);
             } else {
                 sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            }
+            return;
+        }
+
+        if (sel_action === "wallets_withdraw_cancel") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            cleanupUserTextHandler(userId);
+            await safeDeleteMessage(bot, chatId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                sendWithdrawEthereumWalletsMessage(bot, chatId, userId);
+            } else {
+                sendWithdrawWalletsMessage(bot, chatId, userId);
             }
             return;
         }
@@ -4550,6 +4701,17 @@ ${await t('privateKey.p7', userId)}`,
                 await safeDeleteMessage(bot, chatId, messageId);
             }
         }
+        else if (sel_action === "authenticate") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            await sendAuthenticateVerifyMessage(bot, chatId, userId);
+            return;
+        }
+
+        if (sel_action === "authenticate_cancel") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            if (messageId) await bot.deleteMessage(chatId, messageId).catch(() => {});
+            return;
+        }
 
         if (sel_action === "sniper") {
             const userCheck = await User.findOne({ userId });
@@ -5061,6 +5223,16 @@ ${await t('privateKey.p7', userId)}`,
             return;
         }
         if (sel_action === "copyTrade_add") {
+            const tipSettings = await TippingSettings.findOne() || new TippingSettings();
+            const limit = (tipSettings as any).copyTradeMonitoredWalletsLimit ?? 10;
+            const user = await User.findOne({ userId });
+            const currentCount = user?.copyTrade?.monitoredWallets?.length ?? 0;
+            if (currentCount >= limit) {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                const errMsg = `${await t("errors.copyTradeWalletLimitReached", userId)} ${limit}.`;
+                await bot.sendMessage(chatId, errMsg).catch(() => {});
+                return;
+            }
             const enterAddress = await t("copyTrade.enterAddress", userId);
             await bot.deleteMessage(chatId, messageId).catch(() => {});
             const sent = await bot.sendMessage(chatId, enterAddress, {
@@ -6329,6 +6501,7 @@ async function setBotCommands() {
         { command: "/chains", description: `${await t('commands.chains', defaultUserId)}` },
         { command: "/language", description: `${await t('commands.language', defaultUserId)}` },
         { command: "/copytrading", description: `${await t('commands.copytrading', defaultUserId)}` },
+        { command: "/authenticate", description: `${await t('commands.authenticate', defaultUserId)}` },
         // { command: "/orders", description: "View limit orders." },
     ]).then(() => {
             console.log("Commands have been set successfully.");

@@ -12,6 +12,7 @@ const tippingSettingsSchema = new mongoose.Schema({
   walletsSolana: { type: Number, default: 20 }, // Max Solana wallets per user (create + import)
   walletsEthereum: { type: Number, default: 20 }, // Max Ethereum wallets per user (create + import)
   referralSettings: { type: Number, default: 10},
+  copyTradeMonitoredWalletsLimit: { type: Number, default: 10 }, // Max monitored wallets per user (copy trading)
   subscriptionPriceWeek: { type: Number, default: 0.3 }, // Subscription price for 1 week in SOL
   subscriptionPriceMonth: { type: Number, default: 0.5 }, // Subscription price for 1 month in SOL
   subscriptionPriceYear: { type: Number, default: 5 }, // Subscription price for 1 year in SOL

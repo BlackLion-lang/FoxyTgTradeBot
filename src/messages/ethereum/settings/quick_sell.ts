@@ -12,7 +12,7 @@ export const getQuickSellEth = async (
 
     const caption =
         `<strong>${await t('quickSell.p1', userId)}</strong>\n\n` +
-        `${await t('quickSell.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('quickSell.p3', userId)}</a>\n\n` +
+        `${await t('quickSell.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=venterapide&sig=QQTDMg-ZhuLecbmVHYgMnhz2-58HPM6W">${await t('quickSell.p3', userId)}</a>\n\n` +
         `${await t('quickSell.p4', userId)}\n\n` +
         `<strong>${await t('quickSell.p5', userId)}</strong>\n\n` +
         `<code>• ${sell_percents[0]}%\n` +

@@ -12,7 +12,8 @@ export const getQuickBuyEth = async (
 
     const caption =
         `<strong>${await t('quickBuy.p1', userId)}</strong>\n\n` +
-        `${await t('quickBuy.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('quickBuy.p3', userId)}</a>\n\n` +
+        `${await t('quickBuy.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=achatrapide&sig=xQihetB-R9V7EfQ-eW-w4vKCo2nTYsMD
+">${await t('quickBuy.p3', userId)}</a>\n\n` +
         `${await t('quickBuy.p4', userId)}\n\n` +
         `<strong>${await t('quickBuy.p5', userId)}</strong>\n\n` +
         `<code>• ${buy_amounts[0]} ETH\n` +

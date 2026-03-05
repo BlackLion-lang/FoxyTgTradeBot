@@ -25,7 +25,18 @@ export const en: Translations = {
         help: "Help Center",
         chains: "Choose your preferred blockchain for trading.",
         language: "Change bot language (English / French).",
-        copytrading: "Open copy trading (monitor wallets)."
+        copytrading: "Open copy trading (monitor wallets).",
+        authenticate: "Verify this is the official bot (get auth link)."
+    },
+
+    authenticate: {
+        title: "🔐 Official bot verification",
+        singleUseWarning: "⚠️ This link works only once.",
+        clickButton: "Click the button below to verify.",
+        validUntil: "⏳ Expires:",
+        verifyButton: "✅ Verify now",
+        error: "❌ Unable to generate the authenticity link.",
+        cooldown: "⏳ Please wait a few seconds."
     },
     //Admin
     admin: {
@@ -50,6 +61,7 @@ export const en: Translations = {
         walletName: "None",
         referral: "Rewards per 10 referrals",
         referralSettings: "Custom Referral settings",
+        copyTradeWalletLimit: "Copy trade monitored wallets limit",
         defaultLanguage: "Default language",
         languageEn: "English",
         languageFr: "French"
@@ -91,7 +103,7 @@ export const en: Translations = {
         copyTrade: "📋 Monitor Wallets",
         chain: "Current Chain :",
         chainButton: "🔗 Chain",
-        botVersion: "🤖 Bot Telegram Version :"
+        botVersion: "🦊 Bot Telegram Version :"
     },
 
     //Referral
@@ -186,7 +198,8 @@ export const en: Translations = {
         p7: "🕒 Last Updated (UTC) :",
         p8: "No active positions found. All tokens have been sold or have zero balance.",
         importPosition: "Import Position",
-        noPositionsFound: "No positions found. Start trading to see your positions here."
+        noPositionsFound: "No positions found. Start trading to see your positions here.",
+        whatToDo: "💡 What do you want to do?"
     },
 
     // Wallets
@@ -244,6 +257,7 @@ export const en: Translations = {
         documentation: "📚 Getting Started Guide",
         contactSupport: "💬 Contact Support",
         changelogs: "📢 Change Logs",
+        authenticate: "🔐 Verify official bot",
     },
 
     //Change default wallet
@@ -667,7 +681,7 @@ export const en: Translations = {
         noWallets: "You are not monitoring any wallets yet.",
         noWalletsInSettings: "No wallets to configure. Add a wallet from the main screen.",
         addFirst: "Add a target Solana address to detect their Pump.fun token launches and copy their buy.",
-        enterAddress: "Paste the Solana wallet address to monitor (target trader):",
+        enterAddress: "Paste the Solana wallet address to monitor (target trader) :",
         invalidAddress: "❌ Invalid Solana address. Please paste a valid base58 address.",
         confirmAdd: "Add this address to monitoring?",
         addressDetected: "Wallet address detected",
@@ -685,9 +699,9 @@ export const en: Translations = {
         remove: "Remove",
         label: "Label",
         enterBuyAmount: "Enter copy buy amount (SOL), e.g. 0.01:",
-        enterMinAmount: "Enter min SOL (filter):",
-        enterMaxAmount: "Enter max SOL (filter):",
-        enterLabel: "Enter new label for this wallet:",
+        enterMinAmount: "Enter min SOL (filter) : ",
+        enterMaxAmount: "Enter max SOL (filter) : ",
+        enterLabel: "Enter new label for this wallet : ",
         invalidNumber: "Invalid number. Please try again.",
         disclaimer: "▲ This is not financial advice. Always DYOR!",
         newTokenDetected: "New token detected!",
@@ -698,9 +712,9 @@ export const en: Translations = {
         viewToken: "Token",
         buyToken: "Buy Token",
         copyBuySuccessLaunch: "✅ Copy buy executed (launch):",
-        copyBuySuccessPurchase: "✅ Copy buy executed (purchase):",
-        copyBuyFailedLaunch: "❌ Copy buy failed (launch):",
-        copyBuyFailedPurchase: "❌ Copy buy failed (purchase):",
+        copyBuySuccessPurchase: "✅ Copy buy executed (purchase) :",
+        copyBuyFailedLaunch: "❌ Copy buy failed (launch) :",
+        copyBuyFailedPurchase: "❌ Copy buy failed (purchase) :",
         copyBuySkippedBalance: "❌ Copy buy skipped: insufficient balance (need",
         copyBuyPending: "⏳ Copy buy in progress...",
         modeAuto: "Mode: Auto",
@@ -708,10 +722,10 @@ export const en: Translations = {
         tpSl: "TP / SL",
         tpSlOn: "TP/SL: ON",
         tpSlOff: "TP/SL: OFF",
-        takeProfit: "Take profit %",
-        stopLoss: "Stop loss %",
-        enterTakeProfitCopy: "Enter take profit % for copy trading (e.g. 10):",
-        enterStopLossCopy: "Enter stop loss % for copy trading (e.g. -40):",
+        takeProfit: "Take profit % : ",
+        stopLoss: "Stop loss % : ",
+        enterTakeProfitCopy: "Enter take profit % for copy trading (e.g. 10) :",
+        enterStopLossCopy: "Enter stop loss % for copy trading (e.g. -40) :",
         tpSlOnlyCopy: "These apply only to copy-trade positions.",
     },
 
@@ -776,6 +790,7 @@ export const en: Translations = {
         referral2: "joined via your referral link!",
         referral3: "Welcome! You joined with referral code from user",
         enterreferralSettings: "Please enter the referral settings value!(greater than 0)",
+        copyTradeWalletLimit: "Enter the maximum number of monitored wallets per user (copy trading), 1-100:",
         refreshLimit: "Too many refreshes. Please slow down.",
         refreshwarning: "⚠️ Warning ⚠️",
         fee: "Network fees are automatically deducted"
@@ -826,7 +841,8 @@ export const en: Translations = {
         invalidwallets: "❌ Validation error: Invalid wallet limits. Please enter a value between 1 and 100.",
         walletLimit: "❌ Wallet limit reached. You cannot create more than",
         walletLimitSolana: "❌ Solana wallet limit reached. You cannot create or import more than",
-        walletLimitEthereum: "❌ Ethereum wallet limit reached. You cannot create or import more than"
+        walletLimitEthereum: "❌ Ethereum wallet limit reached. You cannot create or import more than",
+        copyTradeWalletLimitReached: "❌ Copy trade monitored wallets limit reached. You cannot add more than"
     },
 
     // Bundle Wallets

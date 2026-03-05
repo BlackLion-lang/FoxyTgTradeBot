@@ -25,9 +25,10 @@ export const getEthereumPositions = async (
     // Handle empty or missing trade history
     if (!currentWallet.tradeHistory || currentWallet.tradeHistory.length === 0) {
         const caption = `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
-            `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('positions.p3', userId)}</a>\n\n` +
+            `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=positions&sig=rwI1fOLjR9pWKYaKJByNfr-ilWH_sqvs">${await t('positions.p3', userId)}</a>\n\n` +
             `${await t('positions.noPositionsFound', userId)}\n\n` +
-            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
+            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
+            `${await t('positions.whatToDo', userId)}`;
         
         const options: TelegramBot.InlineKeyboardButton[][] = [
             [
@@ -127,9 +128,10 @@ export const getEthereumPositions = async (
     // If no tokens with balance found, return empty positions message
     if (balanceGroup.length === 0) {
         const caption = `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
-            `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('positions.p3', userId)}</a>\n\n` +
+            `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=positions&sig=rwI1fOLjR9pWKYaKJByNfr-ilWH_sqvs">${await t('positions.p3', userId)}</a>\n\n` +
             `${await t('positions.p8', userId)}\n\n` +
-            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
+            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
+            `${await t('positions.whatToDo', userId)}`;
         
         const options: TelegramBot.InlineKeyboardButton[][] = [
             [
@@ -289,9 +291,11 @@ export const getEthereumPositions = async (
 
     const caption =
         `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
-        `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('positions.p3', userId)}</a>\n\n` +
+        `${await t('positions.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=positions&sig=rwI1fOLjR9pWKYaKJByNfr-ilWH_sqvs
+">${await t('positions.p3', userId)}</a>\n\n` +
         tokenContents +
-        `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
+        `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
+        `${await t('positions.whatToDo', userId)}`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [];
 

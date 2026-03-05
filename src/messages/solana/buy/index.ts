@@ -59,11 +59,17 @@ export const getBuy = async (userId: number, address: string) => {
     // const default_balance = await getBalance(default_wallet.publicKey)
     const symbol = pair.baseToken.symbol;
     const name = pair.baseToken.name;
-    // const buy_method = user?.settings.buy_method || "";
-    const MaxSupply = pair.priceNative
-    const currentSupply = pair.priceNative
-    const bonding_curve = Number(currentSupply) / Number(MaxSupply);
-    // const bonding_curve = Number((await fetchPumpFunData(address)).bonding_curve);
+    // Bonding curve: from Pump.fun API when token is on pump.fun, else 100% (migrated/other)
+    let bonding_curve = 100;
+    if (pair.dexId === "pumpfun") {
+        try {
+            const pumpData = await fetchPumpFunData(address);
+            const bc = Number(pumpData?.bonding_curve);
+            if (Number.isFinite(bc)) bonding_curve = Math.max(0, Math.min(100, bc));
+        } catch {
+            bonding_curve = 100;
+        }
+    }
     const tokenBalance = await getTokenBalance(
         new PublicKey(active_wallet.publicKey),
         new PublicKey(tokenAddress),
@@ -141,7 +147,7 @@ export const getBuy = async (userId: number, address: string) => {
         `<strong>${renounceStatus}</strong> ${await t('buy.p7', userId)}\n` +
         `<strong>${freezeStatus}</strong> ${await t('buy.p8', userId)}\n` +
         `<strong>${mintStatus}</strong> ${await t('buy.p9', userId)}\n\n` +
-        `${await t('buy.p10', userId)} ${bonding_curve * 100}%\n\n` +
+        `${await t('buy.p10', userId)} ${Number(bonding_curve).toFixed(1)}%\n\n` +
         // `💸 Price: <strong>${formatWithSuperscript(priceNative)} SOL | $${formatWithSuperscript(pair.priceUsd)}</strong>\n` +
         // `📈 Market Cap: <strong>$${formatNumberStyle(market_cap)}</strong>\n` +
         // `🏦 Liquidity: <strong>$${formatNumberStyle(liquidity)}</strong>\n\n` +

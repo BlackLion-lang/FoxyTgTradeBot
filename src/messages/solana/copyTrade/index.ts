@@ -35,7 +35,7 @@ export async function getCopyTradeMain(userId: number): Promise<{ caption: strin
             const label = w.label ? ` (${w.label})` : "";
             return `${i + 1}. <code>${shortAddress(w.address)}</code>${label}`;
         });
-        body = `${currentlyMonitoring} <strong>${count}</strong> ${walletsLabel}:\n\n${lines.join("\n")}`;
+        body = `${currentlyMonitoring} <strong>${count}</strong> ${walletsLabel} :\n\n${lines.join("\n")}`;
     }
 
     const needHelp = await t("settings.p2", userId);
@@ -262,8 +262,8 @@ export async function getCopyTradeTpSlMenu(userId: number): Promise<{ caption: s
     const tpSlOnlyCopy = await t("copyTrade.tpSlOnlyCopy", userId);
     const caption =
         `<strong>📈 ${tpSlLabel}</strong>\n\n` +
-        `• ${takeProfitLabel}: <strong>${tp}%</strong>\n` +
-        `• ${stopLossLabel}: <strong>${sl}%</strong>\n\n` +
+        `• ${takeProfitLabel} : <strong>${tp}%</strong>\n` +
+        `• ${stopLossLabel} : <strong>${sl}%</strong>\n\n` +
         tpSlOnlyCopy;
 
     const inline_keyboard: TelegramBot.InlineKeyboardButton[][] = [

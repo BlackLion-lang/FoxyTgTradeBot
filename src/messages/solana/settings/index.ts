@@ -16,8 +16,7 @@ export const getSettings = async (
     const caption =
         `<strong>${await t('settings.p1', userId)}</strong>\n\n` +
         `<strong>${await t('menu.chain', userId)} ${userChain === "ethereum" ? "🟠 Ethereum" : "🟠 Solana"}</strong>\n\n` +
-        `${await t('settings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=parametres&sig=N4KrgoYgBBbfL0AuWQXs7be84biuUz0I
-">${await t('settings.p3', userId)}</a>\n\n` +
+        `${await t('settings.p2', userId)}\n <a href="${userChain === "ethereum" ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=parametres&sig=w3vgazUPg2d7w1pjApMx__eHhEiiWK23" : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=parametres&sig=N4KrgoYgBBbfL0AuWQXs7be84biuUz0I"}">${await t('settings.p3', userId)}</a>\n\n` +
         `${await t('settings.p4', userId)}\n\n` +
         `<strong>${await t('settings.p5', userId)}</strong>`;
 

@@ -87,7 +87,8 @@ export const getWallets = async (
         `💳 <strong>${userName} (Default)</strong> : <strong>${balance.toFixed(4)} ${await t('currencySymbol_ethereum', userId)}</strong> ($${(balance * validEthPrice).toFixed(2)})\n` +
         `<code>${finalPublicKey}</code>\n\n` +
         `${await t('wallets.p3', userId)}\n` +
-        `<a href="https://the-cryptofox-learning.com/">${await t('wallets.p4', userId)}</a>\n\n` +
+        `<a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=wallet&sig=HUU-PYh4K166cm2Cx76D11XtbdAAVFGA
+">${await t('wallets.p4', userId)}</a>\n\n` +
         `${await t('wallets.p5', userId)}\n\n` +
         `⚠️ ${await t('wallets.p10', userId)} : ${(settings as { walletsEthereum?: number }).walletsEthereum ?? settings.wallets}\n\n` +
         `<strong>${await t('wallets.p6_ethereum', userId)}</strong> : ${await t('totals', userId)} : ${ethereumWallets.length}\n\n` +

@@ -26,6 +26,17 @@ export interface Translations {
         chains: string;
         language: string;
         copytrading: string;
+        authenticate: string;
+    };
+
+    authenticate: {
+        title: string;
+        singleUseWarning: string;
+        clickButton: string;
+        validUntil: string;
+        verifyButton: string;
+        error: string;
+        cooldown: string;
     };
 
     //Admin
@@ -51,6 +62,7 @@ export interface Translations {
         walletName: string;
         referral: string;
         referralSettings: string;
+        copyTradeWalletLimit: string;
         defaultLanguage: string;
         languageEn: string;
         languageFr: string;
@@ -130,6 +142,7 @@ export interface Translations {
         p8: string;
         importPosition: string;
         noPositionsFound: string;
+        whatToDo: string;
     }
 
     //Referral
@@ -248,6 +261,7 @@ export interface Translations {
         documentation: string;
         changelogs: string;
         contactSupport: string;
+        authenticate: string;
     };
 
     //Change default wallet
@@ -779,6 +793,7 @@ export interface Translations {
         enterreferral: string;
         enterreferral_ethereum: string;
         enterreferralSettings: string;
+        copyTradeWalletLimit: string;
         refreshLimit: string;
         refreshwarning: string;
         fee: string;
@@ -828,6 +843,7 @@ export interface Translations {
         walletLimit: string;
         walletLimitSolana: string;
         walletLimitEthereum: string;
+        copyTradeWalletLimitReached: string;
         invalidwallets: string;
         invalidsettings: string;
     };

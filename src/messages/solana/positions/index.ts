@@ -96,7 +96,8 @@ export const getPositions = async (
         const caption = `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
             `${await t('positions.p2', userId)}\n <a href="${(await getUserChain(userId)) === "ethereum" ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=positions&sig=rwI1fOLjR9pWKYaKJByNfr-ilWH_sqvs" : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=positions&sig=djM7IBXJtvVe5_o4TWGJsMBsy95PFStz"}">${await t('positions.p3', userId)}</a>\n\n` +
             `${await t('positions.p8', userId)}\n\n` +
-            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
+            `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
+            `${await t('positions.whatToDo', userId)}`;
         
         const options: TelegramBot.InlineKeyboardButton[][] = [
             [
@@ -199,7 +200,8 @@ export const getPositions = async (
         `<strong>${await t('positions.p1', userId)}</strong>\n\n` +
         `${await t('positions.p2', userId)}\n <a href="${(await getUserChain(userId)) === "ethereum" ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=positions&sig=rwI1fOLjR9pWKYaKJByNfr-ilWH_sqvs" : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=positions&sig=djM7IBXJtvVe5_o4TWGJsMBsy95PFStz"}">${await t('positions.p3', userId)}</a>\n\n` +
         tokenContents +
-        `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}`;
+        `${await t('positions.p7', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
+        `${await t('positions.whatToDo', userId)}`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [];
 

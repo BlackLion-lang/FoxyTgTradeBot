@@ -37,6 +37,9 @@ export const getHelp = async (
                 },
             ],
             [
+                { text: `${await t('help.authenticate', userId)}`, callback_data: "authenticate" }
+            ],
+            [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" }
             ],
         ],

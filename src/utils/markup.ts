@@ -67,6 +67,9 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.referralSettings', userId)} : ${settings.referralSettings}`, callback_data: "admin_referralSettings" },
             ],
             [
+                { text: `${await t('admin.copyTradeWalletLimit', userId)} : ${(settings as any).copyTradeMonitoredWalletsLimit ?? 10}`, callback_data: "admin_copy_trade_limit" },
+            ],
+            [
                 { text: `${status} ${text}`, callback_data: "whitelist_active" },
             ],
             [
