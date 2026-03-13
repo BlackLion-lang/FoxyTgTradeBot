@@ -6,7 +6,8 @@ import { t } from "../../../locales";
 
 export const getWithdrawWallet = async (userId: number) => {
     const user = await User.findOne({ userId }) || new User()
-    const caption = `<strong>${await t('withdrawWallet.p1', userId)}</strong>\n\n` +
+    const caption = `<strong>${await t('withdrawWallet.menuTitle', userId)}</strong>\n\n` +
+        `<strong>${await t('withdrawWallet.p1', userId)}</strong>\n\n` +
         `${await getWalletMessage(userId, "ethereum")}` +
         `<strong>${await t('withdrawWallet.p2', userId)}</strong>`
     

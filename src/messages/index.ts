@@ -74,7 +74,7 @@ export const getWelcome = async (
                 { text: `${await t('welcome.request', userId)}`, url: "https://the-cryptofox-learning.com/fonctions/__bot_trading_tcfl/request_access_bot_trading_form.php" },
                 { text: `${await t('welcome.visit', userId)}`, url: "https://the-cryptofox-learning.com/" },
             ],
-            [{ text: `${await t('welcome.admin', userId)}`, callback_data: "admin_panel" }],
+            [{ text: `${await t('welcome.admin', userId)}`, callback_data: "admin_panel", style: "primary" } as TelegramBot.InlineKeyboardButton & { style?: string }],
         ];
     } else {
         buttons = [

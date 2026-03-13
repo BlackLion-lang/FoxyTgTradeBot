@@ -145,7 +145,7 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
         }
 
         buttons.push([
-            { text: `${await t('menu.adminPanel', userId)}`, callback_data: "admin_panel" },
+            { text: `${await t('menu.adminPanel', userId)}`, callback_data: "admin_panel", style: "primary" } as TelegramBot.InlineKeyboardButton & { style?: string },
             await getCloseButton(userId)
         ]);
     } else {

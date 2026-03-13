@@ -89,6 +89,7 @@ export async function getCopyTradeRemoveMenu(userId: number): Promise<{ caption:
 export async function getCopyTradeSettingsMenu(userId: number): Promise<{ caption: string; markup: TelegramBot.InlineKeyboardMarkup }> {
     const user = (await User.findOne({ userId })) || new User();
     const list = user.copyTrade?.monitoredWallets || [];
+    const settingsMenuTitle = await t("copyTrade.settingsMenuTitle", userId);
     const walletSettings = await t("copyTrade.walletSettings", userId);
     const back = await t("copyTrade.back", userId);
     const noWalletsInSettings = await t("copyTrade.noWalletsInSettings", userId);
@@ -96,7 +97,7 @@ export async function getCopyTradeSettingsMenu(userId: number): Promise<{ captio
     const body = list.length
         ? list.map((w: { address: string; label?: string }, i: number) => `${i + 1}. ${shortAddress(w.address)}${w.label ? ` — ${w.label}` : ""}`).join("\n")
         : noWalletsInSettings;
-    const caption = `<strong>⚙️ ${walletSettings}</strong>\n\n${body}`;
+    const caption = `<strong>${settingsMenuTitle}</strong>\n\n<strong>⚙️ ${walletSettings}</strong>\n\n${body}`;
 
     const rows: TelegramBot.InlineKeyboardButton[][] = list.length
         ? list.slice(0, MONITORED_MAX).map((_: unknown, i: number) => [
@@ -129,17 +130,18 @@ export async function getCopyTradeWalletSettings(
     const rename = await t("copyTrade.rename", userId);
     const remove = await t("copyTrade.remove", userId);
     const back = await t("copyTrade.back", userId);
+    const label = await t("copyTrade.label", userId);
 
     const caption =
         `<strong>⚙️ ${settingsFor}</strong> <code>${shortAddress(w.address)}</code>\n\n` +
-        `• ${copyOnNewToken}: ${w.copyOnNewToken ? "✅" : "❌"}\n` +
-        `• ${buyAmount}: ${w.buyAmountSol ?? 0.01} SOL\n` +
-        `• ${minAmount}: ${w.minAmountSol ?? 0} SOL\n` +
-        `• ${maxAmount}: ${w.maxAmountSol ?? 100} SOL\n` +
-        (w.label ? `• Label: ${w.label}\n` : "");
+        `• ${copyOnNewToken} : ${w.copyOnNewToken ? "✅" : "❌"}\n` +
+        `• ${buyAmount} : ${w.buyAmountSol ?? 0.01} SOL\n` +
+        `• ${minAmount} : ${w.minAmountSol ?? 0} SOL\n` +
+        `• ${maxAmount} : ${w.maxAmountSol ?? 100} SOL\n` +
+        (w.label ? `• ${label} : ${w.label}\n` : "");
 
     const inline_keyboard: TelegramBot.InlineKeyboardButton[][] = [
-        [{ text: `${copyOnNewToken}: ${w.copyOnNewToken ? "✅" : "❌"}`, callback_data: `copyTrade_toggle_${walletIndex}` }],
+        [{ text: `${copyOnNewToken} ${w.copyOnNewToken ? "✅" : "❌"}`, callback_data: `copyTrade_toggle_${walletIndex}` }],
         [{ text: `${buyAmount}`, callback_data: `copyTrade_buyAmount_${walletIndex}` }],
         [
             { text: `${minAmount}`, callback_data: `copyTrade_minAmount_${walletIndex}` },
@@ -268,8 +270,8 @@ export async function getCopyTradeTpSlMenu(userId: number): Promise<{ caption: s
 
     const inline_keyboard: TelegramBot.InlineKeyboardButton[][] = [
         [{ text: tpSlEnabled ? `✅ ${tpSlOnLabel}` : `❌ ${tpSlOffLabel}`, callback_data: "copyTrade_toggle_tp_sl" }],
-        [{ text: `${takeProfitLabel} (${tp}%)`, callback_data: "copyTrade_set_tp" }],
-        [{ text: `${stopLossLabel} (${sl}%)`, callback_data: "copyTrade_set_sl" }],
+        [{ text: `${takeProfitLabel} : (${tp}%)`, callback_data: "copyTrade_set_tp" }],
+        [{ text: `${stopLossLabel} : (${sl}%)`, callback_data: "copyTrade_set_sl" }],
         [{ text: `⬅ ${back}`, callback_data: "copyTrade_back" }],
     ];
 

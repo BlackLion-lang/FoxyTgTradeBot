@@ -7,6 +7,7 @@ import { t } from "../../../locales";
 export const getPrivateKeyWallet = async (userId: number) => {
     const user = (await User.findOne({ userId })) || new User();
     const caption =
+        `<strong>${await t('exportPrivateKey.menuTitle', userId)}</strong>\n\n` +
         `<strong>${await t('exportPrivateKey.p1', userId)}</strong>\n\n` +
         `${await getWalletMessage(userId, "solana")}` +
         `<strong>${await t('exportPrivateKey.p2', userId)}</strong>`;

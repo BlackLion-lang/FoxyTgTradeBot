@@ -176,6 +176,7 @@ export interface Translations {
         shareMessage2: string;
         shareMessage3: string;
         share1: string;
+        sh: string;
     }
 
     // Menu
@@ -248,6 +249,7 @@ export interface Translations {
         young: string;
         autoImage: string;
         autoSell: string;
+        pin: string;
         mev: string;
     };
 
@@ -317,6 +319,7 @@ export interface Translations {
 
     //Withdraw wallet
     withdrawWallet: {
+        menuTitle: string;
         p1: string;
         p2: string;
     },
@@ -329,6 +332,7 @@ export interface Translations {
 
     //dangerZoneMessage
     dangerZoneMessage: {
+        menuTitle: string;
         p1: string;
         p2: string;
         p3: string;
@@ -340,8 +344,24 @@ export interface Translations {
 
     //exportPrivate Key
     exportPrivateKey: {
+        menuTitle: string;
         p1: string;
         p2: string;
+    };
+
+    // PIN for private key export
+    pin: {
+        setPin: string;
+        changePin: string;
+        setPinFirst: string;
+        setPinFirstDesc: string;
+        enterNewPin: string;
+        enterCurrentPin: string;
+        enterPinToExport: string;
+        wrongPin: string;
+        pinSetSuccess: string;
+        pinChangedSuccess: string;
+        pinMustBeDigits: string;
     };
 
     //privateKey
@@ -359,6 +379,7 @@ export interface Translations {
 
     //fee settings
     feeSettings: {
+        menuTitle: string;
         p1: string;
         p2: string;
         p3: string;
@@ -575,6 +596,7 @@ export interface Translations {
 
     // Sniper
     sniper: {
+        menuTitle: string;
         active: string;
         stopped: string;
         detectedActiveTokens: string;
@@ -672,6 +694,7 @@ export interface Translations {
 
     copyTrade: {
         title: string;
+        settingsMenuTitle: string;
         subtitle: string;
         enabledOn: string;
         enabledOff: string;

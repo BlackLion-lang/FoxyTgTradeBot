@@ -49,7 +49,9 @@ export const getSniper = async (
     const cap = `${await t('sniper.detectedActiveTokens', userId)}\n\n` +
         tokenListWithNames.join('\n');
 
+    const menuTitle = await t('sniper.menuTitle', userId);
     const caption =
+        `<strong>${menuTitle}</strong>\n\n` +
         `${tokenlist.length > 0 ? `${cap}` : await t('sniper.noDetectedTokens', userId)} \n\n` +
         `${await t('settings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=snipping&sig=2Ov5gyDDfPN_hKi1MtPa5k3rJkVY77Ex
 ">${await t('settings.p3', userId)}</a>\n\n` +

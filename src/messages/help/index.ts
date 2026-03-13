@@ -20,14 +20,14 @@ export const getHelp = async (
             [
                 {
                     text: `${await t('help.contactSupport', userId)}`,
-                    url: "https://the-cryptofox-learning.com/",
+                    url: "https://the-cryptofox-learning.com/fonctions/__bot_trading_helpme/request_helpme_bot_trading_form",
                 },
 
             ],
             [
                 {
                     text: `${await t('help.documentation', userId)}`,
-                    url: "https://the-cryptofox-learning.com/"
+                    url: "https://the-cryptofox-learning.com/_bot/_TrackerWalleTCFL/start/start.php"
                 },
             ],
             [

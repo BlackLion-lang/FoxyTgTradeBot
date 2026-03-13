@@ -51,12 +51,18 @@ export const getSettings = async (
         [
             { text: `${await t('settings.autoSell', userId)}`, callback_data: "settings_auto_sell" },
         ],
-            [
-                {
-                    text: user.settings.image_activation ? `🟢 ${await t('settings.autoImage', userId)} ` : `🔴 ${await t('settings.autoImage', userId)}`,
-                    callback_data: "settings_image"
-                },
-            ],
+        [
+            {
+                text: (user as any).pinHash ? `🟢 ${await t('settings.pin', userId)}` : `🔴 ${await t('settings.pin', userId)}`,
+                callback_data: "settings_pin",
+            },
+        ],
+        [
+            {
+                text: user.settings.image_activation ? `🟢 ${await t('settings.autoImage', userId)} ` : `🔴 ${await t('settings.autoImage', userId)}`,
+                callback_data: "settings_image"
+            },
+        ],
         [
             { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
         ],

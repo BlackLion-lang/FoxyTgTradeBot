@@ -3,7 +3,9 @@ import { t } from "../../../locales";
 
 /** Same language menu as when clicking Language in Settings (caption + markup). */
 export const getLanguage = async (userId: number) => {
-    const caption = `${await t("language.p1", userId)}`;
+    const caption =
+        `<strong>${await t("settings.language", userId)}</strong>\n\n` +
+        `${await t("language.p1", userId)}`;
     const markup: TelegramBot.InlineKeyboardMarkup = {
         inline_keyboard: [
         [

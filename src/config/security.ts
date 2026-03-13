@@ -107,3 +107,33 @@ export function decryptSecretKey(encryptedBase64: string, password?: string): st
     throw new Error(`Failed to decrypt secret key: ${error.message}`);
   }
 }
+
+const PIN_SALT_LENGTH = 32;
+const PIN_KEY_LENGTH = 64;
+
+/** Hash a PIN for storage. Returns { hash, salt } (both base64). PIN must be 4–8 digits. */
+export function hashPin(pin: string): { hash: string; salt: string } {
+  const normalized = pin.trim();
+  if (!/^\d{4,8}$/.test(normalized)) {
+    throw new Error('PIN must be 4 to 8 digits');
+  }
+  const salt = crypto.randomBytes(PIN_SALT_LENGTH);
+  const hash = crypto.scryptSync(normalized, salt, PIN_KEY_LENGTH);
+  return {
+    hash: hash.toString('base64'),
+    salt: salt.toString('base64'),
+  };
+}
+
+/** Verify a PIN against stored hash and salt. */
+export function verifyPin(pin: string, storedHash: string, storedSalt: string): boolean {
+  if (!storedHash || !storedSalt) return false;
+  try {
+    const salt = Buffer.from(storedSalt, 'base64');
+    const expected = crypto.scryptSync(pin.trim(), salt, PIN_KEY_LENGTH);
+    const expectedB64 = expected.toString('base64');
+    return expectedB64 === storedHash;
+  } catch {
+    return false;
+  }
+}

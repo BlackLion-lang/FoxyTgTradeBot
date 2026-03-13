@@ -122,6 +122,13 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: ""
         },
+        // PIN for private key export (hashed; never store plain PIN)
+        pinHash: { type: String, default: "" },
+        pinSalt: { type: String, default: "" },
+        // Temporary state for PIN flows (set / change / export)
+        pendingPinAction: { type: String, default: "" },
+        pendingExportWalletIndex: { type: Number, default: -1 },
+        pendingExportChain: { type: String, default: "" },
         referrals: {
             type: [
                 {

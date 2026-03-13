@@ -100,7 +100,7 @@ export const en: Translations = {
         help: "🙋‍♂️ Help",
         adminPanel: "👑 Admin Panel",
         trendingCoin: "🥇 Trending Coin",
-        copyTrade: "📋 Monitor Wallets",
+        copyTrade: "🎯 Monitor Wallets",
         chain: "Current Chain :",
         chainButton: "🔗 Chain",
         botVersion: "🦊 Bot Telegram Version :"
@@ -137,6 +137,7 @@ export const en: Translations = {
         shareMessage2: "Manage your Solana crypto faster than ever with instant buying and selling, real-time tracking of your positions, and full control of your wallet directly from Telegram.",
         shareMessage3: "Your referral link :",
         share1: "📥 Share",
+        sh: "Partages",
     },
 
     //Buy
@@ -244,6 +245,7 @@ export const en: Translations = {
         young: "🌱 Young Token",
         autoImage: "Auto PNL Image",
         autoSell: "🕹️ Auto Sell",
+        pin: "🔐 PIN (Export)",
         mev: "MEV Protect"
     },
 
@@ -313,6 +315,7 @@ export const en: Translations = {
 
     //Withdraw
     withdrawWallet: {
+        menuTitle: "Withdrawal Menu",
         p1: "💸 Withdraw",
         p2: "💡 Select a wallet you want to withdraw funds from.",
     },
@@ -325,6 +328,7 @@ export const en: Translations = {
 
     //dangerZoneMessage
     dangerZoneMessage: {
+        menuTitle: "Export Private Key Menu",
         p1: "⚠️ Danger zone!",
         p2: "Be careful, exporting your private key is a dangerous operation.",
         p3: "Anyone",
@@ -336,8 +340,24 @@ export const en: Translations = {
 
     //exportPrivate Key
     exportPrivateKey: {
+        menuTitle: "Private Keys Menu",
         p1: "🔐 Export Private Key",
         p2: "💡 Select the wallet you wish to export."
+    },
+
+    // PIN for private key export
+    pin: {
+        setPin: "🔐 Set PIN",
+        changePin: "🔐 Change PIN",
+        setPinFirst: "PIN required",
+        setPinFirstDesc: "You must set a PIN in Settings (below Auto Sell) before you can export a private key. Tap Settings below to open Settings and configure your PIN.",
+        enterNewPin: "Enter a new PIN (4–8 digits):",
+        enterCurrentPin: "Enter your current PIN:",
+        enterPinToExport: "Enter your PIN to export this wallet's private key:",
+        wrongPin: "❌ Wrong PIN. Try again.",
+        pinSetSuccess: "✅ PIN set. You can now export your private key.",
+        pinChangedSuccess: "✅ PIN changed successfully.",
+        pinMustBeDigits: "PIN must be 4 to 8 digits. Try again.",
     },
 
     //privateKey
@@ -355,6 +375,7 @@ export const en: Translations = {
 
     //fee settings
     feeSettings: {
+        menuTitle: "Recommended Fee Setting Menu",
         p1: "⛽️ Fee Settings",
         p2: "📚 Need more help?",
         p3: "Click Here!",
@@ -571,6 +592,7 @@ export const en: Translations = {
 
     // Sniper
     sniper: {
+        menuTitle: "Snipping Menu",
         active: "🚀 SNIPER ACTIVE — ready to snipe new listings. Stay sharp!",
         stopped: "🛑 Sniper stopped — monitoring paused",
         detectedActiveTokens: "🔥 Detected active tokens :",
@@ -669,6 +691,7 @@ export const en: Translations = {
     // Copy Trading / Monitor Wallets
     copyTrade: {
         title: "Monitor Wallets",
+        settingsMenuTitle: "Copy Trading - Tracked Wallet Settings",
         subtitle: "Copy trade when monitored wallets launch on Pump.fun",
         enabledOn: "Copy trading : Enabled",
         enabledOff: "Copy trading : Disabled",
@@ -717,13 +740,13 @@ export const en: Translations = {
         copyBuyFailedPurchase: "❌ Copy buy failed (purchase) :",
         copyBuySkippedBalance: "❌ Copy buy skipped: insufficient balance (need",
         copyBuyPending: "⏳ Copy buy in progress...",
-        modeAuto: "Mode: Auto",
-        modeManual: "Mode: Manual",
+        modeAuto: "Mode : Auto",
+        modeManual: "Mode : Manual",
         tpSl: "TP / SL",
         tpSlOn: "TP/SL: ON",
         tpSlOff: "TP/SL: OFF",
-        takeProfit: "Take profit % : ",
-        stopLoss: "Stop loss % : ",
+        takeProfit: "Take profit %",
+        stopLoss: "Stop loss %",
         enterTakeProfitCopy: "Enter take profit % for copy trading (e.g. 10) :",
         enterStopLossCopy: "Enter stop loss % for copy trading (e.g. -40) :",
         tpSlOnlyCopy: "These apply only to copy-trade positions.",

@@ -166,7 +166,6 @@ async function handlePumpCreate(
 ): Promise<void> {
     const pumpUrl = `https://pump.fun/coin/${mint}`;
     const solscanUrl = `https://solscan.io/token/${mint}`;
-    const coinInfoPromise = getPumpFunCoinInfo(mint);
     for (const { user: u, wallet: match } of entries) {
         const userId = u.userId as number;
         const dedupKey = source === "buy" ? `buy:${userId}:${mint}:${signature || Date.now()}` : `create:${userId}:${mint}`;
@@ -190,7 +189,7 @@ async function handlePumpCreate(
             const disclaimer = await t("copyTrade.disclaimer", userId);
             const purchaseAlertText =
                 `🚀 <strong>${newTokenDetected}</strong>\n\n` +
-                `<strong>${trackedWallet} : </strong> <code>${creator}</code> (${trackedLabel})\n\n` +
+                `<strong>${trackedWallet} : </strong> <code>${creator}</code>\n\n` +
                 `<strong>Token : </strong> <code>${mint}</code>\n\n` +
                 `${attemptingBuy}\n\n` +
                 `${disclaimer}`;
@@ -249,8 +248,7 @@ async function handlePumpCreate(
                 logger.error("CopyTrade", "Buy failed", userId, mint, err);
                 return { success: false, error: String(err) };
             });
-            const coinInfo = await coinInfoPromise.catch(() => null);
-            const tokenName = coinInfo?.name || coinInfo?.symbol || shortAddress(mint);
+            const tokenName = shortAddress(mint);
             const failedPrefix = await t("copyTrade.copyBuyFailedPurchase", userId);
             if (result?.success) {
                 await applyCopyTradeBuySuccess(userId, mint, walletPubKey, buyAmountSol, result as any);
@@ -297,8 +295,7 @@ async function handlePumpCreate(
                 logger.error("CopyTrade", "Buy failed", userId, mint, err);
                 return { success: false, error: String(err) };
             });
-            const coinInfoLaunch = await coinInfoPromise.catch(() => null);
-            const tokenNameLaunch = coinInfoLaunch?.name || coinInfoLaunch?.symbol || shortAddress(mint);
+            const tokenNameLaunch = shortAddress(mint);
             const failedPrefixLaunch = await t("copyTrade.copyBuyFailedLaunch", userId);
             if (resultLaunch?.success) {
                 await applyCopyTradeBuySuccess(userId, mint, walletPubKey, buyAmountSol, resultLaunch as any);
@@ -320,7 +317,7 @@ async function handlePumpCreate(
 
         const text =
             `🚀 <strong>${newTokenDetected}</strong>\n\n` +
-            `<strong>${trackedWallet} : </strong> <code>${creator}</code> (${trackedLabel})\n\n` +
+            `<strong>${trackedWallet} : </strong> <code>${creator}</code>\n\n` +
             `<strong>Token : </strong> <code>${mint}</code>\n\n` +
             `${tapBuyToCopy}\n\n` +
             `${disclaimer}`;
