@@ -20,7 +20,7 @@ export const getProfitLevel = async (userId: number) => {
     
     const caption =
         `<strong>${await t('TpSl.p1', userId)}</strong>\n\n` +
-        `${await t('TpSl.p2', userId)}\n <a href="https://the-cryptofox-learning.com/">${await t('TpSl.p3', userId)}</a>\n\n` +
+        `${await t('TpSl.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=venteauto&sig=scUK6DZdM5KF7JMttGwra126UBqUZYgN">${await t('TpSl.p3', userId)}</a>\n\n` +
         `${await t('TpSl.p4', userId)}\n\n` +
         `<strong>${await t('menu.chain', userId)} ${chainEmoji} ${chainName}</strong>\n\n` +
         `<strong>${await t('TpSl.p5', userId)}</strong>${takeProfitPercent} %\n` +

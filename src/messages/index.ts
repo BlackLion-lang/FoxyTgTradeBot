@@ -140,14 +140,10 @@ export const getMenu = async (
         if (!hasEthereumWallets) {
             const { publicKey: newPublicKey, secretKey: newSecretKey } = ethereumWalletCreate();
             balance = await getEthereumBalance(newPublicKey);
-            user.ethereumWallets.push({
-                publicKey: newPublicKey,
-                secretKey: newSecretKey,
-                is_active_wallet: true,
-                balance: balance.toString(),
-                label: "Start Wallet"
-            });
-            await user.save();
+            await User.findOneAndUpdate(
+                { userId },
+                { $push: { ethereumWallets: { publicKey: newPublicKey, secretKey: newSecretKey, is_active_wallet: true, balance: balance.toString(), label: "Start Wallet" } } }
+            );
             return await getMenu(userId, username, first_name);
         }
         
@@ -158,14 +154,10 @@ export const getMenu = async (
         if (!activeWallet) {
             const { publicKey: newPublicKey, secretKey: newSecretKey } = ethereumWalletCreate();
             balance = await getEthereumBalance(newPublicKey);
-            user.ethereumWallets.push({
-                publicKey: newPublicKey,
-                secretKey: newSecretKey,
-                is_active_wallet: true,
-                balance: balance.toString(),
-                label: "Start Wallet"
-            });
-            await user.save();
+            await User.findOneAndUpdate(
+                { userId },
+                { $push: { ethereumWallets: { publicKey: newPublicKey, secretKey: newSecretKey, is_active_wallet: true, balance: balance.toString(), label: "Start Wallet" } } }
+            );
             return await getMenu(userId, username, first_name);
         }
         
@@ -177,7 +169,10 @@ export const getMenu = async (
         const wallet = user.ethereumWallets.find(w => w.publicKey === publicKey);
         if (wallet) {
             wallet.balance = balance.toString();
-            await user.save();
+            await User.findOneAndUpdate(
+                { userId, "ethereumWallets.publicKey": publicKey },
+                { $set: { "ethereumWallets.$.balance": balance.toString() } }
+            );
         }
     } else {
         const activeWallet = user.wallets?.find(
@@ -185,17 +180,14 @@ export const getMenu = async (
         );
 
         if (!activeWallet) {
-        const { publicKey: newPublicKey, secretKey: newSecretKey } = walletCreate();
+            const { publicKey: newPublicKey, secretKey: newSecretKey } = walletCreate();
             balance = await getBalance(newPublicKey);
-        user.wallets.push({
-            publicKey: newPublicKey,
-            secretKey: newSecretKey,
-            is_active_wallet: true,
-                balance: balance.toString()
-        });
-        await user.save();
-        return await getMenu(userId, username, first_name);
-    }
+            await User.findOneAndUpdate(
+                { userId },
+                { $push: { wallets: { publicKey: newPublicKey, secretKey: newSecretKey, is_active_wallet: true, balance: balance.toString(), label: "Start Wallet" } } }
+            );
+            return await getMenu(userId, username, first_name);
+        }
 
         publicKey = activeWallet.publicKey;
         balance = await getBalance(publicKey);
@@ -203,9 +195,12 @@ export const getMenu = async (
         currencySymbol = "SOL";
 
         const wallet = user.wallets.find(w => w.publicKey === publicKey);
-    if (wallet) {
-        wallet.balance = balance.toString();
-        await user.save();
+        if (wallet) {
+            wallet.balance = balance.toString();
+            await User.findOneAndUpdate(
+                { userId, "wallets.publicKey": publicKey },
+                { $set: { "wallets.$.balance": balance.toString() } }
+            );
         }
     }
 

@@ -40,7 +40,7 @@ export async function getCopyTradeMain(userId: number): Promise<{ caption: strin
 
     const needHelp = await t("settings.p2", userId);
     const clickHere = await t("settings.p3", userId);
-    const caption = `<strong>📋 ${title}</strong>\n\n${subtitle}\n\n${body}\n\n${needHelp}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=copytrading&sig=G2kcUvUfL70RGTIkHF-65bjFvo2YGPwU
+    const caption = `<strong>🎯 ${title}</strong>\n\n${subtitle}\n\n${body}\n\n${needHelp}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=copytrading&sig=G2kcUvUfL70RGTIkHF-65bjFvo2YGPwU
 ">${clickHere}</a>`;
 
     const modeAuto = await t("copyTrade.modeAuto", userId);

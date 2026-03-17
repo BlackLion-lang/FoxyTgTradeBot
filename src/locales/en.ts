@@ -240,6 +240,7 @@ export const en: Translations = {
         slippage: "💦 Slippage",
         wallet: "💳 Wallets",
         language: "🌏 Language",
+        languageTitle: "🌏 Foxy Language",
         quickBuy: "⚡ Quick Buy",
         quickSell: "💰 Quick Sell",
         young: "🌱 Young Token",
@@ -358,6 +359,9 @@ export const en: Translations = {
         pinSetSuccess: "✅ PIN set. You can now export your private key.",
         pinChangedSuccess: "✅ PIN changed successfully.",
         pinMustBeDigits: "PIN must be 4 to 8 digits. Try again.",
+        removePin: "🔓 Remove PIN",
+        pinRemovedSuccess: "✅ PIN removed. Private key export will no longer require a PIN.",
+        pinOptions: "PIN is enabled. What do you want to do?",
     },
 
     //privateKey
@@ -847,8 +851,8 @@ export const en: Translations = {
         invalidBuy: "Invalid buy amount.",
         invalidSell: "Invalid sell percentage.",
         invalidAutoWallet: "❌ No wallets available to set as default.",
-        invalidTp: "❌ Validation error: Invalid value. Please enter a value greater than 0. Try again!",
-        invalidSl: "❌ Validation error: Invalid value. Please enter a value less than 0. Try again!",
+        invalidTp: "❌ Take profit must be between 0 and 1000 (%). Try again!",
+        invalidSl: "❌ Stop loss must be between -100 and 0 (%). Try again!",
         alreadyWhitelist: "⚠️ User is already whitelisted",
         alreadySniperWhitelist: "⚠️ User is already in sniper whitelist",
         targetSniperUser: "❌ This Telegram user doesn't exist in the sniper whitelist.",

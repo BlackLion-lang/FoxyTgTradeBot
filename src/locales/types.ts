@@ -244,6 +244,7 @@ export interface Translations {
         slippage: string;
         wallet: string;
         language: string;
+        languageTitle: string;
         quickBuy: string;
         quickSell: string;
         young: string;
@@ -362,6 +363,9 @@ export interface Translations {
         pinSetSuccess: string;
         pinChangedSuccess: string;
         pinMustBeDigits: string;
+        removePin: string;
+        pinRemovedSuccess: string;
+        pinOptions: string;
     };
 
     //privateKey

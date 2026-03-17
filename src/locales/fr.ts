@@ -31,7 +31,7 @@ export const fr: Translations = {
 
     // Authentification BOT
     authenticate: {
-        title: "🔐 Vérification de FoxyBoTracker - Notre BOT Officiel :",
+        title: "🔐 Vérification de l'authenticité de FoxyBoTracker :",
         singleUseWarning: "⚠️ Le lien ci-dessous permettant de vérifier l’authenticité de FoxyBoTracker est à usage unique. Il ne fonctionne qu’une seule fois et reste valide pendant un temps limité. ⚠️",
         clickButton: "🦊 Vérifiez l’authenticité de FoxyBoTracker en cliquant sur le bouton ci-dessous.",
         validUntil: "⏳ Le lien expire le :",
@@ -48,8 +48,8 @@ export const fr: Translations = {
         removeUser: "Supprimer un utilisateur",
         addSniperUser: "Ajouter un utilisateur au Sniper",
         removeSniperUser: "Supprimer un utilisateur du Sniper",
-        tipPercentage: "💰 Commission Frais (%) - (Sol)",
-        tipPercentageEth: "💰 Commission Frais (%) - (Eth)",
+        tipPercentage: "💰 Com. Frais (%) - (Sol)",
+        tipPercentageEth: "💰 Com. Frais (%) - (Eth)",
         adminWallet: "💼 Wallet Admin",
         adminWalletName: "📝 Nom Wallet Admin",
         walletSolanaLimit: "Limite Max wallets Solana",
@@ -60,7 +60,7 @@ export const fr: Translations = {
         whitelistActive: "Système Whitelist activé",
         whitelistInactive: "Système Whitelist desactivé",
         walletName: "Aucun",
-        referral: "Récompense 10 parrainages",
+        referral: "Récomp. 10 parrainages",
         wallet: "💼 Limite de Wallet",
         referralSettings: "Paramètres des parrainages",
         copyTradeWalletLimit: "Limite Wallets Monitor (Surveillés)",
@@ -105,7 +105,7 @@ export const fr: Translations = {
         shareMessage2: "Gérez vos cryptomonnaies Solana plus rapidement que jamais grâce aux achats et ventes instantanés, au suivi en temps réel de vos positions et au contrôle total de votre Wallet directement depuis Telegram.",
         shareMessage3: "Votre lien de parrainage :",
         share1: "📥 Partager",
-        sh: "Partages",
+        sh: "🦊 Partager mon lien de parrainage.",
         viewList: "📋 Voir la liste des parrainages",
         listTitle: "📋 Liste des filleuls parrainés via votre lien de parrainage FoxyBoTracker.",
         totalReferrals: "Total des parrainages",
@@ -243,18 +243,19 @@ export const fr: Translations = {
         slippage: "💦 Slippage",
         wallet: "💳 Wallets",
         language: "🌏 Langue",
+        languageTitle: "🌏 Langue de FoxyBoTracker",
         quickBuy: "⚡ Achat rapide",
         quickSell: "💰 Vente rapide",
         young: "🌱 Token récent",
         autoImage: "Image PNL automatique",
         autoSell: "🕹️ Vente automatique",
-        pin: "🔐 PIN (Export)",
+        pin: "🔐 Code PIN (Wallet)",
         mev: "Protection MEV"
     },
 
     // Menu d'aide
     help: {
-        p1: "Aide & Support.",
+        p1: "Menu d'aide & Support.",
         p2: "📚 Pour les FAQ, guides et tutoriels, veuillez visiter notre Site Officiel.",
         p3: "🐦 Pour suivre les dernières mises à jour et actualités concernant les modifications et évolutions de FoxyBoTracker, consultez notre changelog ou nos réseaux sociaux.",
         p4: "💬 Besoin d'aide ? Contactez notre Responsable Support ci-dessous.",
@@ -318,9 +319,9 @@ export const fr: Translations = {
 
     // Menu de Retrait
     withdrawWallet: {
-        menuTitle: "Menu de Retrait",
-        p1: "💸 Retrait",
-        p2: "💡 Sélectionnez un Wallet depuis lequel retirer des fonds.",
+        menuTitle: "Menu de retrait de vos différents Wallets.",
+        p1: "🔒 Sélectionnez le Wallet depuis lequel vous souhaitez retirer des fonds.",
+        p2: "💡 Sélectionnez le Wallet à utiliser pour ce retrait.",
     },
 
     //Wallet par Defaut
@@ -331,19 +332,19 @@ export const fr: Translations = {
 
     // Zone dangereuse
     dangerZoneMessage: {
-        menuTitle: "Menu de Clés Privées",
-        p1: "⚠️ Zone dangereuse ! 🦊",
+        menuTitle: "Menu d’accès à vos clés privées.",
+        p1: "⚠️ À lire attentivement - Zone dangereuse ! 🦊",
         p2: "L’exportation de votre clé privée est une action extrêmement sensible.",
         p3: "Toute personne",
-        p4: "ayant accès à cette clé peut accéder à votre Wallet, transférer vos fonds et effectuer des Transactions sans votre autorisation.",
-        p5: "Après l’exportation, nous ne pourrons plus garantir la sécurité de vos fonds ni être responsables en cas de perte ou de vol.",
+        p4: "Toute personne ayant accès à cette clé peut accéder à votre Wallet, transférer vos fonds et effectuer des Transactions sans votre autorisation. Un code PIN vous sera demandé pour confirmer l’exportation.",
+        p5: "Après l’exportation, nous ne pourrons plus garantir la sécurité de vos fonds et ne pourrons être tenus responsables en cas de perte ou de vol.",
         p6: "Êtes-vous absolument sûr de vouloir continuer ?",
         exportPrivateKey: "🔑 Exporter",
     },
 
     // Exporter la clé privée
     exportPrivateKey: {
-        menuTitle: "Menu de Clés Privés",
+        menuTitle: "Menu d’accès à vos clés privées.",
         p1: "🔐 Exportation de la clé privée.",
         p2: "💡 Sélectionnez le Wallet pour lequel vous souhaitez exporter la clé privée."
     },
@@ -352,33 +353,36 @@ export const fr: Translations = {
     pin: {
         setPin: "🔐 Définir le PIN",
         changePin: "🔐 Changer le PIN",
-        setPinFirst: "PIN requis",
-        setPinFirstDesc: "Vous devez définir un PIN dans les Paramètres (sous Vente auto) avant de pouvoir exporter une clé privée. Appuyez sur Paramètres ci-dessous pour configurer votre PIN.",
-        enterNewPin: "Entrez un nouveau PIN (4 à 8 chiffres) :",
-        enterCurrentPin: "Entrez votre PIN actuel :",
-        enterPinToExport: "Entrez votre PIN pour exporter la clé privée de ce portefeuille :",
-        wrongPin: "❌ PIN incorrect. Réessayez.",
-        pinSetSuccess: "✅ PIN défini. Vous pouvez maintenant exporter votre clé privée.",
-        pinChangedSuccess: "✅ PIN modifié avec succès.",
-        pinMustBeDigits: "Le PIN doit contenir 4 à 8 chiffres. Réessayez.",
+        setPinFirst: "Code PIN requis !",
+        setPinFirstDesc: "Vous devez définir un code PIN dans les Paramètres avant de pouvoir exporter une clé privée de l'un de vos Wallet. Appuyez sur Paramètres ci-dessous pour configurer votre code PIN.",
+        enterNewPin: "Entrez un nouveau code PIN (4 à 8 chiffres) :",
+        enterCurrentPin: "Entrez votre code PIN actuel :",
+        enterPinToExport: "Entrez votre code PIN pour exporter la clé privée de ce Wallet :",
+        wrongPin: "❌ Code PIN incorrect. Réessayez.",
+        pinSetSuccess: "✅ Code PIN défini. Vous pouvez maintenant exporter votre clé privée en toute sécurité.",
+        pinChangedSuccess: "✅ Code PIN modifié avec succès.",
+        pinMustBeDigits: "Le code PIN doit contenir entre 4 et 8 chiffres. Réessayez.",
+        removePin: "🔓 Supprimer le PIN",
+        pinRemovedSuccess: "✅ PIN supprimé. L'export de clé privée ne demandera plus de PIN.",
+        pinOptions: "Le PIN est activé. Que voulez-vous faire ?",
     },
 
     // Clé privée
     privateKey: {
         p1: "🔐 Wallet :",
-        p2: "Adresse :",
-        p3: "🔑 Clé privée :",
-        p4: "Voir sur Solscan",
+        p2: "Adresse du Wallet :",
+        p3: "🔑 Clé privée du Wallet :",
+        p4: "Voir le Wallet sur Solscan",
         p5: "NE LA PARTAGEZ AVEC PERSONNE",
-        p6: "Gardez La en lieu sûr, car elle donne un accès complet à votre Wallet et vos fonds",
-        p7: "Une fois terminé, appuyez sur le bouton \"SUPPRIMER LE MESSAGE\" ci dessous",
+        p6: "Gardez La en lieu sûr, car elle donne un accès complet à votre Wallet et vos fonds.",
+        p7: "Une fois terminé, appuyez sur le bouton \"SUPPRIMER LE MESSAGE\" ci dessous.",
         revealKey: "🔐 Afficher la clé",
         deleteMessage: "🗑️ Supprimer le message"
     },
 
     // Paramètres des frais
     feeSettings: {
-        menuTitle: "Menu de Réglage de Frais Recommandés",
+        menuTitle: "Paramètres des frais recommandés.",
         p1: "⛽️ Paramètres des frais.",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
@@ -564,16 +568,16 @@ export const fr: Translations = {
 
     // Souscription
     subscribe: {
-        title: "Options d'Abonnement",
-        options: "Options d'Abonnement",
-        unlockFeatures: "Débloquez des fonctionnalités premium :",
+        title: "Options d'abonnement pour le module de Snipping.",
+        options: "Options d'abonnement pour le module de Snipping.",
+        unlockFeatures: "Débloquez des fonctionnalités premium tel que :",
         sniping: "Sniping",
-        choosePlan: "Choisissez le plan qui vous convient le mieux :",
-        alreadySubscribed: "Vous êtes déjà abonné !",
+        choosePlan: "Choisissez le plan qui vous convient le mieux selon vos besoins :",
+        alreadySubscribed: "Vous êtes déjà abonné au module de Snipping !",
         plan: "Plan",
         started: "Commencé",
         expiresIn: "Expire dans",
-        subscriptionRequired: "Activation du système d'abonnement utilisateurs",
+        subscriptionRequired: "Activation système d'abonnement",
         pressSubscribe: "Appuyez sur le bouton *S'abonner* dans le menu principal pour activer votre abonnement.",
         walletNotConfigured: "Le Wallet d'abonnement n'est pas configuré. Veuillez contacter le support.",
         userNotFound: "Impossible de trouver votre enregistrement utilisateur. Veuillez réessayer /start.",
@@ -595,11 +599,11 @@ export const fr: Translations = {
 
     // Module de Snipping
     sniper: {
-        menuTitle: "Menu de Snipping",
+        menuTitle: "Menu de Snipping.",
         active: "🚀 SNIPER ACTIF — Prêt à sniper les nouveaux listings. Restez vigilant !",
         stopped: "🛑 Module Sniper arrêté — Surveillance en pause.",
         detectedActiveTokens: "🔥 Tokens actifs détectés :",
-        noDetectedTokens: "Aucun Token actif détecté.",
+        noDetectedTokens: "Aucun Token actif détecté pour le moment.",
         panelDescription: "C'est le panneau du bot sniper. Ici, vous pouvez configurer tous les paramètres du bot.",
         panelDescription2: "Si vous avez la moindre question veuillez nous contacter via notre site officiel ou via la section d’aide.",
         exampleLink: "Lien d'exemple",
@@ -694,7 +698,7 @@ export const fr: Translations = {
     // CopyTrading / Monitor Wallets
     copyTrade: {
         title: "Monitor - Wallets sous surveillances.",
-        settingsMenuTitle: "CopyTrading - Réglages Wallet trackés",
+        settingsMenuTitle: "Monitor - Réglages des Wallet trackés.",
         subtitle: "Copiez les Trades quand les Wallets surveillés lancent ou achètent sur Pump.fun.",
         enabledOn: "CopyTrading : Activé",
         enabledOff: "CopyTrading : Désactivé",
@@ -717,13 +721,13 @@ export const fr: Translations = {
         addedSuccess: "✅ Wallet ajouté au Monitor. FoxyBoTracker détectera leurs lancements sur Pump.fun.",
         removedSuccess: "✅ Wallet supprimé du Monitor.",
         settingsFor: "Paramètres pour le Wallet",
-        copyOnNewToken: "Copier l'achat au lancement d'un nouveau Token",
+        copyOnNewToken: "Copie à la création d’un Token",
         buyAmount: "Montant d'achat copié (SOL)",
         minAmount: "SOL Min. (Filtre)",
         maxAmount: "SOL Max. (Filtre)",
         rename: "Renommer",
-        remove: "Retirer",
-        label: "Libellé",
+        remove: "Supprimer",
+        label: "Nom du Wallet",
         enterBuyAmount: "Entrez le montant d'achat copié (SOL), Exemple : 0,01 :",
         enterMinAmount: "Entrez le SOL min (Filtre) :",
         enterMaxAmount: "Entrez le SOL max (Filtre) :",
@@ -752,7 +756,7 @@ export const fr: Translations = {
         stopLoss: "Stop Loss %",
         enterTakeProfitCopy: "Entrez le Take Profit % pour le CopyTrading (Exemple : 10) :",
         enterStopLossCopy: "Entrez le Stop Loss % pour le CopyTrading (Exemple : -40) :",
-        tpSlOnlyCopy: "Ils s'appliquent uniquement aux positions CopyTrade.",
+        tpSlOnlyCopy: "Ces réglages s’appliquent uniquement aux positions des Wallets actuellement surveillés par le Monitor.",
     },
 
     // Messages
@@ -850,8 +854,8 @@ export const fr: Translations = {
         invalidBuy: "Montant d'achat invalide.",
         invalidSell: "Pourcentage de vente invalide.",
         invalidAutoWallet: "❌ Aucun Wallet disponible à définir par défaut.",
-        invalidTp: "❌ Erreur de validation : Valeur non valide. Veuillez saisir une valeur supérieure à 0. Réessayez !",
-        invalidSl: "❌ Erreur de validation : Valeur non valide. Veuillez saisir une valeur inférieure à 0. Réessayez !",
+        invalidTp: "❌ Le take profit doit être entre 0 et 1000 (%). Réessayez !",
+        invalidSl: "❌ Le stop loss doit être entre -100 et 0 (%). Réessayez !",
         alreadyWhitelist: "⚠️ L'utilisateur est déjà sur la Whitelist.",
         alreadySniperWhitelist: "⚠️ L'utilisateur est déjà dans la Whitelist du module de Snipping.",
         targetSniperUser: "❌ Cet utilisateur Telegram n'existe pas dans la Whitelist du module de Snipping.",
@@ -1114,9 +1118,9 @@ export const fr: Translations = {
 
     // Sélection de Blockchain
     chain: {
-        selectBlockchain: "🔗 Sélectionner la Blockchain :",
+        selectBlockchain: "🔗 Sélectionner la Blockchain que vous souhaitez utiliser.",
         current: "Blockchain sélectionnée :",
-        choosePreferred: "Sélectionnez la Blockchain sur laquelle vous souhaitez Trader avec notre BOT FoxyBoTracker :",
+        choosePreferred: "Choisissez la Blockchain sur laquelle vous souhaitez Trader avec FoxyBoTracker :",
         solana: "Solana",
         ethereum: "Ethereum",
         solanaSelected: "🟠 Solana",

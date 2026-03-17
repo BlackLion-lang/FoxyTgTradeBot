@@ -15,6 +15,10 @@ import {
 } from "@solana/web3.js";
 import { connection } from "./config/connection";
 import { bot } from "./config/constant";
+
+/** TP/SL limits to avoid crashes: TP 0–1000 (%), SL -100–0 (%). Applied to auto-sell, sniper, copy trade, Solana & Ethereum. */
+const TP_MAX = 1000;
+const SL_MIN = -100;
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, hashPin, verifyPin } from "./config/security";
 import {
     getBalance,
@@ -3115,7 +3119,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             if (!hasPin) {
                 await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
-                    reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
+                    reply_markup: { inline_keyboard: [[{ text: `${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
                 });
                 return;
             }
@@ -3363,28 +3367,19 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             return;
                         }
                         const imagePath = "./src/assets/privateKey.jpg";
-                        function escapeMarkdownV2(text: string): string {
-                            return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
-                        }
-                        const safeTxLink = chain === "ethereum"
-                            ? escapeMarkdownV2(`https://etherscan.io/address/${publicKey}`)
-                            : escapeMarkdownV2(`https://solscan.io/account/${publicKey}`);
-                        const message = `[${await t('privateKey.p4', userId)}](${safeTxLink})`;
+                        const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                        const scanUrl = chain === "ethereum" ? `https://etherscan.io/address/${publicKey}` : `https://solscan.io/account/${publicKey}`;
+                        const p4 = await t("privateKey.p4", userId);
                         await bot.sendPhoto(chatId, imagePath, {
                             caption:
-                                `*${await t('privateKey.p1', userId)}* *${label || "(no name)"}*\n
-*${await t('privateKey.p2', userId)}* \`${publicKey}\`\n
-${await t('privateKey.p3', userId)}
-||${decrypted}|| 
-
-_${message}_
-
-__${await t('privateKey.p5', userId)}__
-${await t('privateKey.p6', userId)}
-${await t('privateKey.p7', userId)}`,
-                            parse_mode: "MarkdownV2",
+                                `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
+                                `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
+                                `${esc(await t("privateKey.p3", userId))}\n<tg-spoiler>${esc(decrypted)}</tg-spoiler>\n\n` +
+                                `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
+                                `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
+                            parse_mode: "HTML",
                             reply_markup: {
-                                inline_keyboard: [[{ text: `${await t('privateKey.revealKey', userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
+                                inline_keyboard: [[{ text: `${await t("privateKey.revealKey", userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
                             },
                         });
                     }));
@@ -3423,39 +3418,21 @@ ${await t('privateKey.p7', userId)}`,
                     }
 
                     const imagePath = "./src/assets/privateKey.jpg";
-                    function escapeMarkdownV2(text: string): string {
-                        return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
-                    }
-                    const safeTxLink = chain === "ethereum"
-                        ? escapeMarkdownV2(`https://etherscan.io/address/${publicKey}`)
-                        : escapeMarkdownV2(`https://solscan.io/account/${publicKey}`);
-                    const message = `[${await t('privateKey.p4', userId)}](${safeTxLink})`;
-
-                    await bot.sendPhoto(
-                        chatId,
-                        imagePath,
-                        {
-                            caption:
-                                `*${await t('privateKey.p1', userId)}* *${label || "(no name)"}*\n
-*${await t('privateKey.p2', userId)}* \`${publicKey}\`\n
-${await t('privateKey.p3', userId)}
-||${decrypted}|| 
-
-_${message}_
-
-__${await t('privateKey.p5', userId)}__
-${await t('privateKey.p6', userId)}
-${await t('privateKey.p7', userId)}`,
-                            parse_mode: "MarkdownV2",
-                            reply_markup: {
-                                inline_keyboard: [
-                                    [
-                                        { text: `${await t('privateKey.revealKey', userId)}`, callback_data: `copy_to_clipboard_${idx}` },
-                                    ],
-                                ],
-                            },
+                    const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                    const scanUrl = chain === "ethereum" ? `https://etherscan.io/address/${publicKey}` : `https://solscan.io/account/${publicKey}`;
+                    const p4 = await t("privateKey.p4", userId);
+                    await bot.sendPhoto(chatId, imagePath, {
+                        caption:
+                            `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
+                            `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
+                            `${esc(await t("privateKey.p3", userId))}\n<tg-spoiler>${esc(decrypted)}</tg-spoiler>\n\n` +
+                            `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
+                            `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
+                        parse_mode: "HTML",
+                        reply_markup: {
+                            inline_keyboard: [[{ text: `${await t("privateKey.revealKey", userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
                         },
-                    );
+                    });
                 }));
             return;
         }
@@ -3511,37 +3488,21 @@ ${await t('privateKey.p7', userId)}`,
             }
 
             const imagePath = "./src/assets/privateKey.jpg";
-            function escapeMarkdownV2(text: string): string {
-                return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
-            }
-            const safeTxLink = escapeMarkdownV2(`${scanBaseUrl}${publicKey}`);
-            const message = `[${await t('privateKey.p4', userId)}](${safeTxLink})`;
-
-            bot.sendPhoto(
-                chatId,
-                imagePath,
-                {
-                    caption:
-                        `*${await t('privateKey.p1', userId)}* *${label || "(no name)"}*\n
-*${await t('privateKey.p2', userId)}* \`${publicKey}\`\n
-${await t('privateKey.p3', userId)}
-\`${decrypted}\` 
-
-_${message}_
-
-__${await t('privateKey.p5', userId)}__
-${await t('privateKey.p6', userId)}
-${await t('privateKey.p7', userId)}`,
-                    parse_mode: "MarkdownV2",
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: `${await t('privateKey.deleteMessage', userId)}`, callback_data: "wallets_export_confirm_delete" },
-                            ],
-                        ],
-                    },
+            const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+            const scanUrl = `${scanBaseUrl}${publicKey}`;
+            const p4 = await t("privateKey.p4", userId);
+            bot.sendPhoto(chatId, imagePath, {
+                caption:
+                    `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
+                    `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
+                    `${esc(await t("privateKey.p3", userId))}\n<code>${esc(decrypted)}</code>\n\n` +
+                    `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
+                    `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
+                parse_mode: "HTML",
+                reply_markup: {
+                    inline_keyboard: [[{ text: `${await t("privateKey.deleteMessage", userId)}`, callback_data: "wallets_export_confirm_delete" }]],
                 },
-            );
+            });
             return;
         }
 
@@ -4745,90 +4706,147 @@ ${await t('privateKey.p7', userId)}`,
                     }
                 }));
             } else {
-                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-                bot.once("text", createUserTextHandler(userId, async (reply) => {
-                    const pin = (reply.text || "").trim();
-                    setTimeout(() => {
-                        bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
-                        bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                    }, 5000);
-                    const u = await User.findOne({ userId });
-                    if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                        const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
-                        const retryMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-                        bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
-                            const pinRetry = (replyRetry.text || "").trim();
-                            setTimeout(() => {
-                                bot.deleteMessage(chatId, retryMsg.message_id).catch(() => {});
-                                bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
-                            }, 5000);
-                            const uR = await User.findOne({ userId });
-                            if (!uR || !verifyPin(pinRetry, (uR as any).pinHash || "", (uR as any).pinSalt || "")) {
-                                const wrongPinMsg2 = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg2.message_id).catch(() => {}), 5000);
-                                sendSettingsMessageWithImage(bot, chatId, userId);
-                                return;
-                            }
-                            const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                            bot.once("text", createUserTextHandler(userId, async (reply2) => {
-                                const newPin = (reply2.text || "").trim();
-                                setTimeout(() => {
-                                    bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
-                                    bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
-                                }, 5000);
-                                try {
-                                    if (!/^\d{4,8}$/.test(newPin)) {
-                                        const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                                        setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                                        return;
-                                    }
-                                    const { hash, salt } = hashPin(newPin);
-                                    const u2 = await User.findOne({ userId });
-                                    if (!u2) return;
-                                    (u2 as any).pinHash = hash;
-                                    (u2 as any).pinSalt = salt;
-                                    await u2.save();
-                                    const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
-                                    setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
-                                    sendSettingsMessageWithImage(bot, chatId, userId);
-                                } catch (err: any) {
-                                    const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                                    setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                                }
-                            }));
-                        }));
-                        return;
-                    }
-                    const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                    bot.once("text", createUserTextHandler(userId, async (reply2) => {
-                        const newPin = (reply2.text || "").trim();
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
-                            bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
-                        }, 5000);
-                        try {
-                            if (!/^\d{4,8}$/.test(newPin)) {
-                                const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                                return;
-                            }
-                            const { hash, salt } = hashPin(newPin);
-                            const u2 = await User.findOne({ userId });
-                            if (!u2) return;
-                            (u2 as any).pinHash = hash;
-                            (u2 as any).pinSalt = salt;
-                            await u2.save();
-                            const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
-                            sendSettingsMessageWithImage(bot, chatId, userId);
-                        } catch (err: any) {
-                            const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                        }
-                    }));
-                }));
+                await bot.sendMessage(chatId, await t("pin.pinOptions", userId), {
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: await t("pin.changePin", userId), callback_data: "settings_pin_change" },
+                                { text: await t("pin.removePin", userId), callback_data: "settings_pin_remove" },
+                            ],
+                            [{ text: `${await t("backSettings", userId)}`, callback_data: "settings" }],
+                        ],
+                    },
+                });
             }
+            return;
+        }
+
+        if (sel_action === "settings_pin_change") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            const userDoc = await User.findOne({ userId });
+            const hasPin = !!(userDoc as any)?.pinHash;
+            if (!hasPin) {
+                await bot.sendMessage(chatId, `🔐 ${await t("pin.setPinFirst", userId)}\n\n${await t("pin.setPinFirstDesc", userId)}`, {
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: [[{ text: `${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
+                });
+                return;
+            }
+            const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                const pin = (reply.text || "").trim();
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                }, 5000);
+                const u = await User.findOne({ userId });
+                if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                    const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                    setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
+                    const retryMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+                    bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
+                        const pinRetry = (replyRetry.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, retryMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
+                        }, 5000);
+                        const uR = await User.findOne({ userId });
+                        if (!uR || !verifyPin(pinRetry, (uR as any).pinHash || "", (uR as any).pinSalt || "")) {
+                            const wrongPinMsg2 = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg2.message_id).catch(() => {}), 5000);
+                            sendSettingsMessageWithImage(bot, chatId, userId);
+                            return;
+                        }
+                        const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
+                        bot.once("text", createUserTextHandler(userId, async (reply2) => {
+                            const newPin = (reply2.text || "").trim();
+                            setTimeout(() => {
+                                bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
+                                bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
+                            }, 5000);
+                            try {
+                                if (!/^\d{4,8}$/.test(newPin)) {
+                                    const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
+                                    setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
+                                    return;
+                                }
+                                const { hash, salt } = hashPin(newPin);
+                                const u2 = await User.findOne({ userId });
+                                if (!u2) return;
+                                (u2 as any).pinHash = hash;
+                                (u2 as any).pinSalt = salt;
+                                await u2.save();
+                                const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
+                                setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
+                                sendSettingsMessageWithImage(bot, chatId, userId);
+                            } catch (err: any) {
+                                const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
+                                setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
+                            }
+                        }));
+                    }));
+                    return;
+                }
+                const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
+                bot.once("text", createUserTextHandler(userId, async (reply2) => {
+                    const newPin = (reply2.text || "").trim();
+                    setTimeout(() => {
+                        bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
+                        bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
+                    }, 5000);
+                    try {
+                        if (!/^\d{4,8}$/.test(newPin)) {
+                            const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
+                            return;
+                        }
+                        const { hash, salt } = hashPin(newPin);
+                        const u2 = await User.findOne({ userId });
+                        if (!u2) return;
+                        (u2 as any).pinHash = hash;
+                        (u2 as any).pinSalt = salt;
+                        await u2.save();
+                        const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
+                        setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
+                        sendSettingsMessageWithImage(bot, chatId, userId);
+                    } catch (err: any) {
+                        const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
+                        setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
+                    }
+                }));
+            }));
+            return;
+        }
+
+        if (sel_action === "settings_pin_remove") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            const userDoc = await User.findOne({ userId });
+            const hasPin = !!(userDoc as any)?.pinHash;
+            if (!hasPin) {
+                await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
+                sendSettingsMessageWithImage(bot, chatId, userId);
+                return;
+            }
+            const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                const pin = (reply.text || "").trim();
+                setTimeout(() => {
+                    bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                }, 5000);
+                const u = await User.findOne({ userId });
+                if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                    const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                    setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
+                    sendSettingsMessageWithImage(bot, chatId, userId);
+                    return;
+                }
+                (u as any).pinHash = "";
+                (u as any).pinSalt = "";
+                await u.save();
+                await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
+                sendSettingsMessageWithImage(bot, chatId, userId);
+            }));
             return;
         }
 
@@ -4877,7 +4895,7 @@ ${await t('privateKey.p7', userId)}`,
                 await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
                 await bot.deleteMessage(chatId, reply.message_id).catch(() => { });
 
-                if (isNaN(TpPercent) || TpPercent <= 0 || TpPercent > 100) {
+                if (isNaN(TpPercent) || TpPercent <= 0 || TpPercent > TP_MAX) {
                     const errorMessage = await bot.sendMessage(
                         chatId,
                         `${await t('errors.invalidTp', userId)}`
@@ -4891,7 +4909,7 @@ ${await t('privateKey.p7', userId)}`,
                         const newTpPercent = Number(newReply.text || "");
                         await bot.deleteMessage(chatId, newReply.message_id).catch(() => { });
 
-                        if (isNaN(newTpPercent) || newTpPercent <= 0 || newTpPercent > 100) {
+                        if (isNaN(newTpPercent) || newTpPercent <= 0 || newTpPercent > TP_MAX) {
                             await bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidTp', userId)}`
@@ -4934,7 +4952,7 @@ ${await t('privateKey.p7', userId)}`,
                 await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => { });
                 await bot.deleteMessage(chatId, reply.message_id).catch(() => { });
 
-                if (isNaN(SlPercent) || SlPercent >= 0 || SlPercent < -100) {
+                if (isNaN(SlPercent) || SlPercent > 0 || SlPercent < SL_MIN) {
                     const errorMessage = await bot.sendMessage(
                         chatId,
                         `${await t('errors.invalidSl', userId)}`
@@ -4948,7 +4966,7 @@ ${await t('privateKey.p7', userId)}`,
                         const newSlPercent = Number(newReply.text || "");
                         await bot.deleteMessage(chatId, newReply.message_id).catch(() => { });
 
-                        if (isNaN(newSlPercent) || newSlPercent >= 0 || newSlPercent < -100) {
+                        if (isNaN(newSlPercent) || newSlPercent > 0 || newSlPercent < SL_MIN) {
                             await bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidSl', userId)}`
@@ -5213,7 +5231,7 @@ ${await t('privateKey.p7', userId)}`,
                 setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
                 const raw = (reply.text || "").trim().replace(",", ".");
                 const num = Number(raw);
-                if (isNaN(num) || num < 0 || num > 1000) {
+                if (isNaN(num) || num < 0 || num > TP_MAX) {
                     await bot.sendMessage(chatId, await t("copyTrade.invalidNumber", userId)).catch(() => {});
                     return;
                 }
@@ -5248,7 +5266,7 @@ ${await t('privateKey.p7', userId)}`,
                 setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
                 const raw = (reply.text || "").trim().replace(",", ".");
                 const num = Number(raw);
-                if (isNaN(num) || num > 0 || num < -100) {
+                if (isNaN(num) || num > 0 || num < SL_MIN) {
                     await bot.sendMessage(chatId, await t("copyTrade.invalidNumber", userId)).catch(() => {});
                     return;
                 }
@@ -5951,10 +5969,10 @@ ${await t('privateKey.p7', userId)}`,
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
                         const takeProfitPercent = Number(reply.text || "");
-                        if (isNaN(takeProfitPercent) || takeProfitPercent < 0 || takeProfitPercent > 100) {
+                        if (isNaN(takeProfitPercent) || takeProfitPercent <= 0 || takeProfitPercent > TP_MAX) {
                             bot.sendMessage(
                                 chatId,
-                                `${await t('errors.invalidAmount', userId)}`,
+                                `${await t('errors.invalidTp', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
                                     safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
@@ -5962,10 +5980,10 @@ ${await t('privateKey.p7', userId)}`,
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
                                         const newTakeProfitPercent = Number(newReply.text || "");
-                                        if (isNaN(newTakeProfitPercent) || newTakeProfitPercent <= 0 || newTakeProfitPercent > 100) {
+                                        if (isNaN(newTakeProfitPercent) || newTakeProfitPercent <= 0 || newTakeProfitPercent > TP_MAX) {
                                             bot.sendMessage(
                                                 chatId,
-                                                `${await t('errors.invalidAmount', userId)}`,
+                                                `${await t('errors.invalidTp', userId)}`,
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
@@ -6004,10 +6022,10 @@ ${await t('privateKey.p7', userId)}`,
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
                         const stopLossPercent = Number(reply.text || "");
-                        if (isNaN(stopLossPercent) || stopLossPercent > 0 || stopLossPercent < -100) {
+                        if (isNaN(stopLossPercent) || stopLossPercent > 0 || stopLossPercent < SL_MIN) {
                             bot.sendMessage(
                                 chatId,
-                                `${await t('errors.invalidAmount', userId)}`,
+                                `${await t('errors.invalidSl', userId)}`,
                             ).then((newSentMessage) => {
                                 setTimeout(() => {
                                     safeDeleteMessage(bot, chatId, newSentMessage.message_id).catch(() => { });
@@ -6015,10 +6033,10 @@ ${await t('privateKey.p7', userId)}`,
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
                                         const newStopLossPercent = Number(newReply.text || "");
-                                        if (isNaN(newStopLossPercent) || newStopLossPercent >= 0 || newStopLossPercent < -100) {
+                                        if (isNaN(newStopLossPercent) || newStopLossPercent > 0 || newStopLossPercent < SL_MIN) {
                                             bot.sendMessage(
                                                 chatId,
-                                                `${await t('errors.invalidAmount', userId)}`,
+                                                `${await t('errors.invalidSl', userId)}`,
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
