@@ -49,6 +49,16 @@ import {
 import { walletBackButton, walletsBackMarkup, getCloseButton, getCancelButton } from "./utils/markup";
 import { getUserChain } from "./utils/chain";
 import { User } from "./models/user";
+
+/** Atomic sniper subdoc update — avoids Mongoose VersionError when another task updates the same user (e.g. auto-sell, copy trade) while a text reply is pending. */
+async function setSniperField(userId: number, field: string, value: unknown): Promise<void> {
+    await User.updateOne({ userId }, { $set: { [`sniper.${field}`]: value } });
+}
+
+/** Atomic update under `settings.*` (or any top-level path) — same rationale as `setSniperField`. */
+async function setUserSettingPath(userId: number, dotPath: string, value: unknown): Promise<void> {
+    await User.updateOne({ userId }, { $set: { [dotPath]: value } });
+}
 import { PendingUser } from "./models/pendingUser";
 import { limitOrderData } from "./models/limitOrder";
 import bs58 from "bs58";
@@ -746,8 +756,10 @@ bot.on("callback_query", async (callbackQuery) => {
         const from = callbackQuery.from;
         const channelType = ctx?.chat.type;
         const caption = callbackQuery.message?.caption || "";
-        const solanaAddress = text.match(/([A-Za-z0-9]{32,44})/)?.[1] || "";
-        const ethAddress = text.match(/(0x[a-fA-F0-9]{40})/)?.[1] || "";
+        /** Buy/sell screens are usually photos with the mint in caption — text-only match missed the token. */
+        const textOrCaption = `${text}\n${caption}`;
+        const solanaAddress = textOrCaption.match(/([1-9A-HJ-NP-Za-km-z]{32,44})/)?.[1] || "";
+        const ethAddress = textOrCaption.match(/(0x[a-fA-F0-9]{40})/)?.[1] || "";
         const tokenAddress = ethAddress || solanaAddress;
 
         const SPAM_LIMIT = 10;
@@ -756,7 +768,7 @@ bot.on("callback_query", async (callbackQuery) => {
         if (tokenAddress) {
             console.log("Extracted Token Address:", tokenAddress);
         } else {
-            console.log("No Token Address Found in Caption");
+            console.log("No token address found in message text or caption");
         }
 
         const userId = from.id;
@@ -1713,7 +1725,7 @@ bot.on("callback_query", async (callbackQuery) => {
             const referralLink = `https://t.me/Tcfl_trade_bot?start=ref_${userId}`;
             // const referralLink = `https://t.me/Eniybot?start=ref_${userId}`;
             const title = await t('referral.sh', userId);
-            const message = `<strong>${title}</strong>\n\n` +
+            const message = `${title}\n\n` +
                 `${await t('referral.shareMessage1', userId)}\n` +
                 `${await t('referral.shareMessage2', userId)}\n\n` +
                 `${await t('referral.shareMessage3', userId)}\n${referralLink}`;
@@ -2044,6 +2056,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 return;
             }
 
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             await sendBuyMessageWithAddress(
                 bot,
                 chatId,
@@ -2145,6 +2158,22 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action && sel_action.startsWith("buy_") && sel_action !== "buy_x" && sel_action !== "buy_amount_x" && !sel_action.startsWith("buy_amount_") && !sel_action.startsWith("buy_gas_eth_")) {
+            const chainBuy = await getUserChain(userId);
+            if (chainBuy !== "solana") {
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: await t("errors.notToken", userId),
+                    show_alert: true,
+                }).catch(() => {});
+                return;
+            }
+            if (!tokenAddress || !isValidSolanaAddress(tokenAddress)) {
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: await t("errors.notToken", userId),
+                    show_alert: true,
+                }).catch(() => {});
+                return;
+            }
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             handleBuyAction(
                 sel_action as BuyAction,
                 bot,
@@ -2153,9 +2182,11 @@ bot.on("callback_query", async (callbackQuery) => {
                 messageId,
                 tokenAddress,
             );
+            return;
         }
 
         if (sel_action === "buy_x") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const userChain = await getUserChain(userId);
             const buyXMessage = userChain === "ethereum"
                 ? await t('messages.buy_x_ethereum', userId)
@@ -2199,6 +2230,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     }),
                 );
             });
+            return;
         }
 
         const dangerZoneMessage =
@@ -2325,37 +2357,34 @@ bot.on("callback_query", async (callbackQuery) => {
                 await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, sellPercent, tokenBalance);
                 return;
             } else {
-                // Handle Solana users
-                if (sel_action === "sell_x") {
-                    // sell_x is handled separately below
+                if (sel_action !== "sell_x") {
+                    let sellPercent: number;
+                    const sell_percent = user.settings.quick_sell?.sell_percent || [10, 20, 50, 75, 100];
+                    switch (sel_action) {
+                        case "sell_10": sellPercent = sell_percent[0] || 10; break;
+                        case "sell_20": sellPercent = sell_percent[1] || 20; break;
+                        case "sell_50": sellPercent = sell_percent[2] || 50; break;
+                        case "sell_75": sellPercent = sell_percent[3] || 75; break;
+                        case "sell_100": sellPercent = sell_percent[4] || 100; break;
+                        default: sellPercent = 10;
+                    }
+
+                    await sendSellMessageWithAddress(
+                        bot,
+                        chatId,
+                        userId,
+                        messageId,
+                        tokenAddress,
+                        sellPercent,
+                        Number(tokenBalance)
+                    );
                     return;
                 }
-                
-                let sellPercent: number;
-                const sell_percent = user.settings.quick_sell?.sell_percent || [10, 20, 50, 75, 100];
-                switch (sel_action) {
-                    case "sell_10": sellPercent = sell_percent[0] || 10; break;
-                    case "sell_20": sellPercent = sell_percent[1] || 20; break;
-                    case "sell_50": sellPercent = sell_percent[2] || 50; break;
-                    case "sell_75": sellPercent = sell_percent[3] || 75; break;
-                    case "sell_100": sellPercent = sell_percent[4] || 100; break;
-                    default: sellPercent = 10;
-                }
-                
-                await sendSellMessageWithAddress(
-                    bot,
-                    chatId,
-                    userId,
-                    messageId,
-                    tokenAddress,
-                    sellPercent,
-                    Number(tokenBalance)
-                );
-                return;
             }
         }
 
         if (sel_action && sel_action.startsWith("sell_") && sel_action !== "sell_x" && sel_action !== "sell_10" && sel_action !== "sell_20" && sel_action !== "sell_50" && sel_action !== "sell_75" && sel_action !== "sell_100" && !sel_action?.startsWith("sell_gas_eth_")) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             handleSellAction(
                 sel_action as SellAction,
                 bot,
@@ -2364,6 +2393,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 messageId,
                 tokenAddress,
             );
+            return;
         }
 
         if (sel_action === "sell_x") {
@@ -2371,7 +2401,6 @@ bot.on("callback_query", async (callbackQuery) => {
             bot.sendMessage(
                 chatId,
                 `${await t('messages.sell_x', userId)}`,
-                // { reply_markup: { force_reply: true } },
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
@@ -3671,7 +3700,17 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         }
 
         if (sel_action === "bundle_reset") {
-            await bundleWalletMenu.resetBundledWallets(User, callbackQuery, createUserTextHandler);
+            await bundleWalletMenu.resetBundledWallets(User, callbackQuery);
+            return;
+        }
+
+        if (sel_action === "bundle_reset_confirm") {
+            await bundleWalletMenu.resetBundledWallets(User, callbackQuery);
+            return;
+        }
+
+        if (sel_action === "bundle_reset_cancel") {
+            await bundleWalletMenu.resetBundledWallets(User, callbackQuery);
             return;
         }
 
@@ -4269,7 +4308,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
                         const slippageValue = Number(reply.text || "");
-                        if (isNaN(slippageValue) || slippageValue < 0 || slippageValue > 100) {
+                        if (isNaN(slippageValue) || slippageValue < 1 || slippageValue > 100) {
                             bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidSlippage', userId)}`,
@@ -4280,22 +4319,18 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
                                         const newSlippageValue = Number(newReply.text || "");
-                                        if (isNaN(newSlippageValue) || newSlippageValue < 0 || newSlippageValue > 100) {
+                                        if (isNaN(newSlippageValue) || newSlippageValue < 1 || newSlippageValue > 100) {
                                             bot.sendMessage(
                                                 chatId,
                                                 `${await t('errors.invalidSlippage', userId)}`,
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            switch (sel_action) {
-                                                case "settings_slippage_buy":
-                                                    user.settings.slippage.buy_slippage = newSlippageValue;
-                                                    break;
-                                                case "settings_slippage_sell":
-                                                    user.settings.slippage.sell_slippage = newSlippageValue;
-                                                    break;
-                                            }
-                                            await user.save();
+                                            const path =
+                                                sel_action === "settings_slippage_buy"
+                                                    ? "settings.slippage.buy_slippage"
+                                                    : "settings.slippage.sell_slippage";
+                                            await setUserSettingPath(userId, path, newSlippageValue);
                                             editSlippageMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -4303,15 +4338,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            switch (sel_action) {
-                                case "settings_slippage_buy":
-                                    user.settings.slippage.buy_slippage = slippageValue;
-                                    break;
-                                case "settings_slippage_sell":
-                                    user.settings.slippage.sell_slippage = slippageValue;
-                                    break;
-                            }
-                            await user.save();
+                            const path =
+                                sel_action === "settings_slippage_buy"
+                                    ? "settings.slippage.buy_slippage"
+                                    : "settings.slippage.sell_slippage";
+                            await setUserSettingPath(userId, path, slippageValue);
                             editSlippageMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -4331,7 +4362,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
                         const slippageValueEth = Number(reply.text || "");
-                        if (isNaN(slippageValueEth) || slippageValueEth < 0 || slippageValueEth > 100) {
+                        if (isNaN(slippageValueEth) || slippageValueEth < 1 || slippageValueEth > 100) {
                             bot.sendMessage(
                                 chatId,
                                 `${await t('errors.invalidSlippage', userId)}`,
@@ -4342,22 +4373,18 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 bot.once('text',
                                     createUserTextHandler(userId, async (newReply) => {
                                         const newSlippageValueEth = Number(newReply.text || "");
-                                        if (isNaN(newSlippageValueEth) || newSlippageValueEth < 0 || newSlippageValueEth > 100) {
+                                        if (isNaN(newSlippageValueEth) || newSlippageValueEth < 1 || newSlippageValueEth > 100) {
                                             bot.sendMessage(
                                                 chatId,
                                                 `${await t('errors.invalidSlippage', userId)}`,
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            switch (sel_action) {
-                                                case "settings_slippage_buy_eth":
-                                                    user.settings.slippage_eth.buy_slippage_eth = newSlippageValueEth;
-                                                    break;
-                                                case "settings_slippage_sell_eth":
-                                                    user.settings.slippage_eth.sell_slippage_eth = newSlippageValueEth;
-                                                    break;
-                                            }
-                                            await user.save();
+                                            const path =
+                                                sel_action === "settings_slippage_buy_eth"
+                                                    ? "settings.slippage_eth.buy_slippage_eth"
+                                                    : "settings.slippage_eth.sell_slippage_eth";
+                                            await setUserSettingPath(userId, path, newSlippageValueEth);
                                             editSlippageMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -4365,15 +4392,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            switch (sel_action) {
-                                case "settings_slippage_buy_eth":
-                                    user.settings.slippage_eth.buy_slippage_eth = slippageValueEth;
-                                    break;
-                                case "settings_slippage_sell_eth":
-                                    user.settings.slippage_eth.sell_slippage_eth = slippageValueEth;
-                                    break;
-                            }
-                            await user.save();
+                            const path =
+                                sel_action === "settings_slippage_buy_eth"
+                                    ? "settings.slippage_eth.buy_slippage_eth"
+                                    : "settings.slippage_eth.sell_slippage_eth";
+                            await setUserSettingPath(userId, path, slippageValueEth);
                             editSlippageMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -4405,6 +4428,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         }
 
         if (sel_action === "young_token") {
+            const userChain = await getUserChain(userId);
             const sent = bot.sendMessage(
                 chatId,
                 `${await t('messages.youngInput', userId)}`,
@@ -4435,8 +4459,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.settings.youngTokenDate = newdate;
-                                            await user.save();
+                                            const youngPath =
+                                                userChain === "ethereum"
+                                                    ? "settings.youngTokenDate_ethereum"
+                                                    : "settings.youngTokenDate_solana";
+                                            await setUserSettingPath(userId, youngPath, newdate);
                                             editSettingsMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -4444,8 +4471,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.settings.youngTokenDate = date;
-                            await user.save();
+                            const youngPath =
+                                userChain === "ethereum"
+                                    ? "settings.youngTokenDate_ethereum"
+                                    : "settings.youngTokenDate_solana";
+                            await setUserSettingPath(userId, youngPath, date);
                             editSettingsMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -4868,13 +4898,19 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             editMessageReplyMarkup(bot, chatId, userId, messageId);
         }
         if (sel_action === "settings_auto_Sell_wallets") {
-            if (user.wallets.length > 0) {
-                user.wallets.forEach(wallet => wallet.is_active_wallet = false);
-                user.wallets[0].is_active_wallet = true;
-                await user.save();
-                editSwitchWalletsMessage(bot, chatId, userId, messageId);
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                if (user.ethereumWallets?.length > 0) {
+                    sendDefaultEthereumWalletMessage(bot, chatId, userId, messageId);
+                } else {
+                    bot.sendMessage(chatId, `${await t('errors.invalidAutoWallet', userId)}`);
+                }
             } else {
-                bot.sendMessage(chatId, `${await t('errors.invalidAutoWallet', userId)}`);
+                if (user.wallets?.length > 0) {
+                    sendDefaultWalletMessage(bot, chatId, userId, messageId);
+                } else {
+                    bot.sendMessage(chatId, `${await t('errors.invalidAutoWallet', userId)}`);
+                }
             }
             return;
         }
@@ -5699,7 +5735,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             const shortAddr = (u2.copyTrade.pendingAddAddress || "").length > 16
                                 ? `${(u2.copyTrade.pendingAddAddress || "").slice(0, 8)}...${(u2.copyTrade.pendingAddAddress || "").slice(-8)}`
                                 : (u2.copyTrade.pendingAddAddress || "");
-                            const confirmText = `${await t("copyTrade.addressDetected", userId)}: <code>${shortAddr}</code>${label ? `\n${await t("copyTrade.label", userId)}: ${label}` : ""}\n\n${await t("copyTrade.confirmAdd", userId)}`;
+                            const confirmText = `${await t("copyTrade.addressDetected", userId)} : <code>${shortAddr}</code>${label ? `\n${await t("copyTrade.label", userId)} : ${label}` : ""}\n\n${await t("copyTrade.confirmAdd", userId)}`;
                     const yesAdd = await t("copyTrade.yesAdd", userId);
                     const noBtn = await t("copyTrade.no", userId);
                             const confirmMarkup = {
@@ -5829,8 +5865,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.slippage = newSlippageValue;
-                                            await user.save();
+                                            await setSniperField(userId, "slippage", newSlippageValue);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -5838,8 +5873,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.slippage = slippageValue;
-                            await user.save();
+                            await setSniperField(userId, "slippage", slippageValue);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -5881,8 +5915,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.buy_amount = newBuyAmountValue;
-                                            await user.save();
+                                            await setSniperField(userId, "buy_amount", newBuyAmountValue);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -5890,8 +5923,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.buy_amount = buyAmountValue;
-                            await user.save();
+                            await setSniperField(userId, "buy_amount", buyAmountValue);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -5934,8 +5966,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.buy_limit = newBuyLimit;
-                                            await user.save();
+                                            await setSniperField(userId, "buy_limit", newBuyLimit);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -5943,8 +5974,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.buy_limit = buyLimit;
-                            await user.save();
+                            await setSniperField(userId, "buy_limit", buyLimit);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -5987,8 +6017,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.take_profit = newTakeProfitPercent;
-                                            await user.save();
+                                            await setSniperField(userId, "take_profit", newTakeProfitPercent);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -5996,8 +6025,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.take_profit = takeProfitPercent;
-                            await user.save();
+                            await setSniperField(userId, "take_profit", takeProfitPercent);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6040,8 +6068,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.stop_loss = newStopLossPercent;
-                                            await user.save();
+                                            await setSniperField(userId, "stop_loss", newStopLossPercent);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6049,8 +6076,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.stop_loss = stopLossPercent;
-                            await user.save();
+                            await setSniperField(userId, "stop_loss", stopLossPercent);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6093,8 +6119,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.time_limit = newTimelimit;
-                                            await user.save();
+                                            await setSniperField(userId, "time_limit", newTimelimit);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6102,8 +6127,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.time_limit = timeLimit;
-                            await user.save();
+                            await setSniperField(userId, "time_limit", timeLimit);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6164,8 +6188,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.bonding_curve_min = newBondingCurveMin;
-                                            await user.save();
+                                            await setSniperField(userId, "bonding_curve_min", newBondingCurveMin);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6173,8 +6196,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.bonding_curve_min = bonding_curve_min;
-                            await user.save();
+                            await setSniperField(userId, "bonding_curve_min", bonding_curve_min);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6217,8 +6239,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.bonding_curve_max = newBondingCurveMax;
-                                            await user.save();
+                                            await setSniperField(userId, "bonding_curve_max", newBondingCurveMax);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6226,8 +6247,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.bonding_curve_max = bondingMax;
-                            await user.save();
+                            await setSniperField(userId, "bonding_curve_max", bondingMax);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6270,8 +6290,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.min_mc = newMcMin;
-                                            await user.save();
+                                            await setSniperField(userId, "min_mc", newMcMin);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6279,8 +6298,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.min_mc = mcMin;
-                            await user.save();
+                            await setSniperField(userId, "min_mc", mcMin);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6323,8 +6341,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.max_mc = newMcMax;
-                                            await user.save();
+                                            await setSniperField(userId, "max_mc", newMcMax);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6332,8 +6349,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.max_mc = mcMax;
-                            await user.save();
+                            await setSniperField(userId, "max_mc", mcMax);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6376,8 +6392,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.min_token_age = newMinTokenAge;
-                                            await user.save();
+                                            await setSniperField(userId, "min_token_age", newMinTokenAge);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6385,8 +6400,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.min_token_age = minTokenAge;
-                            await user.save();
+                            await setSniperField(userId, "min_token_age", minTokenAge);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6430,8 +6444,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.max_token_age = newMaxTokenAge;
-                                            await user.save();
+                                            await setSniperField(userId, "max_token_age", newMaxTokenAge);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6439,8 +6452,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.max_token_age = maxTokenAge;
-                            await user.save();
+                            await setSniperField(userId, "max_token_age", maxTokenAge);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6483,8 +6495,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.min_holders = newMinHolders;
-                                            await user.save();
+                                            await setSniperField(userId, "min_holders", newMinHolders);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6492,8 +6503,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.min_holders = minHolders;
-                            await user.save();
+                            await setSniperField(userId, "min_holders", minHolders);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6537,8 +6547,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.max_holders = newMaxHolders;
-                                            await user.save();
+                                            await setSniperField(userId, "max_holders", newMaxHolders);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6546,8 +6555,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.max_holders = maxHolders;
-                            await user.save();
+                            await setSniperField(userId, "max_holders", maxHolders);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6590,8 +6598,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.min_vol = newMinVolume;
-                                            await user.save();
+                                            await setSniperField(userId, "min_vol", newMinVolume);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6599,8 +6606,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.min_vol = minVolume;
-                            await user.save();
+                            await setSniperField(userId, "min_vol", minVolume);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6644,8 +6650,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.max_vol = newMaxVolume;
-                                            await user.save();
+                                            await setSniperField(userId, "max_vol", newMaxVolume);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6653,8 +6658,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.max_vol = maxVolume;
-                            await user.save();
+                            await setSniperField(userId, "max_vol", maxVolume);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6697,8 +6701,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.min_liq = newMinLiquidity;
-                                            await user.save();
+                                            await setSniperField(userId, "min_liq", newMinLiquidity);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6706,8 +6709,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.min_liq = minLiquidity;
-                            await user.save();
+                            await setSniperField(userId, "min_liq", minLiquidity);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6750,8 +6752,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.max_liq = newMaxLiquidity;
-                                            await user.save();
+                                            await setSniperField(userId, "max_liq", newMaxLiquidity);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6759,8 +6760,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.max_liq = maxLiquidity;
-                            await user.save();
+                            await setSniperField(userId, "max_liq", maxLiquidity);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6803,8 +6803,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.TXNS_MIN = newMinTxns;
-                                            await user.save();
+                                            await setSniperField(userId, "TXNS_MIN", newMinTxns);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6812,8 +6811,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.TXNS_MIN = minTxns;
-                            await user.save();
+                            await setSniperField(userId, "TXNS_MIN", minTxns);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {
@@ -6856,8 +6854,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                                 // { reply_markup: { force_reply: true } },
                                             );
                                         } else {
-                                            user.sniper.TXNS_MAX = newMaxTxns;
-                                            await user.save();
+                                            await setSniperField(userId, "TXNS_MAX", newMaxTxns);
                                             editSniperMessage(bot, chatId, userId, messageId);
                                         }
                                         await safeDeleteMessage(bot, chatId, newReply.message_id);
@@ -6865,8 +6862,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 );
                             });
                         } else {
-                            user.sniper.TXNS_MAX = maxTxns;
-                            await user.save();
+                            await setSniperField(userId, "TXNS_MAX", maxTxns);
                             editSniperMessage(bot, chatId, userId, messageId);
                         }
                         setTimeout(() => {

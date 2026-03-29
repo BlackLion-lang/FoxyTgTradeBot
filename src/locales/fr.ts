@@ -1,7 +1,7 @@
 import { Translations } from './types';
 
 export const fr: Translations = {
-    // Commun à tous les menus
+    // Messages Commun à tous les menus
     back: "↩️ Retour",
     currencySymbol_solana: "SOL",
     currencySymbol_ethereum: "ETH",
@@ -14,7 +14,7 @@ export const fr: Translations = {
     backSettings: "⬅ Retour paramètres",
     totals: "Total",
 
-    //commandes de FoxyBoTracker
+    // Commandes de FoxyBoTracker
     commands: {
         start: "Commencez avec FoxyBoTracker.",
         menu: "Accédez au menu principal de FoxyBoTracker.",
@@ -29,9 +29,9 @@ export const fr: Translations = {
         authenticate: "Vérifier qu'il s'agit de notre BOT officiel. (Obtenir le lien d'authenticité)"
     },
 
-    // Authentification BOT
+    // Authentification du BOT
     authenticate: {
-        title: "🔐 Vérification de l'authenticité de FoxyBoTracker :",
+        title: "🔐 Vérification de l'authenticité de FoxyBoTracker",
         singleUseWarning: "⚠️ Le lien ci-dessous permettant de vérifier l’authenticité de FoxyBoTracker est à usage unique. Il ne fonctionne qu’une seule fois et reste valide pendant un temps limité. ⚠️",
         clickButton: "🦊 Vérifiez l’authenticité de FoxyBoTracker en cliquant sur le bouton ci-dessous.",
         validUntil: "⏳ Le lien expire le :",
@@ -52,8 +52,8 @@ export const fr: Translations = {
         tipPercentageEth: "💰 Com. Frais (%) - (Eth)",
         adminWallet: "💼 Wallet Admin",
         adminWalletName: "📝 Nom Wallet Admin",
-        walletSolanaLimit: "Limite Max wallets Solana",
-        walletEthereumLimit: "Limite Max wallets Eth",
+        walletSolanaLimit: "Limite Max Wallets Solana",
+        walletEthereumLimit: "Limite Max Wallets Eth",
         solanaPrice: "Prix du Solana",
         p3: "Adresse du Wallet Admin",
         p4: "Solde du Wallet Admin",
@@ -69,7 +69,7 @@ export const fr: Translations = {
         languageFr: "Français"
     },
 
-    //welcome - Bienvenue
+    // Menu Welcome - Bienvenue
     welcome: {
         p1: "Accès restreint – Autorisation requise !",
         p2: "Bonjour",
@@ -83,7 +83,7 @@ export const fr: Translations = {
         admin: "👑 Menu Admin"
     },
 
-    //Referral - Menu Parrainage
+    // Menu Referral - Menu Parrainage
     referral: {
         p1: "🎁 Programme de parrainage 🎁",
         p2: "Invitez vos amis et gagnez des récompenses exclusives avec FoxyBoTracker. 🚀",
@@ -94,7 +94,7 @@ export const fr: Translations = {
         p7: "Partagez ce lien avec vos amis ! Chaque inscription via votre lien = Plus de profits pour vous. ✨",
         p8: "Vous receverez",
         p9: "pour chaque lot de",
-        p10: "parrainages.",
+        p10: "parrainages confirmés.",
         wallet: "💼 Configurer Wallet commissions",
         share: "📥 Partagez votre lien de parrainage",
         openLink: "Ouvrir le lien de parrainage",
@@ -105,9 +105,9 @@ export const fr: Translations = {
         shareMessage2: "Gérez vos cryptomonnaies Solana plus rapidement que jamais grâce aux achats et ventes instantanés, au suivi en temps réel de vos positions et au contrôle total de votre Wallet directement depuis Telegram.",
         shareMessage3: "Votre lien de parrainage :",
         share1: "📥 Partager",
-        sh: "🦊 Partager mon lien de parrainage.",
+        sh: "🦊 Partager mon lien de parrainage",
         viewList: "📋 Voir la liste des parrainages",
-        listTitle: "📋 Liste des filleuls parrainés via votre lien de parrainage FoxyBoTracker.",
+        listTitle: "📋 Liste des filleuls parrainés via votre lien de parrainage FoxyBoTracker",
         totalReferrals: "Total des parrainages",
         noReferrals: "Vous n'avez pas encore de filleul. Partagez votre lien de parrainage pour commencer à gagner des SOL.",
         listHeader: "Utilisateurs parrainés :",
@@ -143,7 +143,7 @@ export const fr: Translations = {
         botVersion: "🦊 Version de FoxyBoTracker Telegram :"
     },
 
-    // Acheter
+    // Menu Acheter
     buy: {
         p1: "💰 Menu d'achat",
         p2: "🌱 Ce Token est très récent. Soyez prudent.",
@@ -165,11 +165,11 @@ export const fr: Translations = {
         p18: "j",
         p19: "Partagez le Token avec vos amis",
         settings: "⚙️ Paramètres",
-        buy: "Acheter",
+        buy: "Achat",
         default: "Défaut"
     },
 
-    // Vendre
+    // Menu de Vente
     sell: {
         p1: "🎒 Menu de vente",
         p2: "💸 Prix :",
@@ -191,9 +191,9 @@ export const fr: Translations = {
         default: "Défaut"
     },
 
-    // Positions
+    // Menu Positions
     positions: {
-        p1: "💼 Vos Positions dans FoxyBoTracker.",
+        p1: "💼 Vos Positions dans FoxyBoTracker",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
         p4: "💰 Solde en Tokens :",
@@ -206,9 +206,9 @@ export const fr: Translations = {
         whatToDo: "💡 Que souhaitez-vous faire ?"
     },
 
-    // Portefeuilles - Wallets
+    // Menu Portefeuilles - Wallets
     wallets: {
-        p1: "💼 Réglages des Wallets FoxyBoTracker.",
+        p1: "💼 Réglages des Wallets FoxyBoTracker",
         p2: "Votre Wallet Solana ou Ethereum :",
         p2_solana: "Votre Wallet Solana :",
         p2_ethereum: "Votre Wallet Ethereum :",
@@ -232,9 +232,9 @@ export const fr: Translations = {
         switch: "✅ Changer le Wallet par défaut",
     },
 
-    // Paramètres
+    // Menu Paramètres
     settings: {
-        p1: "💼 Réglages de FoxyBoTracker.",
+        p1: "💼 Réglages de FoxyBoTracker",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
         p4: "🔒 Sécurité : Utilisez uniquement des paramètres de Trading adaptés à votre niveau de risque et à votre stratégie, afin d'éviter toute exposition excessive ou involontaire.",
@@ -255,7 +255,7 @@ export const fr: Translations = {
 
     // Menu d'aide
     help: {
-        p1: "Menu d'aide & Support.",
+        p1: "Menu d'aide & Support",
         p2: "📚 Pour les FAQ, guides et tutoriels, veuillez visiter notre Site Officiel.",
         p3: "🐦 Pour suivre les dernières mises à jour et actualités concernant les modifications et évolutions de FoxyBoTracker, consultez notre changelog ou nos réseaux sociaux.",
         p4: "💬 Besoin d'aide ? Contactez notre Responsable Support ci-dessous.",
@@ -266,19 +266,19 @@ export const fr: Translations = {
         authenticate: "🔐 Vérifier BOT FoxyBoTracker"
     },
 
-    // Changer de Wallet par défaut
+    // Menu Changement de Wallet par défaut
     switch: {
         p1: "🔁 Changer de Wallet",
         p2: "Wallet actif :",
         p3: "Adresse :",
         p4: "Nom :",
         p5: "Solde du Wallet :",
-        p6: "✅ indique le Wallet actif",
-        p7: "🔓 indique que le Wallet a été exporté",
+        p6: "✅ indique le Wallet actif.",
+        p7: "🔓 indique que le Wallet a été exporté.",
         p8: "Pour passer à un autre Wallet, cliquez sur son adresse ci-dessous"
     },
 
-    //Creation Wallet
+    // Menu Creation de Wallet
     createWallet: {
         p1: "Comment souhaitez-vous nommer votre nouveau Wallet ?",
         p2: "Le nom du Wallet ne peut pas contenir de symboles ou de caractères spéciaux.",
@@ -293,7 +293,7 @@ export const fr: Translations = {
         p11: "⚙️ Paramètres",
     },
 
-    // Importer un Wallet
+    // Menu Importer un Wallet
     importWallet: {
         p1: "✅ Wallet importé avec succès !",
         p2: "💳 Nom :",
@@ -302,13 +302,13 @@ export const fr: Translations = {
         settings: "⚙️ Paramètres",
     },
 
-    // Renommer un Wallet
+    // Menu Renommer un Wallet
     renameWallet: {
         p1: "✏️ Renommer le Wallet",
         p2: "💡 Sélectionnez un Wallet à renommer."
     },
 
-    // Supprimer un Wallet
+    // Menu Supprimer un Wallet
     deleteWallet: {
         p1: "🗑️ Supprimer le Wallet",
         p2: "💡 Sélectionnez un Wallet à supprimer.",
@@ -319,78 +319,78 @@ export const fr: Translations = {
 
     // Menu de Retrait
     withdrawWallet: {
-        menuTitle: "Menu de retrait de vos différents Wallets.",
+        menuTitle: "Menu de retrait de vos différents Wallets",
         p1: "🔒 Sélectionnez le Wallet depuis lequel vous souhaitez retirer des fonds.",
         p2: "💡 Sélectionnez le Wallet à utiliser pour ce retrait.",
     },
 
-    //Wallet par Defaut
+    // Menu Wallet par Defaut
     defaultWallet: {
-        p1: "💳 Changer le Wallet par Défaut.",
+        p1: "💳 Changer le Wallet par défaut",
         p2: "💡 Sélectionnez le Wallet que vous souhaitez définir par défaut pour Trader avec FoxyBoTracker.",
     },
 
-    // Zone dangereuse
+    // Menu Zone dangereuse
     dangerZoneMessage: {
-        menuTitle: "Menu d’accès à vos clés privées.",
+        menuTitle: "Menu d’accès à vos clés privées",
         p1: "⚠️ À lire attentivement - Zone dangereuse ! 🦊",
         p2: "L’exportation de votre clé privée est une action extrêmement sensible.",
         p3: "Toute personne",
-        p4: "Toute personne ayant accès à cette clé peut accéder à votre Wallet, transférer vos fonds et effectuer des Transactions sans votre autorisation. Un code PIN vous sera demandé pour confirmer l’exportation.",
+        p4: "ayant accès à cette clé peut accéder à votre Wallet, transférer vos fonds et effectuer des Transactions sans votre autorisation. Un code PIN vous sera demandé pour confirmer l’exportation.",
         p5: "Après l’exportation, nous ne pourrons plus garantir la sécurité de vos fonds et ne pourrons être tenus responsables en cas de perte ou de vol.",
         p6: "Êtes-vous absolument sûr de vouloir continuer ?",
         exportPrivateKey: "🔑 Exporter",
     },
 
-    // Exporter la clé privée
+    // Menu Exporter la clé privée
     exportPrivateKey: {
-        menuTitle: "Menu d’accès à vos clés privées.",
+        menuTitle: "Menu d’accès à vos clés privées",
         p1: "🔐 Exportation de la clé privée.",
         p2: "💡 Sélectionnez le Wallet pour lequel vous souhaitez exporter la clé privée."
     },
 
-    // PIN pour l'export de clé privée
+    // Menu de code PIN pour l'export de clé privée
     pin: {
-        setPin: "🔐 Définir le PIN",
-        changePin: "🔐 Changer le PIN",
+        setPin: "🔐 Définir le code PIN",
+        changePin: "🔐 Changer le code PIN",
         setPinFirst: "Code PIN requis !",
         setPinFirstDesc: "Vous devez définir un code PIN dans les Paramètres avant de pouvoir exporter une clé privée de l'un de vos Wallet. Appuyez sur Paramètres ci-dessous pour configurer votre code PIN.",
-        enterNewPin: "Entrez un nouveau code PIN (4 à 8 chiffres) :",
+        enterNewPin: "Entrez un nouveau code PIN (4 à 8 chiffres Max) :",
         enterCurrentPin: "Entrez votre code PIN actuel :",
         enterPinToExport: "Entrez votre code PIN pour exporter la clé privée de ce Wallet :",
         wrongPin: "❌ Code PIN incorrect. Réessayez.",
         pinSetSuccess: "✅ Code PIN défini. Vous pouvez maintenant exporter votre clé privée en toute sécurité.",
         pinChangedSuccess: "✅ Code PIN modifié avec succès.",
         pinMustBeDigits: "Le code PIN doit contenir entre 4 et 8 chiffres. Réessayez.",
-        removePin: "🔓 Supprimer le PIN",
-        pinRemovedSuccess: "✅ PIN supprimé. L'export de clé privée ne demandera plus de PIN.",
-        pinOptions: "Le PIN est activé. Que voulez-vous faire ?",
+        removePin: "🔓 Supprimer le code PIN",
+        pinRemovedSuccess: "✅ Code PIN supprimé. L'export de clé privée ne demandera plus de code PIN.",
+        pinOptions: "Le code PIN est activé. Que voulez-vous faire ?",
     },
 
-    // Clé privée
+    // Menu Clé privée
     privateKey: {
         p1: "🔐 Wallet :",
         p2: "Adresse du Wallet :",
         p3: "🔑 Clé privée du Wallet :",
         p4: "Voir le Wallet sur Solscan",
         p5: "NE LA PARTAGEZ AVEC PERSONNE",
-        p6: "Gardez La en lieu sûr, car elle donne un accès complet à votre Wallet et vos fonds.",
-        p7: "Une fois terminé, appuyez sur le bouton \"SUPPRIMER LE MESSAGE\" ci dessous.",
+        p6: "Conservez-la dans un endroit sécurisé, car elle permet un accès total à votre Wallet et à vos fonds.",
+        p7: "Une fois l’opération terminée, cliquez sur le bouton \"SUPPRIMER LE MESSAGE\" ci-dessous.",
         revealKey: "🔐 Afficher la clé",
         deleteMessage: "🗑️ Supprimer le message"
     },
 
-    // Paramètres des frais
+    // Menu Paramètres des frais
     feeSettings: {
-        menuTitle: "Paramètres des frais recommandés.",
-        p1: "⛽️ Paramètres des frais.",
+        menuTitle: "Paramètres des frais recommandés",
+        p1: "⛽️ Paramètres des frais",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
-        p4: "Rapide ⚡ : Utilise environ 0.001 SOL par transaction",
-        p4_ethereum: "Rapide⚡ : Utilise environ 0.0001 ETH par transaction",
-        p5: "Rapide ⚡⚡ : Utilise environ 0.005 SOL par transaction",
-        p5_ethereum: "Rapide⚡⚡ : Utilise environ 0.0005 ETH par transaction",
-        p6: "💡 Augmenter vos frais d'achat et de vente accélérera la prise en compte de la transaction on-chain.",
+        p4: "Rapide ⚡ : Utilise environ 0.001 SOL par Transaction",
+        p4_ethereum: "Rapide⚡ : Utilise environ 0.0001 ETH par Transaction",
+        p5: "Rapide ⚡⚡ : Utilise environ 0.005 SOL par Transaction",
+        p5_ethereum: "Rapide⚡⚡ : Utilise environ 0.0005 ETH par Transaction",
+        p6: "💡 Augmenter vos frais d'achat et de vente accélérera la prise en compte de la Transaction on-chain.",
         p7: "⚠️ Vous devez entrer une valeur entre 0 et 1 pour chaque mise à jour de frais.",
         p8: "Lent",
         p9: "Normal",
@@ -428,26 +428,26 @@ export const fr: Translations = {
         invalidGasFee: "Frais de gaz invalides. Veuillez entrer un nombre valide."
     },
 
-    // Paramètres de Slippage
+    // Menu Paramètres de Slippage
     slippageSettings: {
-        p1: "💦 Paramètres de Slippage.",
+        p1: "💦 Paramètres de Slippage",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
-        p4: "💡 Un pourcentage de Slippage plus élevé augmente la réussite de la transaction. Par exemple, 50% accroît les chances que l'ordre soit exécuté.",
+        p4: "💡 Un pourcentage de Slippage plus élevé augmente la réussite de la Transaction. Par exemple, 50% accroît les chances que l'ordre soit exécuté.",
         buy: "💦 Achat :",
         sell: "💦 Vente :"
     },
 
-    // Langue
+    // Menu Langue
     language: {
         p1: "Veuillez sélectionner la langue de FoxyBoTracker.",
         english: "Anglais",
         french: "Français"
     },
 
-    // Achat rapide
+    // Menu Achat rapide
     quickBuy: {
-        p1: "⛽️ Paramètres d'achat rapide.",
+        p1: "⛽️ Paramètres d'achat rapide",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
         p4: "🌐 Personnalisez ici vos pourcentages d'achat rapide.",
@@ -470,9 +470,9 @@ export const fr: Translations = {
         invalidAmountEth: "Montant invalide. Veuillez entrer un nombre valide."
     },
 
-    // Vente rapide
+    // Mznu Vente rapide
     quickSell: {
-        p1: "⛽️ Paramètres de vente rapide.",
+        p1: "⛽️ Paramètres de vente rapide",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
         p4: "🌐 Personnalisez ici les montants de vente rapide.",
@@ -498,9 +498,9 @@ export const fr: Translations = {
         selling: "Vente :"
     },
 
-    // Vente automatique
+    // Menu Vente automatique
     autoSell: {
-        p1: "⛽️ Paramètres de vente automatique. (Auto Sell)",
+        p1: "⛽️ Paramètres de vente automatique (Auto Sell)",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
         p4: "🌐 Lorsque la vente automatique est activée, Foxy vendra automatiquement tout Token collé selon vos règles.",
@@ -513,9 +513,9 @@ export const fr: Translations = {
         wallet: "💳 Wallet :",
     },
 
-    // TP & SL
+    // Menu TP & SL
     TpSl: {
-        p1: "💸 Niveaux de Take Profit & Stop Loss automatiques.",
+        p1: "💸 Niveaux de Take Profit & Stop Loss automatiques",
         p2: "❓ Si vous avez besoin d'aide",
         p3: "Cliquez ici !",
         p4: "🌐 Après un Trade d'achat réussi, un ordre limite de vente sera automatiquement créé selon vos niveaux de profit ou Stop Loss.",
@@ -526,7 +526,7 @@ export const fr: Translations = {
         sl: "📉 Nouveau Stop Loss : "
     },
 
-    // Retrait
+    // Menu Retrait
     withdrawal: {
         p1: "💳 Retrait",
         p2: "Transaction",
@@ -552,7 +552,7 @@ export const fr: Translations = {
     },
 
     trending: {
-        p1: "🚀 Menu Tokens tendance.",
+        p1: "🚀 Menu Tokens Tendance",
         p2: "🔥 Top 10 des Tokens populaires :",
         p3: "Rang",
         p4: "💠 Nom du Token",
@@ -566,18 +566,18 @@ export const fr: Translations = {
         previous: "⏮️ Précédent"
     },
 
-    // Souscription
+    // Menu Souscription
     subscribe: {
-        title: "Options d'abonnement pour le module de Snipping.",
-        options: "Options d'abonnement pour le module de Snipping.",
+        title: "Options d'abonnement pour le module de Snipping",
+        options: "Options d'abonnement pour le module de Snipping",
         unlockFeatures: "Débloquez des fonctionnalités premium tel que :",
-        sniping: "Sniping",
+        sniping: "Snipping",
         choosePlan: "Choisissez le plan qui vous convient le mieux selon vos besoins :",
         alreadySubscribed: "Vous êtes déjà abonné au module de Snipping !",
         plan: "Plan",
         started: "Commencé",
         expiresIn: "Expire dans",
-        subscriptionRequired: "Activation système d'abonnement",
+        subscriptionRequired: "Activ. système d'abonnement",
         pressSubscribe: "Appuyez sur le bouton *S'abonner* dans le menu principal pour activer votre abonnement.",
         walletNotConfigured: "Le Wallet d'abonnement n'est pas configuré. Veuillez contacter le support.",
         userNotFound: "Impossible de trouver votre enregistrement utilisateur. Veuillez réessayer /start.",
@@ -597,14 +597,14 @@ export const fr: Translations = {
         year: "📅 1 An",
     },
 
-    // Module de Snipping
+    // Menu Module de Snipping
     sniper: {
-        menuTitle: "Menu de Snipping.",
+        menuTitle: "Menu de Snipping",
         active: "🚀 SNIPER ACTIF — Prêt à sniper les nouveaux listings. Restez vigilant !",
         stopped: "🛑 Module Sniper arrêté — Surveillance en pause.",
         detectedActiveTokens: "🔥 Tokens actifs détectés :",
         noDetectedTokens: "Aucun Token actif détecté pour le moment.",
-        panelDescription: "C'est le panneau du bot sniper. Ici, vous pouvez configurer tous les paramètres du bot.",
+        panelDescription: "C'est le panneau du bot sniper. Ici, vous pouvez configurer tous les paramètres de FoxyBoTracker.",
         panelDescription2: "Si vous avez la moindre question veuillez nous contacter via notre site officiel ou via la section d’aide.",
         exampleLink: "Lien d'exemple",
         important: "Important :",
@@ -679,7 +679,7 @@ export const fr: Translations = {
         stopLossLabel: "💸 Stop Loss :",
     },
 
-    // Réglages Snipping (Admin)
+    // Menu Réglages Snipping (Admin)
     snippingSettings: {
         title: "Paramètres de Snipping",
         subscriptionRequired: "Requis",
@@ -692,13 +692,13 @@ export const fr: Translations = {
         enterSubscriptionPriceWeek: "Saisissez le prix d'abonnement pour 1 Semaine (En SOL) :",
         enterSubscriptionPriceMonth: "Saisissez le prix d'abonnement pour 1 Mois (En SOL) :",
         enterSubscriptionPriceYear: "Saisissez le prix d'abonnement pour 1 An (En SOL) :",
-        invalidSubscriptionPrice: "❌ Prix invalide. Veuillez saisir un nombre valide (Exemple : 0,3)",
+        invalidSubscriptionPrice: "❌ Prix invalide. Veuillez saisir un nombre valide. (Exemple : 0,3)",
     },
 
-    // CopyTrading / Monitor Wallets
+    // Menu CopyTrading / Monitor Wallets
     copyTrade: {
-        title: "Monitor - Wallets sous surveillances.",
-        settingsMenuTitle: "Monitor - Réglages des Wallet trackés.",
+        title: "Monitor - Wallets sous surveillances",
+        settingsMenuTitle: "Monitor - Réglages des Wallets Trackés",
         subtitle: "Copiez les Trades quand les Wallets surveillés lancent ou achètent sur Pump.fun.",
         enabledOn: "CopyTrading : Activé",
         enabledOff: "CopyTrading : Désactivé",
@@ -718,8 +718,8 @@ export const fr: Translations = {
         yesAdd: "Oui, ajouter",
         no: "Non",
         cancel: "Annuler",
-        addedSuccess: "✅ Wallet ajouté au Monitor. FoxyBoTracker détectera leurs lancements sur Pump.fun.",
-        removedSuccess: "✅ Wallet supprimé du Monitor.",
+        addedSuccess: "✅ Le Wallet a été ajouté au Monitor. FoxyBoTracker détectera leurs nouveaux lancements depuis Pump.fun.",
+        removedSuccess: "✅ Le Wallet a été supprimé du Monitor.",
         settingsFor: "Paramètres pour le Wallet",
         copyOnNewToken: "Copie à la création d’un Token",
         buyAmount: "Montant d'achat copié (SOL)",
@@ -733,7 +733,7 @@ export const fr: Translations = {
         enterMaxAmount: "Entrez le SOL max (Filtre) :",
         enterLabel: "Entrez le nouveau libellé pour ce Wallet : ",
         invalidNumber: "Nombre invalide. Veuillez réessayer.",
-        disclaimer: "▲ Ceci n'est pas un conseil financier. Faites vos propres recherches (DYOR) !",
+        disclaimer: "🦊 Ceci n'est pas un conseil financier. Faites vos propres recherches (DYOR) !",
         newTokenDetected: "Nouveau Token détecté !",
         targetBought: "Un Wallet ciblé a acheté un Token !",
         trackedWallet: "Wallet suivi",
@@ -757,6 +757,8 @@ export const fr: Translations = {
         enterTakeProfitCopy: "Entrez le Take Profit % pour le CopyTrading (Exemple : 10) :",
         enterStopLossCopy: "Entrez le Stop Loss % pour le CopyTrading (Exemple : -40) :",
         tpSlOnlyCopy: "Ces réglages s’appliquent uniquement aux positions des Wallets actuellement surveillés par le Monitor.",
+        selectWalletToRemove: "Sélectionnez un wallet à retirer de la surveillance :",
+        noWalletsToRemove: "Aucun wallet à retirer.",
     },
 
     // Messages
@@ -790,7 +792,7 @@ export const fr: Translations = {
         positionImport1: "Entrez l'adresse du Token de la position que vous souhaitez importer.",
         positionImport2: "Ce Token n'existe pas",
         feeinput: "Veuillez saisir la valeur des frais (0-1).",
-        slippageInput: "Veuillez entrer le pourcentage de Slippage (0-100).",
+        slippageInput: "Veuillez entrer le pourcentage de Slippage (1-100).",
         youngInput: "Définissez l’âge limite des Tokens récents (1–24).",
         quickBuy: "Veuillez entrer la nouvelle valeur de montant d'achat.",
         quickSell: "Veuillez entrer la nouvelle valeur de pourcentage de vente. (En %) - Exemple : 100",
@@ -815,7 +817,7 @@ export const fr: Translations = {
         autoSell8: "🚫 Le marché a chuté et votre Stop Loss a été déclenché, limitant vos pertes et protégeant votre capital restant.",
         entertip: "Veuillez saisir le pourcentage de pourboire ! (0-100)",
         referral1: "🎉 Votre ami",
-        referral2: "a rejoint via votre lien de parrainage !",
+        referral2: "a rejoint via votre lien de parrainage pour accéder à FoxyBoTracker !",
         referral3: "Bienvenue ! Vous avez rejoint avec le code de parrainage de l'utilisateur",
         enterreferral: "Veuillez entrer la récompense par parrainage en SOL !",
         enterreferral_ethereum: "Veuillez entrer la récompense par parrainage en ETH !",
@@ -823,7 +825,7 @@ export const fr: Translations = {
         copyTradeWalletLimit: "Saisissez le nombre max de Wallets surveillés par utilisateur (CopyTrading), 1-100 :",
         refreshLimit: "⚠️ Trop de rafraîchissements. Veuillez ralentir.",
         refreshwarning: "⚠️ Attention ⚠️",
-        fee: "Les frais de réseau sont automatiquement déduit"
+        fee: "Les frais de réseau sont automatiquement déduit."
     },
 
     // Erreurs
@@ -837,7 +839,7 @@ export const fr: Translations = {
         invalidSellAmount: "❌ Erreur de validation : Montant de Trade invalide. Veuillez entrer une valeur entre 1 et 100.",
         invalidPrivateKey: "❌ Clé privée invalide. Veuillez fournir une clé privée valide.",
         errorOccurred: "❌ Une erreur s'est produite. Veuillez réessayer.",
-        walletNotFound: "❌Il doit y avoir au moins un Wallet créé.",
+        walletNotFound: "❌Il doit y avoir au moins un Wallet créé dans FoxyBoTracker.",
         insufficientBalance: "❌ Solde insuffisant.",
         invalidWithdrawal: "Montant de retrait invalide. Veuillez réessayer.",
         invalidwallet: "Adresse de Wallet invalide. Veuillez réessayer.",
@@ -854,14 +856,14 @@ export const fr: Translations = {
         invalidBuy: "Montant d'achat invalide.",
         invalidSell: "Pourcentage de vente invalide.",
         invalidAutoWallet: "❌ Aucun Wallet disponible à définir par défaut.",
-        invalidTp: "❌ Le take profit doit être entre 0 et 1000 (%). Réessayez !",
-        invalidSl: "❌ Le stop loss doit être entre -100 et 0 (%). Réessayez !",
+        invalidTp: "❌ Le Take Profit doit être entre 1 et 1000 (%). Réessayez !",
+        invalidSl: "❌ Le Stop Loss doit être entre -100 et 1 (%). Réessayez !",
         alreadyWhitelist: "⚠️ L'utilisateur est déjà sur la Whitelist.",
         alreadySniperWhitelist: "⚠️ L'utilisateur est déjà dans la Whitelist du module de Snipping.",
         targetSniperUser: "❌ Cet utilisateur Telegram n'existe pas dans la Whitelist du module de Snipping.",
         userNotFound: "❌ Utilisateur introuvable. Veuillez vérifier le nom d'utilisateur ou l'ID utilisateur et réessayer.",
         notToken: "Token introuvable",
-        transactionFailed: "❌ Transaction échouée : Solde du Wallet faible ou transaction non confirmée en 60.00 secondes",
+        transactionFailed: "❌ Transaction échouée : Solde du Wallet faible ou Transaction non confirmée en 60.00 secondes",
         transactionError: "❌ Erreur : solde de Token faible ou Token non acheté.",
         insufficientFundsForGas: "Fonds insuffisants pour le gaz. Requis : {required} ETH pour les frais de gaz. Disponible : {available} ETH. Manque : {shortfall} ETH",
         insufficientFundsForSwap: "Fonds insuffisants. Requis : {required} ETH ({swapAmount} ETH pour l'échange + {gasAmount} ETH pour le gaz). Disponible : {available} ETH. Manque : {shortfall} ETH",
@@ -880,10 +882,10 @@ export const fr: Translations = {
         // Menu
         menuTitle: "Gestion des Wallets Groupés",
         menuDescription: "Choisissez une option de Wallet :",
-        safeBundler: "Regroupement Sécurisé",
-        maxWallets: "Maximum 20 Wallets",
-        fasterExecution: "Exécution plus rapide",
-        bestForOperations: "Idéal pour les opérations groupées",
+        safeBundler: "Regroupement Sécurisé :",
+        maxWallets: "Maximum 20 Wallets.",
+        fasterExecution: "Exécution plus rapide.",
+        bestForOperations: "Idéal pour les opérations groupées.",
         currentWallets: "Wallets groupés actuels",
         chooseOption: "Choisissez une option de Wallet :",
         viewWallets: "👀 Voir les Wallets",
@@ -896,7 +898,7 @@ export const fr: Translations = {
         
         // View - Visibilité
         bundleWalletsTitle: "Wallets Groupés",
-        noBundleWallets: "Aucun Wallet Groupé n'est configurés.",
+        noBundleWallets: "Aucun Wallet Groupé n'est configurés",
         noBundleWalletsDesc: "Vous n'avez pas encore de Wallets groupés.\n\nCliquez sur \"Créer des Wallets\" pour commencer.",
         totalWallets: "Total",
         walletNumber: "Wallet #",
@@ -914,7 +916,8 @@ export const fr: Translations = {
         invalidCount: "Nombre Invalide",
         invalidCountDesc: "Le regroupement sécurisé prend en charge un maximum de",
         selectedWallets: "Wallets",
-        all: "Tous",
+        forWord: "pour",
+        all: "Le(s)",
         youSelectedCount: "Vous avez sélectionné",
         pleaseSelectMaxOrFewer: "Veuillez sélectionner {max} Wallets ou moins.",
         youSelectedForBundler: "Vous avez sélectionné {count} Wallets pour {bundler}",
@@ -926,7 +929,7 @@ export const fr: Translations = {
         invalidWalletCount: "Nombre de Wallets invalide. Veuillez sélectionner entre 1 et 20 Wallets.",
         pleaseEnterValidNumber: "Veuillez entrer un nombre valide.",
         walletKeysTitle: "Clés Privées des Wallets Bundle",
-        storeSecurely: "Stockez ce fichier dans un endroit sûr!",
+        storeSecurely: "Stockez ce fichier dans un endroit sûr !",
         neverShare: "Ne partagez jamais vos clés privées avec qui que ce soit !",
         downloadAndSave: "Téléchargez et sauvegardez ce fichier immédiatement.",
         keysFileSent: "Le fichier des clés de Wallet a été envoyé. Veuillez le télécharger et le sauvegarder en toute sécurité.",
@@ -1014,18 +1017,18 @@ export const fr: Translations = {
         fundsInActiveWallet: "Les fonds sont maintenant dans votre Wallet actif.",
         noWithdrawableFunds: "Aucun Fonds Retirable",
         allWalletsInsufficient: "Tous les Wallets groupés ont un solde insuffisant pour retirer.",
-        needRentExempt: "(Besoin de conserver le minimum exonéré de loyer + Frais de transaction)",
+        needRentExempt: "(Besoin de conserver le minimum exonéré de loyer + Frais de Transaction)",
         
         // Reset - Réinitialiser
         resetTitle: "Réinitialiser les Wallets Groupés",
-        resetWarning: "ATTENTION : Cela supprimera TOUS les",
+        resetWarning: "ATTENTION : Cela supprimera le(s)",
         willDeleteAll: "Wallets groupés !",
         cannotBeUndone: "Cette action ne peut pas être annulée.",
         savePrivateKeysIfNeeded: "Assurez-vous d'avoir sauvegardé toutes les clés privées si nécessaire.",
         typeReset: "Tapez \"RESET\" pour confirmer :",
         resetCancelled: "Réinitialisation annulée. Tapez RESET pour confirmer.",
         resetComplete: "Wallets Groupés Réinitialisés",
-        allWalletsDeleted: "Wallets groupés ont été supprimés.",
+        allWalletsDeleted: "groupés ont été supprimés.",
         noBundleWalletsToReset: "Aucun Wallet groupé à réinitialiser.",
         
         // Buy/Sell - Achats/Ventes
@@ -1116,9 +1119,9 @@ export const fr: Translations = {
         bundleSellButton: "👜 Vente Groupée",
     },
 
-    // Sélection de Blockchain
+    // Menu Sélection de Blockchain
     chain: {
-        selectBlockchain: "🔗 Sélectionner la Blockchain que vous souhaitez utiliser.",
+        selectBlockchain: "🔗 Sélectionner la Blockchain que vous souhaitez utiliser avec FoxyBoTracker",
         current: "Blockchain sélectionnée :",
         choosePreferred: "Choisissez la Blockchain sur laquelle vous souhaitez Trader avec FoxyBoTracker :",
         solana: "Solana",

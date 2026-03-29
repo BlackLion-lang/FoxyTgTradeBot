@@ -12,6 +12,9 @@ export const getSettings = async (
     if (!user) throw "No User";
     const userChain = await getUserChain(userId);
     const isEthereum = userChain === "ethereum";
+    const youngTokenHours = isEthereum
+        ? (user.settings.youngTokenDate_ethereum ?? user.settings.youngTokenDate ?? 24)
+        : (user.settings.youngTokenDate_solana ?? user.settings.youngTokenDate ?? 24);
 
     const caption =
         `<strong>${await t('settings.p1', userId)}</strong>\n\n` +
@@ -46,7 +49,7 @@ export const getSettings = async (
             },
         ],
         [
-            { text: `${await t('settings.young', userId)} ${user.settings.youngTokenDate || 24}h`, callback_data: "young_token" },
+            { text: `${await t('settings.young', userId)} ${youngTokenHours}h`, callback_data: "young_token" },
         ],
         [
             { text: `${await t('settings.autoSell', userId)}`, callback_data: "settings_auto_sell" },

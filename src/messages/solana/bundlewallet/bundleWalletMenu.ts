@@ -502,14 +502,19 @@ export const withdrawFromBundles = async (
 
 export const resetBundledWallets = async (
     UserModel: Model<any>,
-    callbackQuery: CallbackQuery,
-    createUserTextHandler: (userId: number, handler: (reply: Message) => void | Promise<void>, timeoutMs?: number) => (msg: Message) => boolean
+    callbackQuery: CallbackQuery
 ) => {
     const userId = callbackQuery.from.id;
     const chatId = callbackQuery.message?.chat.id || 0;
     const messageId = callbackQuery.message?.message_id || 0;
+    const action = callbackQuery.data || "";
 
-    await safeDeleteMessage(chatId, messageId);
+    // Cancel flow: close confirm prompt and return to bundle menu
+    if (action === "bundle_reset_cancel") {
+        await safeDeleteMessage(chatId, messageId);
+        await showBundleWalletMenu(UserModel, callbackQuery, () => {}, () => (msg: Message) => true);
+        return;
+    }
 
     const user = await UserModel.findOne({ userId });
     if (!user) {
@@ -520,6 +525,7 @@ export const resetBundledWallets = async (
     const bundleCount = userDoc.bundleWallets?.length || 0;
 
     if (bundleCount === 0) {
+        await safeDeleteMessage(chatId, messageId);
         return bot.sendMessage(
             chatId,
             `❌ ${await t('bundleWallets.noBundleWalletsToReset', userId)}`,
@@ -533,51 +539,47 @@ export const resetBundledWallets = async (
         );
     }
 
+    // Confirm action: perform reset
+    if (action === "bundle_reset_confirm") {
+        await safeDeleteMessage(chatId, messageId);
+        await UserModel.findOneAndUpdate(
+            { userId: userId },
+            { $set: { bundleWallets: [] } }
+        );
+
+        await bot.sendMessage(
+            chatId,
+            `✅ *${await t('bundleWallets.resetComplete', userId)}*\n\n` +
+            `${await t('bundleWallets.all', userId)} ${bundleCount} ${await t('bundleWallets.selectedWallets', userId)} ${await t('bundleWallets.allWalletsDeleted', userId)}`,
+            {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [
+                        [{ text: `${await t('back', userId)}`, callback_data: "bundled_wallets" }],
+                    ],
+                },
+            }
+        );
+        return;
+    }
+
+    // Initial prompt with buttons instead of typing RESET
+    await safeDeleteMessage(chatId, messageId);
     await bot.sendMessage(
         chatId,
         `♻️ *${await t('bundleWallets.resetTitle', userId)}*\n\n` +
         `⚠️ *${await t('bundleWallets.resetWarning', userId)} ${bundleCount} ${await t('bundleWallets.willDeleteAll', userId)}*\n\n` +
         `${await t('bundleWallets.cannotBeUndone', userId)}\n` +
-        `${await t('bundleWallets.savePrivateKeysIfNeeded', userId)}\n\n` +
-        `${await t('bundleWallets.typeReset', userId)}`,
+        `${await t('bundleWallets.savePrivateKeysIfNeeded', userId)}`,
         {
             parse_mode: 'Markdown',
             reply_markup: {
-                force_reply: false,
+                inline_keyboard: [
+                    [{ text: "RESET", callback_data: "bundle_reset_confirm" }],
+                    [{ text: `${await t('cancel', userId)}`, callback_data: "bundle_reset_cancel", style: "danger" } as any],
+                ],
             },
         }
-    ).then((sentMessage: any) => {
-        bot.once("message", createUserTextHandler(userId, async (reply) => {
-            if (reply.chat.id !== chatId) return;
-            if (reply.text?.toUpperCase() !== 'RESET') {
-                await bot.sendMessage(chatId, `❌ ${await t('bundleWallets.resetCancelled', userId)}`);
-                await safeDeleteMessage(chatId, sentMessage.message_id);
-                await safeDeleteMessage(chatId, reply.message_id);
-                return;
-            }
-
-            await safeDeleteMessage(chatId, sentMessage.message_id);
-            await safeDeleteMessage(chatId, reply.message_id);
-
-            await UserModel.findOneAndUpdate(
-                { userId: userId },
-                { $set: { bundleWallets: [] } }
-            );
-
-            await bot.sendMessage(
-                chatId,
-                `✅ *${await t('bundleWallets.resetComplete', userId)}*\n\n` +
-                `${await t('bundleWallets.all', userId)} ${bundleCount} ${await t('bundleWallets.selectedWallets', userId)} ${await t('bundleWallets.allWalletsDeleted', userId)}`,
-                {
-                    parse_mode: 'Markdown',
-                    reply_markup: {
-                        inline_keyboard: [
-                            [{ text: `${await t('back', userId)}`, callback_data: "bundled_wallets" }],
-                        ],
-                    },
-                }
-            );
-        }));
-    });
+    );
 };
 

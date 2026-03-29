@@ -730,7 +730,7 @@ export const en: Translations = {
         enterMaxAmount: "Enter max SOL (filter) : ",
         enterLabel: "Enter new label for this wallet : ",
         invalidNumber: "Invalid number. Please try again.",
-        disclaimer: "▲ This is not financial advice. Always DYOR!",
+        disclaimer: "🦊 This is not financial advice. Always DYOR!",
         newTokenDetected: "New token detected!",
         targetBought: "Target wallet bought token!",
         trackedWallet: "Tracked wallet",
@@ -754,6 +754,8 @@ export const en: Translations = {
         enterTakeProfitCopy: "Enter take profit % for copy trading (e.g. 10) :",
         enterStopLossCopy: "Enter stop loss % for copy trading (e.g. -40) :",
         tpSlOnlyCopy: "These apply only to copy-trade positions.",
+        selectWalletToRemove: "Select a wallet to remove from monitoring:",
+        noWalletsToRemove: "No wallets to remove.",
     },
 
     //Messages
@@ -911,6 +913,7 @@ export const en: Translations = {
         invalidCount: "Invalid Count",
         invalidCountDesc: "Safe bundler supports maximum",
         selectedWallets: "wallets",
+        forWord: "for",
         all: "All",
         youSelectedCount: "You selected",
         pleaseSelectMaxOrFewer: "Please select {max} or fewer wallets.",

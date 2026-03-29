@@ -125,8 +125,9 @@ export async function Buy(bot: TelegramBot, chatId: number, userId: number, addr
         const difftime = createDate > 0 ? (now - createDate) : 0
         const { days, hours, minutes, seconds } = msToTime(difftime)
         
+        const youngTokenHoursEth = user.settings?.youngTokenDate_ethereum ?? user.settings?.youngTokenDate ?? 24
         let warning = ""
-        if (createDate > 0 && difftime < 1000 * 60 * 60 * (user.settings?.youngTokenDate || 24)) {
+        if (createDate > 0 && difftime < 1000 * 60 * 60 * youngTokenHoursEth) {
             warning = `${await t('buy.p2', userId)}`
         } else if (createDate > 0) {
             warning = `${await t('buy.p3', userId)}`
@@ -293,8 +294,9 @@ export async function BuyEdit(bot: TelegramBot, chatId: number, userId: number, 
         const difftime = createDate > 0 ? (now - createDate) : 0
         const { days, hours, minutes, seconds } = msToTime(difftime)
         
+        const youngTokenHoursEth = user.settings?.youngTokenDate_ethereum ?? user.settings?.youngTokenDate ?? 24
         let warning = ""
-        if (createDate > 0 && difftime < 1000 * 60 * 60 * (user.settings?.youngTokenDate || 24)) {
+        if (createDate > 0 && difftime < 1000 * 60 * 60 * youngTokenHoursEth) {
             warning = `${await t('buy.p2', userId)}`
         } else if (createDate > 0) {
             warning = `${await t('buy.p3', userId)}`

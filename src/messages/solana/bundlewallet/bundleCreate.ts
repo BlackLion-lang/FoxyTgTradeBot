@@ -23,7 +23,7 @@ const bundleCreateHandler = async (UserModel: Model<any>, userId: number, chatId
   const bundleTypeName = await t('bundleWallets.safeBundler', userId);
   await bot.sendMessage(
     chatId,
-    `🔄 ${await t('bundleWallets.creatingWallets', userId)} <b>${count} ${await t('bundleWallets.selectedWallets', userId)}</b> for <b>${bundleTypeName}</b>...`,
+    `🔄 ${await t('bundleWallets.creatingWallets', userId)} <b>${count} ${await t('bundleWallets.selectedWallets', userId)}</b> ${await t('bundleWallets.forWord', userId)} <b>${bundleTypeName}</b>...`,
     { parse_mode: "HTML" }
   );
 
@@ -136,7 +136,6 @@ const bundleCreateHandler = async (UserModel: Model<any>, userId: number, chatId
   await bot.sendMessage(
     chatId,
     `✅ <b>${await t('bundleWallets.congratulations', userId)}</b>\n\n` +
-    `${count} ${await t('bundleWallets.walletsCreated', userId)} <b>${bundleTypeName}</b>.\n\n` +
     `📎 ${await t('bundleWallets.keysFileSent', userId)}\n\n` +
     `📌 <i>${await t('bundleWallets.savePrivateKeys', userId)}</i>`,
     { 

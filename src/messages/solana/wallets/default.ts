@@ -11,14 +11,15 @@ export const getDefaultWallet = async (userId: number) => {
         `${await getWalletMessage(userId, "solana")}\n\n` +
         `<strong>${await t('defaultWallet.p2', userId)}</strong>`;
     const wallets = user.wallets;
-    const default_wallet = (user as any).default_wallet;
+    const activeWalletIndex = wallets.findIndex((w) => w.is_active_wallet);
 
     const options: TelegramBot.InlineKeyboardButton[][] = [];
     for (let i = 0; i < wallets.length; i += 2) {
         const option: TelegramBot.InlineKeyboardButton[] = [];
         for (let j = i; j < wallets.length && j < i + 2; j++) {
+            const dot = j === activeWalletIndex ? "🟠 " : "";
             option.push({
-                text: `${j === default_wallet ? "🟢" : ""} ${wallets[j].label}`,
+                text: `${dot}${wallets[j].label}`,
                 callback_data: `wallets_default_${j}`,
             });
         }

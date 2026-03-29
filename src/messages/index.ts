@@ -231,7 +231,7 @@ export const getMenu = async (
         `${menuP5}\n\n` +
         `${await t('menu.botVersion', userId)} <strong>${versionData.bot_telegram_version}</strong>\n` ;
 
-    return { caption, markup: getMenuMarkup(userId) };
+    return { caption, markup: await getMenuMarkup(userId) };
 };
 
 export const sendAdminPanelMessage = async (

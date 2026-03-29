@@ -113,7 +113,8 @@ export const getBuy = async (userId: number, address: string) => {
 
     let warning = "";
 
-    if (difftime < 1000 * 60 * 60 * user.settings.youngTokenDate) {
+    const youngTokenHours = user.settings.youngTokenDate_solana ?? user.settings.youngTokenDate ?? 24;
+    if (difftime < 1000 * 60 * 60 * youngTokenHours) {
         warning = `${await t('buy.p2', userId)}`;
     } else {
         warning = `${await t('buy.p3', userId)}`;

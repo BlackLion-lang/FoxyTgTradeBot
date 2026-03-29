@@ -757,6 +757,8 @@ export interface Translations {
         enterTakeProfitCopy: string;
         enterStopLossCopy: string;
         tpSlOnlyCopy: string;
+        selectWalletToRemove: string;
+        noWalletsToRemove: string;
     }
 
     //Messages
@@ -914,6 +916,7 @@ export interface Translations {
         invalidCount: string;
         invalidCountDesc: string;
         selectedWallets: string;
+        forWord: string;
         all: string;
         youSelectedCount: string;
         pleaseSelectMaxOrFewer: string;

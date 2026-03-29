@@ -219,6 +219,14 @@ const userSchema = new mongoose.Schema(
                     type: Number,
                     default: 6,
                 },
+                youngTokenDate_solana: {
+                    type: Number,
+                    default: 6,
+                },
+                youngTokenDate_ethereum: {
+                    type: Number,
+                    default: 24,
+                },
                 image_activation: {
                     type: Boolean,
                     default: false

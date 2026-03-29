@@ -40,8 +40,9 @@ export async function getCopyTradeMain(userId: number): Promise<{ caption: strin
 
     const needHelp = await t("settings.p2", userId);
     const clickHere = await t("settings.p3", userId);
-    const caption = `<strong>🎯 ${title}</strong>\n\n${subtitle}\n\n${body}\n\n${needHelp}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=copytrading&sig=G2kcUvUfL70RGTIkHF-65bjFvo2YGPwU
+    const helpLine = `${needHelp}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=copytrading&sig=G2kcUvUfL70RGTIkHF-65bjFvo2YGPwU
 ">${clickHere}</a>`;
+    const caption = `<strong>🎯 ${title}</strong>\n\n${subtitle}\n\n${helpLine}\n\n${body}`;
 
     const modeAuto = await t("copyTrade.modeAuto", userId);
     const modeManual = await t("copyTrade.modeManual", userId);
@@ -73,8 +74,10 @@ export async function getCopyTradeRemoveMenu(userId: number): Promise<{ caption:
     const list = user.copyTrade?.monitoredWallets || [];
     const removeWallet = await t("copyTrade.removeWallet", userId);
     const back = await t("copyTrade.back", userId);
+    const selectWalletToRemove = await t("copyTrade.selectWalletToRemove", userId);
+    const noWalletsToRemove = await t("copyTrade.noWalletsToRemove", userId);
 
-    const selectPrompt = list.length ? "Select a wallet to remove from monitoring:" : "No wallets to remove.";
+    const selectPrompt = list.length ? selectWalletToRemove : noWalletsToRemove;
     const caption = `<strong>🗑 ${removeWallet}</strong>\n\n${selectPrompt}\n\n${list.map((w: { address: string; label?: string }, i: number) => `${i + 1}. ${shortAddress(w.address)}${w.label ? ` (${w.label})` : ""}`).join("\n") || "—"}`;
 
     const rows: TelegramBot.InlineKeyboardButton[][] = list.slice(0, MONITORED_MAX).map((_: unknown, i: number) => [

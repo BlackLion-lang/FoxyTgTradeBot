@@ -138,10 +138,6 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
                 { text: `${await t('menu.trendingCoin', userId)}`, callback_data: "trending_coin" },
             ]);
-        } else {
-            buttons.push([
-                { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
-            ]);
         }
 
         buttons.push([
@@ -175,15 +171,15 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
             ]);
         }
 
-        buttons.push(
-            [
+        if (!isEthereum) {
+            buttons.push([
                 { text: `${await t('menu.referral', userId)}`, callback_data: "referral_system" },
                 { text: `${await t('menu.trendingCoin', userId)}`, callback_data: "trending_coin" },
-            ],
-            [
-                await getCloseButton(userId)
-            ],
-        );
+            ]);
+        }
+        buttons.push([
+            await getCloseButton(userId)
+        ]);
     }
 
     return { inline_keyboard: buttons };

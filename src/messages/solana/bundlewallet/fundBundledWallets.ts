@@ -195,11 +195,11 @@ const performCleanFunding = async (user: any, totalSOL: number, chatId: number) 
   if (totalLamports < totalRequired) {
     await bot.editMessageText(
       `❌ *${await t('bundleWallets.insufficientAmount', chatId)}*\n\n` +
-        `${await t('bundleWallets.provided', chatId)}: *${totalSOL} ${await t('bundleWallets.sol', chatId)}*\n` +
-        `${await t('bundleWallets.required', chatId)}: *${(totalRequired / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}*\n\n` +
-        `*${await t('bundleWallets.breakdown', chatId)}:*\n` +
-        `• ${await t('bundleWallets.distribution', chatId)}: ${(minDistributable / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}\n` +
-        `• ${await t('bundleWallets.feesReserves', chatId)}: ${(totalOverhead / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}\n\n` +
+        `${await t('bundleWallets.provided', chatId)} : *${totalSOL} ${await t('bundleWallets.sol', chatId)}*\n` +
+        `${await t('bundleWallets.required', chatId)} : *${(totalRequired / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}*\n\n` +
+        `*${await t('bundleWallets.breakdown', chatId)} :*\n` +
+        `• ${await t('bundleWallets.distribution', chatId)} : ${(minDistributable / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}\n` +
+        `• ${await t('bundleWallets.feesReserves', chatId)} : ${(totalOverhead / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}\n\n` +
         `${await t('bundleWallets.addMore', chatId)} *${((totalRequired - totalLamports) / LAMPORTS_PER_SOL).toFixed(4)} ${await t('bundleWallets.sol', chatId)}*`,
       {
         chat_id: chatId,

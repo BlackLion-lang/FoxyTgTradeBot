@@ -38,8 +38,8 @@ export const getFee = async (
         }
 
         const caption =
-            `<strong>${await t('feeSettings.menuTitle', userId)}</strong>\n\n` +
-            `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=frais&sig=B8wF2Jbu96_1e19FVno4c1ivttAqmiy_
+            `<strong>${await t('feeSettings.p1', userId)}</strong>\n\n` +
+            `${await t('feeSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=frais&sig=MYyh6NJlxt6PKrROttXZf50Ld8eHZwlW
 ">${await t('feeSettings.p3', userId)}</a>\n\n` +
             `<strong>${await t('feeSettings.gasFeeSettingsEthereum', userId)}</strong>\n\n` +
             `<strong>${await t('feeSettings.configureGasFeeEthereum', userId)}</strong>\n\n` +
@@ -232,7 +232,7 @@ export const editFeeAutoMessage = async (
             ],
         };
         await bot.editMessageCaption(
-            `<strong>${await t('feeSettings.menuTitle', userId)}</strong>
+            `<strong>${await t('feeSettings.p11', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} 
 <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
@@ -306,9 +306,9 @@ export const sendFeeAutoMessage = async (
         };
         bot.sendMessage(
             chatId,
-            `<strong>${await t('feeSettings.menuTitle', userId)}</strong>
+            `<strong>${await t('feeSettings.recommendedGasFeeSettings', userId)}</strong>
 
-${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
+${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=fraisrecommande&sig=gUPLPtGFoDqHZCyrRndYduVggY7DRGMR
 ">${await t('feeSettings.p13', userId)}</a>
 
 ${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwei
@@ -339,7 +339,7 @@ ${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwe
         };
         bot.sendMessage(
             chatId,
-            `<strong>${await t('feeSettings.menuTitle', userId)}</strong>
+            `<strong>${await t('feeSettings.p11', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
 ">${await t('feeSettings.p13', userId)}</a>
@@ -424,10 +424,10 @@ export const editFeeAutoMessageEth = async (
             ],
         };
         await bot.editMessageCaption(
-            `<strong>${await t('feeSettings.menuTitle', userId)}</strong>
+            `<strong>${await t('feeSettings.recommendedGasFeeSettings', userId)}</strong>
 
 ${await t('feeSettings.p12', userId)} 
-<a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
+<a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=fraisrecommande&sig=gUPLPtGFoDqHZCyrRndYduVggY7DRGMR
 ">${await t('feeSettings.p13', userId)}</a>
 
 <strong>${await t('feeSettings.p16', userId)}</strong> ${feeSpeed}

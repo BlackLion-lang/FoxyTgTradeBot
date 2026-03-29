@@ -13,17 +13,20 @@ export const getSlippage = async (
     
     // Use Ethereum slippage settings if chain is Ethereum
     const buySlippage = isEthereum 
-        ? (user.settings.slippage_eth?.buy_slippage_eth || 0.5)
-        : (user.settings.slippage?.buy_slippage || 0.5);
+        ? (user.settings.slippage_eth?.buy_slippage_eth || 1)
+        : (user.settings.slippage?.buy_slippage || 1);
     const sellSlippage = isEthereum
-        ? (user.settings.slippage_eth?.sell_slippage_eth || 0.5)
-        : (user.settings.slippage?.sell_slippage || 0.5);
+        ? (user.settings.slippage_eth?.sell_slippage_eth || 1)
+        : (user.settings.slippage?.sell_slippage || 1);
     
     console.log('debug userSetting slippage', buySlippage, "sell_slippage", sellSlippage);
+    const slippageHelpUrl = isEthereum
+        ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=slippage&sig=jJAlBjobc_MMhq0j5T8mvDZyumOvJP6D"
+        : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=slippage&sig=Z5T8jH3CdGQM-sZs7Fh2KIVF-G7m5EW7";
     const caption =
         `<strong>${await t('slippageSettings.p1', userId)}</strong>\n\n` +
-        `${await t('slippageSettings.p2', userId)}\n <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=slippage&sig=Z5T8jH3CdGQM-sZs7Fh2KIVF-G7m5EW7
-">${await t('slippageSettings.p3', userId)}</a>\n\n` +
+        `${await t('slippageSettings.p2', userId)}\n` +
+        `<a href="${slippageHelpUrl}">${await t('slippageSettings.p3', userId)}</a>\n\n` +
         `<strong>${await t('slippageSettings.p4', userId)}</strong>`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
