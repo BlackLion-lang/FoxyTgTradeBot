@@ -530,21 +530,53 @@ export const sendBuyMessageWithAddress = async (
                 parse_mode: "HTML",
                 reply_markup: markup,
             });
+            await sendMenu(bot, chatId, userId, messageId);
 
             return;
 
         } else {
-            const sent = bot.sendMessage(chatId, `${await t('errors.transactionFailed', userId)}`);
+            const failText =
+                `${await t('quickBuy.p7', userId)}\n\n` +
+                `Token : <code>${tokenAddress}</code>\n\n` +
+                `${await t('quickBuy.p14', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
+                `<code>${active_wallet?.publicKey}</code>\n\n` +
+                `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
+                `${solAmount} SOL ⇄\n` +
+                `${await t('quickBuy.p9', userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
+                `${await t('quickBuy.failed', userId)}`;
+
+            const sent = await bot.sendMessage(chatId, failText, {
+                parse_mode: "HTML",
+                disable_web_page_preview: true,
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://solscan.io/token/${tokenAddress}` },
+                        ],
+                        [
+                            await getCloseButton(userId)
+                        ]
+                    ],
+                },
+            });
             setTimeout(async () => {
-                bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
+                bot.deleteMessage(chatId, sent.message_id).catch(() => { });
             }, 10000);
-            sendMenu(bot, chatId, userId, messageId);
-            // ${result.error}
         }
 
         // } else {
         //     bot.sendMessage(chatId, `❌ Error: ${result.error}`);
         // }
+    }).catch(async (err: any) => {
+        const errorDetail = err?.message ? String(err.message) : err ? String(err) : "";
+        const sent = await bot.sendMessage(
+            chatId,
+            `${await t('quickBuy.failed', userId)}${errorDetail ? `\n\n${errorDetail}` : ''}`,
+            { parse_mode: "HTML" },
+        );
+        setTimeout(async () => {
+            bot.deleteMessage(chatId, sent.message_id).catch(() => {});
+        }, 10000);
     });
 
     // Fetch the buy message and send it to the user

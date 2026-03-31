@@ -14,6 +14,7 @@ import { limitOrderData } from "../../models/limitOrder"
 import { formatNumberStyle } from "../../services/other"
 import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
 import { getCloseButton } from "../../utils/markup"
+import { sendMenu } from ".."
 
 export const sendEthereumBuyMessage = async (
     bot: TelegramBot,
@@ -369,17 +370,53 @@ export const sendEthereumBuyMessageWithAddress = async (
                 }
             });
 
-            console.log("debug -> sellMenu")
+            await sendMenu(bot, chatId, userId, messageId);
+        } else {
+            const errorDetail =
+                (result as any)?.error
+                    ? String((result as any).error)
+                    : (result as any)?.message
+                        ? String((result as any).message)
+                        : "";
 
-            // Automatically open sell menu after successful buy (similar to Solana)
-            const { Sell } = await import("../../commands/ethereum/sell");
-            await Sell(bot, chatId, userId, tokenAddress);
+            const failText =
+                `${await t('quickBuy.p7', userId)}\n\n` +
+                `Token : <code>${tokenAddress}</code>\n\n` +
+                `${await t('quickBuy.p14', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+                `<code>${active_wallet?.publicKey}</code>\n\n` +
+                `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
+                `${ethAmount} ETH ⇄\n` +
+                `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
+                `${await t('quickBuy.failed', userId)}${errorDetail ? `\n\n${errorDetail}` : ''}`;
+
+            const sent = await bot.sendMessage(
+                chatId,
+                failText,
+                {
+                    parse_mode: "HTML",
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
+                            ],
+                            [
+                                await getCloseButton(userId)
+                            ]
+                        ]
+                    },
+                },
+            );
+            setTimeout(async () => {
+                bot.deleteMessage(chatId, sent.message_id).catch(() => {});
+            }, 10000);
         }
     } catch (error: any) {
         console.error('Ethereum buy error:', error);
         const errorMessage = error?.message || error?.toString() || "Unknown error";
-        await bot.sendMessage(chatId, `❌ ${await t('errors.transactionFailed', userId)}: ${errorMessage}`, {
-            disable_web_page_preview: true
+        await bot.sendMessage(chatId, `${await t('quickBuy.failed', userId)}\n\n${errorMessage}`, {
+            disable_web_page_preview: true,
+            parse_mode: "HTML",
         });
     }
 };

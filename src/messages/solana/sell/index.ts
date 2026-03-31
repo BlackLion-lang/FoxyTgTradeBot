@@ -311,6 +311,17 @@ export const sendSellMessage = async (
             bot.deleteMessage(chatId, sentMessage.message_id);
             bot.deleteMessage(chatId, reply.message_id);
         });
+    }).catch(async (err: any) => {
+        const errorDetail = err?.message ? String(err.message) : err ? String(err) : "";
+        const sent = await bot.sendMessage(
+            chatId,
+            `${await t('errors.transactionFailed', userId)}${errorDetail ? `: ${errorDetail}` : ''}`,
+            { disable_web_page_preview: true },
+        );
+        setTimeout(async () => {
+            bot.deleteMessage(chatId, sent.message_id).catch(() => {});
+        }, 10000);
+        sendMenu(bot, chatId, userId, messageId);
     });
 };
 
@@ -654,12 +665,38 @@ export const sendSellMessageWithAddress = async (
                 await user.save();
             }
         } else {
-            const sent = bot.sendMessage(chatId, `${await t('errors.transactionFailed', userId)}`,);
+            const failText =
+                `${await t('quickSell.p7', userId)}\n\n` +
+                `Token : <code>${tokenAddress}</code>\n\n` +
+                `${await t('quickSell.p18', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
+                `<code>${active_wallet?.publicKey}</code>\n\n` +
+                `🔴 <strong><em>${await t('quickSell.p8', userId)}</em></strong>\n` +
+                `${await t('quickSell.p9', userId)} ${tokenAmount.toFixed(2)} ${symbol}\n` +
+                `${await t('quickSell.p10', userId)} ${(amount * tokenAmount / 100).toFixed(2)} ${symbol} ⇄ \n` +
+                `${await t('quickSell.p11', userId)} : ${user.settings.slippage.sell_slippage}% \n\n` +
+                `${await t('quickSell.failed', userId)}`;
+
+            const sent = await bot.sendMessage(
+                chatId,
+                failText,
+                {
+                    parse_mode: "HTML",
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: `${await t('quickSell.viewToken', userId)}`, url: `https://solscan.io/token/${tokenAddress}` },
+                            ],
+                            [
+                                await getCloseButton(userId)
+                            ]
+                        ]
+                    },
+                },
+            );
             setTimeout(async () => {
                 bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
             }, 10000);
-            sendMenu(bot, chatId, userId, messageId);
-            // ${result.error}
         }
     });
 };

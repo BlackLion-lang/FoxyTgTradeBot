@@ -463,6 +463,7 @@ export const fr: Translations = {
         p14: "Wallet",
         p15: "Token",
         p16: "Voir sur Etherscan",
+        failed: "🔴 Achat échoué !",
         viewToken: "🔄 Voir le Token",
         positions: "📊 Positions",
         sell: "🎒 Vendre",
@@ -495,7 +496,8 @@ export const fr: Translations = {
         positions: "📊 Positions",
         buy: "💰 Acheter",
         tokenBalance: "Solde en Tokens :",
-        selling: "Vente :"
+        selling: "Vente :",
+        failed: "🔴 Vente échouée !"
     },
 
     // Menu Vente automatique

@@ -152,21 +152,6 @@ const userSchema = new mongoose.Schema(
                     type: {
                         buy_fee: { type: Number, default: 0.001 },
                         sell_fee: { type: Number, default: 0.001 },
-                        buy_tip: { type: Number, default: 0.005 },
-                        sell_tip: { type: Number, default: 0.005 },
-                        auto_tip: {
-                            type: {
-                                is_enabled: {
-                                    type: Boolean,
-                                    default: false,
-                                },
-                                max_tip: {
-                                    type: Number,
-                                    default: 0.005,
-                                },
-                            },
-                            default: {},
-                        },
                     },
                     default: {},
                 },
@@ -244,14 +229,6 @@ const userSchema = new mongoose.Schema(
                         stopLossPercent_ethereum: { type: Number, default: -40 }
                     },
                     default: {},
-                },
-                language: {
-                    type: String,
-                    default: "en",
-                    enum: [
-                        "en",
-                        "fr"
-                    ],
                 },
                 // Ethereum gas settings
                 gas_values_eth: {

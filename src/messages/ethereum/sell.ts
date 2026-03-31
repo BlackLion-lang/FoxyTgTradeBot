@@ -15,6 +15,7 @@ import { formatNumberStyle, getCurrentTime, getFrenchTime, getlocationTime } fro
 import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
 import { getImage } from "../Image/image"
 import { getCloseButton } from "../../utils/markup"
+import { sendMenu } from ".."
 
 export const editEthereumSellMessageWithAddress = async (
     bot: TelegramBot,
@@ -430,12 +431,53 @@ export const sendEthereumSellMessageWithAddress = async (
                 });
                 await user.save();
             }
+            await sendMenu(bot, chatId, userId, messageId);
+        } else {
+            const errorDetail =
+                (result as any)?.error
+                    ? String((result as any).error)
+                    : (result as any)?.message
+                        ? String((result as any).message)
+                        : "";
+
+            const failText =
+                `${await t('quickSell.p7', userId)}\n\n` +
+                `Token : <code>${tokenAddress}</code>\n\n` +
+                `${await t('quickSell.p18', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+                `<code>${active_wallet?.publicKey}</code>\n\n` +
+                `🔴 <strong><em>${await t('quickSell.p8', userId)}</em></strong>\n` +
+                `${await t('quickSell.tokenBalance', userId)} <strong>${tokenBalance.toFixed(2)} ${token.symbol || 'TOKEN'}</strong>\n` +
+                `${await t('quickSell.selling', userId)} <strong>${tokenAmountToSell.toFixed(2)} ${token.symbol || 'TOKEN'} (${sellPercent}%)</strong>\n\n` +
+                `${await t('quickSell.failed', userId)}${errorDetail ? `\n\n${errorDetail}` : ''}`;
+
+            const sent = await bot.sendMessage(
+                chatId,
+                failText,
+                {
+                    parse_mode: "HTML",
+                    disable_web_page_preview: true,
+                    reply_markup: {
+                        inline_keyboard: [
+                            [
+                                { text: `${await t('quickSell.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
+                            ],
+                            [
+                                await getCloseButton(userId)
+                            ]
+                        ]
+                    },
+                },
+            );
+            setTimeout(async () => {
+                bot.deleteMessage(chatId, sent.message_id).catch(() => {});
+            }, 10000);
         }
     } catch (error: any) {
         console.error('Ethereum sell error:', error);
         const errorMessage = error?.message || error?.toString() || "Unknown error";
-        await bot.sendMessage(chatId, `❌ ${await t('errors.transactionFailed', userId)}: ${errorMessage}`, {
-            disable_web_page_preview: true
+        await bot.sendMessage(chatId, `${await t('quickSell.failed', userId)}\n\n${errorMessage}`, {
+            disable_web_page_preview: true,
+            parse_mode: "HTML",
         });
     }
 };

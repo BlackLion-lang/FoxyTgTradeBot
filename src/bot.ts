@@ -4159,7 +4159,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     );
                 });
             }
-        } else if (sel_action === "settings_fee_buy_fee" || sel_action === "settings_fee_sell_fee" || sel_action === "settings_fee_buy_tip" || sel_action === "settings_fee_sell_tip") {
+        } else if (sel_action === "settings_fee_buy_fee" || sel_action === "settings_fee_sell_fee") {
             bot.sendMessage(
                 chatId,
                 `${await t('messages.feeinput', userId)}`,
@@ -4191,12 +4191,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 break;
                             case "settings_fee_sell_fee":
                                 user.settings.fee_setting.sell_fee = feeValue;
-                                break;
-                            case "settings_fee_buy_tip":
-                                user.settings.fee_setting.buy_tip = feeValue;
-                                break;
-                            case "settings_fee_sell_tip":
-                                user.settings.fee_setting.sell_tip = feeValue;
                                 break;
                         }
                         await user.save();

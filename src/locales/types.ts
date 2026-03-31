@@ -469,6 +469,7 @@ export interface Translations {
         sell: string;
         enterBuyAmountEth: string;
         invalidAmountEth: string;
+        failed: string;
     };
 
     //Quick Sell
@@ -497,6 +498,7 @@ export interface Translations {
         buy: string;
         tokenBalance: string;
         selling: string;
+        failed: string;
     }
 
     //Auto Sell

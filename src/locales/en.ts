@@ -460,6 +460,7 @@ export const en: Translations = {
         p14: "Wallet",
         p15: "Token",
         p16: "View on Etherscan",
+        failed: "🔴 Buy Failed!",
         viewToken: "🔄 View Token",
         positions: "📊 Positions",
         sell: "🎒 Sell",
@@ -492,7 +493,8 @@ export const en: Translations = {
         positions: "📊 Positions",
         buy: "💰 Buy",
         tokenBalance: "Token Balance:",
-        selling: "Selling:"
+        selling: "Selling:",
+        failed: "🔴 Sell Failed!"
     },
 
     //Auto Sell
