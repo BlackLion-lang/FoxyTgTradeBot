@@ -1,5 +1,5 @@
-import { Contract } from "ethers"
-import { ETH_UNISWAP_QUOTER, ETH_UNISWAP_V2_ROUTER, ETH_WETH, public_ethereum_provider } from "../../config/ethereum"
+import { Contract, ethers } from "ethers"
+import { ETH_UNISWAP_QUOTER, ETH_UNISWAP_V2_ROUTER, ETH_WETH, ethereum_provider, public_ethereum_provider } from "../../config/ethereum"
 import { checkWallet_eth } from "../../utils/ethereum"
 import UniswapV2RouterABI from '../../abi/uniswap_v2_router.json'
 import quoterABI from '../../abi/uniswap_v3_quoter.json'
@@ -43,6 +43,29 @@ export const getBalance = async (publicKey: string) => {
     const response = await fetch(url)        
     const data = await response.json()
     return Number(data.result) / 1e18
+}
+
+/** Max ETH that can be sent in one native transfer (full balance minus gas reserve via RPC). */
+export async function getMaxWithdrawableEth(publicKey: string): Promise<number> {
+    try {
+        const address = ethers.getAddress(publicKey.trim())
+        const balance = await ethereum_provider.getBalance(address)
+        const feeData = await ethereum_provider.getFeeData()
+        const maxFee = feeData.maxFeePerGas ?? feeData.gasPrice
+        if (!maxFee || maxFee === 0n) {
+            const fallbackReserve = ethers.parseEther("0.003")
+            const w = balance > fallbackReserve ? balance - fallbackReserve : 0n
+            return Math.max(0, parseFloat(ethers.formatEther(w)))
+        }
+        const gasLimit = 21000n
+        const reserve = (gasLimit * maxFee * 115n) / 100n
+        const maxWei = balance > reserve ? balance - reserve : 0n
+        return Math.max(0, parseFloat(ethers.formatEther(maxWei)))
+    } catch (e) {
+        console.error("getMaxWithdrawableEth:", e)
+        const bal = await getBalance(publicKey)
+        return Math.max(0, bal - 0.003)
+    }
 }
 
 export const getTokenBalance = async (tokenAddress: string, publicKey: string) => {

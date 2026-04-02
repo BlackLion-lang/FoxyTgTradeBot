@@ -99,7 +99,8 @@ export const sendEthereumSellMessageWithAddress = async (
     );
 
     if (!active_wallet) {
-        await bot.sendMessage(chatId, `❌ No active wallet found.`, {
+        await bot.sendMessage(chatId, `${await t('errors.activeWalletNotConfigured', userId)}`, {
+            parse_mode: "HTML",
             disable_web_page_preview: true
         });
         return;
@@ -120,18 +121,19 @@ export const sendEthereumSellMessageWithAddress = async (
     }
     
     const tokenAmountToSell = (tokenBalance * sellPercent) / 100;
-    
+    const symbol = token.symbol || "TOKEN";
+
     const text = `${await t('quickSell.p7', userId)}\n\n` +
         `Token : <code>${tokenAddress}</code>\n\n` +
         `${await t('quickSell.p18', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
         `<code>${active_wallet?.publicKey}</code>\n\n` +
-        `${await t('quickSell.tokenBalance', userId)} <strong>${tokenBalance.toFixed(2)} ${token.symbol || 'TOKEN'}</strong>\n` +
-        `${await t('quickSell.selling', userId)} <strong>${tokenAmountToSell.toFixed(2)} ${token.symbol || 'TOKEN'} (${sellPercent}%)</strong>\n\n` +
         `🟡 <strong><em>${await t('quickSell.p8', userId)}</em></strong>\n` +
+        `${await t('quickSell.p9', userId)} ${tokenBalance.toFixed(2)} ${symbol}\n` +
+        `${await t('quickSell.p10', userId)} ${tokenAmountToSell.toFixed(2)} ${symbol} ⇄ \n` +
         `${await t('quickSell.p11', userId)} : ${user.settings.slippage_eth?.sell_slippage_eth || 0.5} % \n\n` +
-        `<strong><em>${await t('quickSell.p19', userId)}</em></strong>`
+        `<strong><em>${await t('quickSell.p12', userId)}</em></strong>`
     
-    const sent = bot.sendMessage(
+    const pendingSwapMessage = bot.sendMessage(
         chatId,
         text,
         {
@@ -149,10 +151,14 @@ export const sendEthereumSellMessageWithAddress = async (
             disable_web_page_preview: true
         },
     );
-    
-    setTimeout(async () => {
-        bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
-    }, 20000);
+    const deletePendingSwapMessage = async () => {
+        try {
+            const m = await pendingSwapMessage;
+            await bot.deleteMessage(chatId, m.message_id);
+        } catch {
+            // already deleted or not found
+        }
+    };
 
     try {
         const slippage = BigInt(Math.floor((user.settings.slippage_eth?.sell_slippage_eth || 0.5) * 100000))
@@ -281,14 +287,7 @@ export const sendEthereumSellMessageWithAddress = async (
             }
             
             await user.save();
-            
-            // Delete pending message
-            try {
-                await bot.deleteMessage(chatId, (await sent).message_id);
-            } catch (e) {
-                // Ignore if already deleted or not found
-            }
-            
+
             // Calculate USD value of tokens sold (matching Solana: priceUsd * tokenAmount)
             const tokenSoldUsd = tokenAmountSold * tokenInfo.priceUsd;
             
@@ -364,8 +363,8 @@ export const sendEthereumSellMessageWithAddress = async (
                 `${await t('quickSell.p13', userId)} ${remainingTokenBalance.toFixed(2)} ${tokenInfo.symbol}\n` +
                 `${await t('quickSell.p14', userId)} ${tokenAmountSold.toFixed(2)} ${tokenInfo.symbol} ⇄ ${tokenSoldUsd.toFixed(2)} USD\n` +
                 `${await t('quickSell.p15', userId)} ${formatNumberStyle(tokenInfo.marketCap || 0)}\n\n` +
-                `<strong><em>${await t('quickSell.p19', userId)}</em></strong> - <a href="${walletScanTxUrl(txHash)}">${await t('quickSell.p19', userId)}</a>`
-            
+                `<strong><em>${await t('quickSell.p16', userId)}</em></strong> - <a href="${walletScanTxUrl(txHash)}">${await t('quickSell.p19', userId)}</a>`;
+
             await bot.sendMessage(chatId, caption_finish, {
                 parse_mode: 'HTML',
                 disable_web_page_preview: true,
@@ -382,7 +381,10 @@ export const sendEthereumSellMessageWithAddress = async (
                     ]
                 }
             });
-            
+            await deletePendingSwapMessage();
+
+            await sendMenu(bot, chatId, userId, messageId);
+
             // Generate PnL image if image_activation is enabled and selling 100%
             if (user.settings.image_activation && sellPercent == 100) {
                 const imagePath = `./src/assetsOut/${getlocationTime(Date.now()).toString()}.jpg`;
@@ -397,6 +399,14 @@ export const sendEthereumSellMessageWithAddress = async (
                 const displayName = shortenUsername(user.username || '');
                 const displayTokenName = shortenUsername(tokenInfo.name || '');
                 
+                if (messageId > 0) {
+                    try {
+                        await bot.deleteMessage(chatId, messageId);
+                    } catch {
+                        /* already deleted or not found */
+                    }
+                }
+
                 await getImage(
                     `@${displayName}`,
                     `Date de vente : UTC : ${getCurrentTime()}\n                         FR : ${getFrenchTime()}`,
@@ -408,13 +418,11 @@ export const sendEthereumSellMessageWithAddress = async (
                     imagePath
                 );
                 
-                // Send PnL generation message
-                const sent = await bot.sendMessage(chatId, `${await t('messages.pnl', userId)}`, { parse_mode: "HTML" });
+                const pnlStatus = await bot.sendMessage(chatId, `${await t('messages.pnl', userId)}`, { parse_mode: "HTML" });
                 setTimeout(async () => {
-                    await bot.deleteMessage(chatId, sent.message_id).catch(() => {});
+                    await bot.deleteMessage(chatId, pnlStatus.message_id).catch(() => {});
                 }, 3000);
-                
-                // Send the PnL image
+
                 const caption = `${await t('sell.p14', userId)}`;
                 await bot.sendPhoto(chatId, imagePath, {
                     caption,
@@ -431,26 +439,19 @@ export const sendEthereumSellMessageWithAddress = async (
                 });
                 await user.save();
             }
-            await sendMenu(bot, chatId, userId, messageId);
         } else {
-            const errorDetail =
-                (result as any)?.error
-                    ? String((result as any).error)
-                    : (result as any)?.message
-                        ? String((result as any).message)
-                        : "";
-
             const failText =
                 `${await t('quickSell.p7', userId)}\n\n` +
                 `Token : <code>${tokenAddress}</code>\n\n` +
                 `${await t('quickSell.p18', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
                 `<code>${active_wallet?.publicKey}</code>\n\n` +
                 `🔴 <strong><em>${await t('quickSell.p8', userId)}</em></strong>\n` +
-                `${await t('quickSell.tokenBalance', userId)} <strong>${tokenBalance.toFixed(2)} ${token.symbol || 'TOKEN'}</strong>\n` +
-                `${await t('quickSell.selling', userId)} <strong>${tokenAmountToSell.toFixed(2)} ${token.symbol || 'TOKEN'} (${sellPercent}%)</strong>\n\n` +
-                `${await t('quickSell.failed', userId)}${errorDetail ? `\n\n${errorDetail}` : ''}`;
+                `${await t('quickSell.p9', userId)} ${tokenBalance.toFixed(2)} ${symbol}\n` +
+                `${await t('quickSell.p10', userId)} ${tokenAmountToSell.toFixed(2)} ${symbol} ⇄ \n` +
+                `${await t('quickSell.p11', userId)} : ${user.settings.slippage_eth?.sell_slippage_eth || 0.5} % \n\n` +
+                `<strong>${await t('quickSell.failed', userId)}</strong>`;
 
-            const sent = await bot.sendMessage(
+            await bot.sendMessage(
                 chatId,
                 failText,
                 {
@@ -468,16 +469,37 @@ export const sendEthereumSellMessageWithAddress = async (
                     },
                 },
             );
-            setTimeout(async () => {
-                bot.deleteMessage(chatId, sent.message_id).catch(() => {});
-            }, 10000);
+            await deletePendingSwapMessage();
+            await sendMenu(bot, chatId, userId, messageId);
         }
     } catch (error: any) {
         console.error('Ethereum sell error:', error);
-        const errorMessage = error?.message || error?.toString() || "Unknown error";
-        await bot.sendMessage(chatId, `${await t('quickSell.failed', userId)}\n\n${errorMessage}`, {
-            disable_web_page_preview: true,
+        const failText =
+            `${await t('quickSell.p7', userId)}\n\n` +
+            `Token : <code>${tokenAddress}</code>\n\n` +
+            `${await t('quickSell.p18', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+            `<code>${active_wallet?.publicKey}</code>\n\n` +
+            `🔴 <strong><em>${await t('quickSell.p8', userId)}</em></strong>\n` +
+            `${await t('quickSell.p9', userId)} ${tokenBalance.toFixed(2)} ${symbol}\n` +
+            `${await t('quickSell.p10', userId)} ${tokenAmountToSell.toFixed(2)} ${symbol} ⇄ \n` +
+            `${await t('quickSell.p11', userId)} : ${user.settings.slippage_eth?.sell_slippage_eth || 0.5} % \n\n` +
+            `<strong>${await t('quickSell.failed', userId)}</strong>`;
+        await bot.sendMessage(chatId, failText, {
             parse_mode: "HTML",
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        {
+                            text: `${await t('quickSell.viewToken', userId)}`,
+                            url: `https://etherscan.io/token/${tokenAddress}`,
+                        },
+                    ],
+                    [await getCloseButton(userId)],
+                ],
+            },
         });
+        await deletePendingSwapMessage();
+        await sendMenu(bot, chatId, userId, messageId);
     }
 };

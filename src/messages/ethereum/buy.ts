@@ -141,7 +141,8 @@ export const sendEthereumBuyMessageWithAddress = async (
     );
 
     if (!active_wallet) {
-        await bot.sendMessage(chatId, `❌ No active wallet found.`, {
+        await bot.sendMessage(chatId, `${await t('errors.activeWalletNotConfigured', userId)}`, {
+            parse_mode: "HTML",
             disable_web_page_preview: true
         });
         return;
@@ -168,9 +169,9 @@ export const sendEthereumBuyMessageWithAddress = async (
         `🟡 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
         `${ethAmount} ETH ⇄\n` +
         `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
-        `<strong><em>${await t('quickBuy.p16', userId)}</em></strong>`
+        `<strong><em>${await t('quickBuy.p10', userId)}</em></strong>`
     
-    const sent = bot.sendMessage(
+    const pendingSwapMessage = bot.sendMessage(
         chatId,
         text,
         {
@@ -188,10 +189,14 @@ export const sendEthereumBuyMessageWithAddress = async (
             disable_web_page_preview: true
         },
     );
-    
-    setTimeout(async () => {
-        bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
-    }, 30000);
+    const deletePendingSwapMessage = async () => {
+        try {
+            const m = await pendingSwapMessage;
+            await bot.deleteMessage(chatId, m.message_id);
+        } catch {
+            // already deleted or not found
+        }
+    };
 
     try {
         const slippage = BigInt(Math.floor((user.settings.slippage_eth?.buy_slippage_eth || 0.5) * 100000))
@@ -333,17 +338,7 @@ export const sendEthereumBuyMessageWithAddress = async (
             }
             
             await user.save();
-            
-            // Delete pending message
-            setTimeout(async () => {
-                try {
-                    await bot.deleteMessage(chatId, (await sent).message_id);
-                } catch (e) {
-                    // Ignore if already deleted or not found
-                }
-            }, 30000);
-            
-            // Format confirmation message matching Solana style
+
             const caption_finish = `${await t('quickBuy.p7', userId)}\n\n` +
                 `Token : <code>${tokenAddress}</code>\n\n` +
                 `${await t('quickBuy.p14', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${updatedBalance.toFixed(4)} ETH</strong> ($${(updatedBalance * eth_price).toFixed(2)})\n` +
@@ -351,8 +346,16 @@ export const sendEthereumBuyMessageWithAddress = async (
                 `🟢 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
                 `${ethAmount} ETH ⇄ ${tokenAmountReceived.toFixed(2)} ${tokenInfo.symbol}\n` +
                 `${await t('quickBuy.p11', userId)} ${formatNumberStyle(tokenInfo.marketCap || 0)}\n\n` +
-                `<strong><em>${await t('quickBuy.p16', userId)}</em></strong> - <a href="${walletScanTxUrl(txHash)}">${await t('quickBuy.p16', userId)}</a>`
-            
+                `<strong><em>${await t('quickBuy.p12', userId)}</em></strong> - <a href="${walletScanTxUrl(txHash)}">${await t('quickBuy.p16', userId)}</a>`;
+
+            setTimeout(async () => {
+                try {
+                    await bot.deleteMessage(chatId, messageId);
+                } catch {
+                    /* already deleted or not found */
+                }
+            }, 5000);
+
             await bot.sendMessage(chatId, caption_finish, {
                 parse_mode: 'HTML',
                 disable_web_page_preview: true,
@@ -369,16 +372,11 @@ export const sendEthereumBuyMessageWithAddress = async (
                     ]
                 }
             });
+            await deletePendingSwapMessage();
 
-            await sendMenu(bot, chatId, userId, messageId);
+            const { Sell } = await import("../../commands/ethereum/sell");
+            await Sell(bot, chatId, userId, tokenAddress);
         } else {
-            const errorDetail =
-                (result as any)?.error
-                    ? String((result as any).error)
-                    : (result as any)?.message
-                        ? String((result as any).message)
-                        : "";
-
             const failText =
                 `${await t('quickBuy.p7', userId)}\n\n` +
                 `Token : <code>${tokenAddress}</code>\n\n` +
@@ -387,9 +385,9 @@ export const sendEthereumBuyMessageWithAddress = async (
                 `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
                 `${ethAmount} ETH ⇄\n` +
                 `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
-                `${await t('quickBuy.failed', userId)}${errorDetail ? `\n\n${errorDetail}` : ''}`;
+                `<strong>${await t('quickBuy.failed', userId)}</strong>`;
 
-            const sent = await bot.sendMessage(
+            await bot.sendMessage(
                 chatId,
                 failText,
                 {
@@ -407,16 +405,36 @@ export const sendEthereumBuyMessageWithAddress = async (
                     },
                 },
             );
-            setTimeout(async () => {
-                bot.deleteMessage(chatId, sent.message_id).catch(() => {});
-            }, 10000);
+            await deletePendingSwapMessage();
+            sendMenu(bot, chatId, userId, messageId);
         }
     } catch (error: any) {
         console.error('Ethereum buy error:', error);
-        const errorMessage = error?.message || error?.toString() || "Unknown error";
-        await bot.sendMessage(chatId, `${await t('quickBuy.failed', userId)}\n\n${errorMessage}`, {
-            disable_web_page_preview: true,
+        const failText =
+            `${await t('quickBuy.p7', userId)}\n\n` +
+            `Token : <code>${tokenAddress}</code>\n\n` +
+            `${await t('quickBuy.p14', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+            `<code>${active_wallet?.publicKey}</code>\n\n` +
+            `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
+            `${ethAmount} ETH ⇄\n` +
+            `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
+            `<strong>${await t('quickBuy.failed', userId)}</strong>`;
+        await bot.sendMessage(chatId, failText, {
             parse_mode: "HTML",
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        {
+                            text: `${await t('quickBuy.viewToken', userId)}`,
+                            url: `https://etherscan.io/token/${tokenAddress}`,
+                        },
+                    ],
+                    [await getCloseButton(userId)],
+                ],
+            },
         });
+        await deletePendingSwapMessage();
+        await sendMenu(bot, chatId, userId, messageId);
     }
 };

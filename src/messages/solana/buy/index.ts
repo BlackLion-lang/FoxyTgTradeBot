@@ -339,7 +339,7 @@ export const sendBuyMessageWithAddress = async (
         `${solAmount} SOL ⇄\n` +
         `${await t('quickBuy.p9', userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
         `<strong><em>${await t('quickBuy.p10', userId)}</em></strong>`
-    const sent = bot.sendMessage(
+    const pendingSwapMessage = bot.sendMessage(
         chatId,
         text,
         {
@@ -356,8 +356,16 @@ export const sendBuyMessageWithAddress = async (
             },
         },
     );
+    const deletePendingSwapMessage = async () => {
+        try {
+            const m = await pendingSwapMessage;
+            await bot.deleteMessage(chatId, m.message_id);
+        } catch {
+            // already deleted or not found
+        }
+    };
     setTimeout(async () => {
-        bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
+        bot.deleteMessage(chatId, (await pendingSwapMessage).message_id).catch(() => {});
     }, 10000);
     console.log("sendmessage", text)
 
@@ -381,6 +389,7 @@ export const sendBuyMessageWithAddress = async (
     ).then(async (result: SwapResult) => {
         // Handle the result of the swap
         if (result.success && active_wallet) {
+            await deletePendingSwapMessage();
             const settings = await TippingSettings.findOne() || new TippingSettings(); // Get the first document
             if (!settings) throw new Error("Tipping settings not found!");
             const sol_price = getSolPrice();
@@ -530,7 +539,6 @@ export const sendBuyMessageWithAddress = async (
                 parse_mode: "HTML",
                 reply_markup: markup,
             });
-            await sendMenu(bot, chatId, userId, messageId);
 
             return;
 
@@ -543,9 +551,9 @@ export const sendBuyMessageWithAddress = async (
                 `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
                 `${solAmount} SOL ⇄\n` +
                 `${await t('quickBuy.p9', userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
-                `${await t('quickBuy.failed', userId)}`;
+                `<strong>${await t('quickBuy.failed', userId)}</strong>`;
 
-            const sent = await bot.sendMessage(chatId, failText, {
+            await bot.sendMessage(chatId, failText, {
                 parse_mode: "HTML",
                 disable_web_page_preview: true,
                 reply_markup: {
@@ -559,9 +567,7 @@ export const sendBuyMessageWithAddress = async (
                     ],
                 },
             });
-            setTimeout(async () => {
-                bot.deleteMessage(chatId, sent.message_id).catch(() => { });
-            }, 10000);
+            sendMenu(bot, chatId, userId, messageId);
         }
 
         // } else {
@@ -569,14 +575,12 @@ export const sendBuyMessageWithAddress = async (
         // }
     }).catch(async (err: any) => {
         const errorDetail = err?.message ? String(err.message) : err ? String(err) : "";
-        const sent = await bot.sendMessage(
+        await bot.sendMessage(
             chatId,
-            `${await t('quickBuy.failed', userId)}${errorDetail ? `\n\n${errorDetail}` : ''}`,
+            `<strong>${await t('quickBuy.failed', userId)}</strong>${errorDetail ? `\n\n${errorDetail}` : ''}`,
             { parse_mode: "HTML" },
         );
-        setTimeout(async () => {
-            bot.deleteMessage(chatId, sent.message_id).catch(() => {});
-        }, 10000);
+        sendMenu(bot, chatId, userId, messageId);
     });
 
     // Fetch the buy message and send it to the user

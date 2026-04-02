@@ -99,10 +99,13 @@ export const getMenu = async (
     const userChain = await getUserChain(userId);
     
     if (!user) {
+        const settings = await TippingSettings.findOne().lean();
+        const defaultLanguage = (settings as any)?.defaultLanguage === "en" ? "en" : "fr";
         const newUser = new User();
         newUser.userId = userId;
         newUser.username = username;
         newUser.first_name = first_name;
+        newUser.language = defaultLanguage;
         
         if (userChain === "ethereum") {
             const { publicKey, secretKey } = ethereumWalletCreate();

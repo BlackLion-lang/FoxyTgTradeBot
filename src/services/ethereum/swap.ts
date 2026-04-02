@@ -6,7 +6,7 @@ import {
     ETH_UNISWAP_V3_ROUTER, 
     ETH_SWAP_ROUTER,
     ETH_WETH, 
-    // ethereum_provider,
+    ethereum_provider,
     public_ethereum_provider
 } from "../../config/ethereum"
 import UniswapV2RouterABI from '../../abi/uniswap_v2_router.json'
@@ -23,6 +23,62 @@ import { formatNumberStyle } from '../other'
 import { getPairInfoWithTokenAddress } from './dexscreener'
 import { TippingSettings } from '../../models/tipSettings'
 import { getCloseButton } from '../../utils/markup'
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * ERC20 approve for ETH_SWAP_ROUTER with RPC convergence polling and USDT-style reset fallback.
+ * Fixes intermittent "Available: 0" after a confirmed approve (load-balanced public RPCs) and picky tokens.
+ */
+async function ensureTokenAllowanceForSwapRouter(
+    tokenContract: Contract,
+    wallet: Wallet,
+    spender: string,
+    required: bigint,
+) {
+    const owner = wallet.address;
+    let allowance = await tokenContract.allowance(owner, spender);
+    if (allowance >= required) return;
+
+    const submitApprove = async (amount: bigint) => {
+        const tx = await tokenContract.approve(spender, amount);
+        const receipt = await tx.wait();
+        if (receipt != null && Number(receipt.status) !== 1) {
+            throw new Error("Token approve transaction was not successful");
+        }
+    };
+
+    console.log("approve started...");
+    await submitApprove(MaxUint256);
+    console.log("approve confirmed, polling allowance...");
+
+    for (let i = 0; i < 15; i++) {
+        allowance = await tokenContract.allowance(owner, spender);
+        if (allowance >= required) return;
+        await sleep(400);
+    }
+
+    console.warn("Allowance still low after approve; trying reset-to-zero then re-approve (USDT-style)");
+    try {
+        await submitApprove(0n);
+        await submitApprove(MaxUint256);
+        for (let i = 0; i < 12; i++) {
+            allowance = await tokenContract.allowance(owner, spender);
+            if (allowance >= required) return;
+            await sleep(400);
+        }
+    } catch (e) {
+        console.warn("USDT-style approve reset failed, will try exact amount:", e);
+    }
+
+    await submitApprove(required);
+    allowance = await tokenContract.allowance(owner, spender);
+    if (allowance < required) {
+        throw new Error(
+            `Insufficient token allowance. Required: ${required.toString()}, Available: ${allowance.toString()}`,
+        );
+    }
+}
 
 interface swapInterface {
     index: number,
@@ -315,7 +371,8 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
     try {
         const { index, amount, token_address, pair_address, slippage, gas_amount, dexId, secretKey, deadline } = params
         console.log('Selling params', index, amount, token_address, pair_address, slippage, gas_amount, dexId, secretKey, deadline)
-        const provider = public_ethereum_provider
+        /** Primary RPC: avoids seeing allowance 0 after approve when public nodes lag behind. */
+        const provider = ethereum_provider
         const currentBlock = await provider.getBlock('latest')
         const UNISWAP_V2_ROUTER = ETH_UNISWAP_V2_ROUTER
         const UNISWAP_V3_ROUTER = ETH_UNISWAP_V3_ROUTER
@@ -395,7 +452,9 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
             "function decimals() view returns (uint8)",
             "function transfer(address to, uint256 amount) public returns (bool)"
         ];
-        const tokenContract = new Contract(token_address, tokenABI, wallet)
+        const tokenAddr = ethers.getAddress(token_address);
+        const swapSpender = ethers.getAddress(ETH_SWAP_ROUTER);
+        const tokenContract = new Contract(tokenAddr, tokenABI, wallet);
         const decimals = await tokenContract.decimals()
         
         // Validate amount
@@ -436,7 +495,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
         if(dexId === 'Uniswap V2') {
             try {
                 const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)            
-                const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [token_address, WETH]);
+                const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [tokenAddr, WETH]);
                 expectedAmountOut = amountsOut[1];
                 
                 if (!expectedAmountOut || expectedAmountOut === 0n) {
@@ -467,7 +526,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
                 const quoter = new ethers.Contract(ETH_UNISWAP_QUOTER, quoterABI, wallet)
 
                 const params = {
-                    tokenIn: token_address, 
+                    tokenIn: tokenAddr, 
                     tokenOut: WETH,
                     fee: feeTier,
                     amountIn: actualAmount, 
@@ -484,7 +543,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
                 feeTier = 0n;
                 try {
                     const UNISWAP_V2_ROUTER_CONTRACT = new Contract(UNISWAP_V2_ROUTER, UniswapV2RouterABI, wallet)            
-                    const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [token_address, WETH]);
+                    const amountsOut = await UNISWAP_V2_ROUTER_CONTRACT.getAmountsOut(actualAmount, [tokenAddr, WETH]);
                     expectedAmountOut = amountsOut[1];
                     
                     if (!expectedAmountOut || expectedAmountOut === 0n) {
@@ -508,30 +567,17 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
         }        
 
         // Use ETH_SWAP_ROUTER instead of direct Uniswap router
-        const routerContract = new Contract(ETH_SWAP_ROUTER, BaseswapRouterABI, wallet)
+        const routerContract = new Contract(swapSpender, BaseswapRouterABI, wallet)
         
         // Referral address (zero address if not provided)
         const ref_address = '0x0000000000000000000000000000000000000000'
         
-        // Approve token spending for swap router (use actualAmount)
-        const allowance = await tokenContract.allowance(wallet.address, ETH_SWAP_ROUTER);
-        if(allowance < actualAmount) {
-            console.log('approve started...')
-            const approve_tx = await tokenContract.approve(ETH_SWAP_ROUTER, MaxUint256);
-            await approve_tx.wait()
-            console.log('approve confirmed...')
-        }
-        
-        // Double-check allowance after approval
-        const finalAllowance = await tokenContract.allowance(wallet.address, ETH_SWAP_ROUTER);
-        if (finalAllowance < actualAmount) {
-            throw new Error(`Insufficient token allowance. Required: ${actualAmount.toString()}, Available: ${finalAllowance.toString()}`)
-        }
+        await ensureTokenAllowanceForSwapRouter(tokenContract, wallet, swapSpender, actualAmount);
         
         console.log(actualAmount,
             amountOutMin, // Accept any amount of ETH
             feeTier,
-            [token_address, WETH], // Path: Token -> WETH
+            [tokenAddr, WETH], // Path: Token -> WETH
             actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
             wallet.address, // Recipient address
             ref_address, gas_amount)
@@ -554,7 +600,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
                 actualAmount,
                 amountOutMin, // Accept any amount of ETH
                 feeTier,
-                [token_address, WETH], // Path: Token -> WETH
+                [tokenAddr, WETH], // Path: Token -> WETH
                 actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
                 wallet.address, // Recipient address
                 ref_address,
@@ -568,7 +614,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
             console.log('Sending transaction with params:', {
                 amount: actualAmount.toString(),
                 amountOutMin: amountOutMin.toString(),
-                path: [token_address, WETH],
+                path: [tokenAddr, WETH],
                 to: wallet.address,
                 gasLimit: gasLimit,
                 gasPrice: `${ethers.formatUnits(gasPrice, 'gwei')} gwei`
@@ -591,7 +637,7 @@ export const swapExactTokenForETHUsingUniswapV2_ = async (params: swapInterface)
                 actualAmount,
                 0n, // Use 0n for amountOutMin in actual call (as per reference)
                 feeTier,
-                [token_address, WETH], // Path: Token -> WETH
+                [tokenAddr, WETH], // Path: Token -> WETH
                 actualDexId === 'Uniswap V3' ? UNISWAP_V3_ROUTER : UNISWAP_V2_ROUTER,
                 wallet.address, // Recipient address
                 ref_address,

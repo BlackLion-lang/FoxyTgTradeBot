@@ -1,5 +1,6 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../models/user";
+import { TippingSettings } from "../models/tipSettings";
 import { t } from "../locales";
 
 export const chain = async (
@@ -12,9 +13,12 @@ export const chain = async (
 
     let user = await User.findOne({ userId });
     if (!user) {
+        const settings = await TippingSettings.findOne().lean();
+        const defaultLanguage = (settings as any)?.defaultLanguage === "en" ? "en" : "fr";
         user = new User();
         user.userId = userId;
         user.chain = "solana"; // default
+        user.language = defaultLanguage;
         await user.save();
     }
 

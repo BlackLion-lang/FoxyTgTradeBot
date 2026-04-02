@@ -321,15 +321,17 @@ ${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwe
             },
         );
     } else {
-        const result = await getRecommendedMEVTip("veryHigh");
         const user = (await User.findOne({ userId })) || new User();
+        const result = await getRecommendedMEVTip(
+            user.settings.auto_tip as "medium" | "high" | "veryHigh",
+        );
         const newMarkup: TelegramBot.InlineKeyboardMarkup = {
             inline_keyboard: [
                 [
-                    { text: await t('feeSettings.slowButton', userId), callback_data: "speed_medium" },
-                    { text: await t('feeSettings.fastButton', userId), callback_data: "speed_veryHigh" },
-                    { text: await t('feeSettings.normalButton', userId), callback_data: "speed_high" },
-                    { text: await t('feeSettings.slowButton2', userId), callback_data: "speed_medium" },
+                    // Must match bot.ts: speed_low→medium, speed_medium→high, speed_high→veryHigh
+                    { text: await t('feeSettings.slowButton2', userId), callback_data: "speed_low" },
+                    { text: await t('feeSettings.normalButton', userId), callback_data: "speed_medium" },
+                    { text: await t('feeSettings.fastButton', userId), callback_data: "speed_high" },
                 ],
                 [
                     { text: await t('back', userId), callback_data: "settings_fee_back" },

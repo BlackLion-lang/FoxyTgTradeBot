@@ -36,7 +36,7 @@ import { editprofitLevelMessage, editProfitlevelMessageReplyMarkup } from './mes
 import { editWalletsMessage, sendWalletsMessageWithImage, sendWalletsMessage } from "./messages/solana/wallets";
 import { editWalletsMessage as editEthereumWalletsMessage } from "./messages/ethereum/wallets";
 import { isEvmAddress } from "./utils/ethereum";
-import { getBalance as getEthereumBalance } from "./services/ethereum/etherscan";
+import { getBalance as getEthereumBalance, getMaxWithdrawableEth } from "./services/ethereum/etherscan";
 import { transferETH } from "./services/ethereum/transfer";
 import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendAddSniperUserMessage, sendMenuMessage, sendMenuMessageWithImage, editAdminPanelMessage, sendMenu, sendSnippingSettingsMessage, editSnippingSettingsMessage } from "./messages";
 import {
@@ -690,6 +690,21 @@ const userLastMessage = new Map();
 const userLastTokens = new Map();
 
 const activeTextHandlers = new Map<number, NodeJS.Timeout>(); // user_id -> timeout
+/** Same function reference passed to `bot.once('text', ...)` so we can remove stale listeners (e.g. amount step still waiting when user clicks 100%). */
+const pendingTextListenerByUser = new Map<number, (msg: TelegramBot.Message) => void | boolean>();
+
+const cleanupUserTextHandler = (userId: number) => {
+    const prevListener = pendingTextListenerByUser.get(userId);
+    if (prevListener) {
+        bot.removeListener('text', prevListener);
+        pendingTextListenerByUser.delete(userId);
+    }
+    const timeout = activeTextHandlers.get(userId);
+    if (timeout) {
+        clearTimeout(timeout);
+        activeTextHandlers.delete(userId);
+    }
+};
 
 const createUserTextHandler = (targetUserId: number, handler: (reply: TelegramBot.Message) => void | Promise<void>, timeoutMs: number = 300000) => {
     cleanupUserTextHandler(targetUserId);
@@ -708,16 +723,9 @@ const createUserTextHandler = (targetUserId: number, handler: (reply: TelegramBo
     }, timeoutMs);
 
     activeTextHandlers.set(targetUserId, timeout);
+    pendingTextListenerByUser.set(targetUserId, wrappedHandler);
 
     return wrappedHandler;
-};
-
-const cleanupUserTextHandler = (userId: number) => {
-    const timeout = activeTextHandlers.get(userId);
-    if (timeout) {
-        clearTimeout(timeout);
-        activeTextHandlers.delete(userId);
-    }
 };
 
 const safeDeleteMessage = async (bot: TelegramBot, chatId: number, messageId: number) => {
@@ -781,16 +789,10 @@ bot.on("callback_query", async (callbackQuery) => {
         }
         const users = await User.findOne({ userId });
         if (!users) return; // Skip if user doesn't exist
-        let tokenBalance: any;
-        if (users.language === "en") {
-            tokenBalance = text.match(
-                /💰 Token Balance : ([\d.]+) [A-Za-z0-9 ]+/
-            )?.[1];
-        } else {
-            tokenBalance = text.match(
-                /💰 Solde en tokens : ([\d.]+) [A-Za-z0-9 ]+/
-            )?.[1];
-        }
+        // Parse token balance in a language-agnostic way (EN/FR).
+        // Fallback to on-chain balance in sell handlers when this is missing.
+        const tokenBalanceMatch = textOrCaption.match(/(?:Token\s*Balance|Solde\s*en\s*tokens)\s*:\s*([\d.]+)/i);
+        let tokenBalance: any = tokenBalanceMatch?.[1];
         const solAmount = caption.match(/Wallet Balance: ([\d.]+) SOL/)?.[1];
         const callbackQueryId = callbackQuery.id;
         const currentKeyboard = callbackQuery.message?.reply_markup;
@@ -2376,7 +2378,19 @@ bot.on("callback_query", async (callbackQuery) => {
                         messageId,
                         tokenAddress,
                         sellPercent,
-                        Number(tokenBalance)
+                        await (async () => {
+                            let solanaTokenBalance = Number(tokenBalance);
+                            if ((!Number.isFinite(solanaTokenBalance) || solanaTokenBalance <= 0) && tokenAddress && isValidSolanaAddress(tokenAddress)) {
+                                const activeWallet = user.wallets.find((w: any) => w.is_active_wallet);
+                                if (activeWallet?.publicKey) {
+                                    solanaTokenBalance = await getTokenBalance(
+                                        new PublicKey(activeWallet.publicKey),
+                                        new PublicKey(tokenAddress),
+                                    ).catch(() => 0);
+                                }
+                            }
+                            return solanaTokenBalance;
+                        })()
                     );
                     return;
                 }
@@ -2426,6 +2440,16 @@ bot.on("callback_query", async (callbackQuery) => {
                                 const { sendEthereumSellMessageWithAddress } = await import("./messages/ethereum/sell");
                                 await sendEthereumSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, tokenSellPercent, tokenBalance);
                             } else {
+                                let solanaTokenBalance = Number(tokenBalance);
+                                if ((!Number.isFinite(solanaTokenBalance) || solanaTokenBalance <= 0) && tokenAddress && isValidSolanaAddress(tokenAddress)) {
+                                    const activeWallet = user.wallets.find((w: any) => w.is_active_wallet);
+                                    if (activeWallet?.publicKey) {
+                                        solanaTokenBalance = await getTokenBalance(
+                                            new PublicKey(activeWallet.publicKey),
+                                            new PublicKey(tokenAddress),
+                                        ).catch(() => 0);
+                                    }
+                                }
                                 await sendSellMessageWithAddress(
                                     bot,
                                     chatId,
@@ -2433,7 +2457,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                     messageId,
                                     tokenAddress,
                                     tokenSellPercent,
-                                    Number(tokenBalance),
+                                    solanaTokenBalance,
                                 );
                             }
                         }
@@ -2554,6 +2578,7 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action?.startsWith('wallets_withdraw_confirm_')) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const parts = sel_action.split('wallets_withdraw_confirm_')[1].split('_');
             const index = Number(parts[0]);
             const ethToAddress = parts[1] || null;
@@ -2568,16 +2593,31 @@ bot.on("callback_query", async (callbackQuery) => {
                     return;
                 }
 
-                let finalAmount = ethAmount;
+                let finalAmount = ethAmount != null && !isNaN(ethAmount) && ethAmount > 0 ? ethAmount : null;
                 let finalAddress = ethToAddress;
 
-                if (!finalAmount) {
-                    const amountMatch = text.match(/([\d.]+)\s*(ETH|eth)/i);
-                    finalAmount = amountMatch ? Number(amountMatch[1]) : null;
+                const withdrawParseSource = `${textOrCaption}`.replace(/\u00a0/g, " ");
+                const parseEthAmountFromMessage = (src: string): number | null => {
+                    const m = src.match(/([\d][\d.,]*)\s*(?:ETH|eth|Ξ|ethereum)\b/i);
+                    if (!m) return null;
+                    let raw = m[1].replace(/\s/g, "");
+                    const lastComma = raw.lastIndexOf(",");
+                    const lastDot = raw.lastIndexOf(".");
+                    if (lastComma > lastDot) {
+                        raw = raw.replace(/\./g, "").replace(",", ".");
+                    } else {
+                        raw = raw.replace(/,/g, "");
+                    }
+                    const n = Number(raw);
+                    return Number.isFinite(n) && n > 0 ? n : null;
+                };
+
+                if (finalAmount == null) {
+                    finalAmount = parseEthAmountFromMessage(withdrawParseSource);
                 }
 
                 if (!finalAddress) {
-                    const addressMatch = text.match(/(0x[a-fA-F0-9]{40})/);
+                    const addressMatch = withdrawParseSource.match(/(0x[a-fA-F0-9]{40})/);
                     finalAddress = addressMatch ? addressMatch[1] : null;
                 }
 
@@ -2591,12 +2631,23 @@ bot.on("callback_query", async (callbackQuery) => {
                     return;
                 }
 
+                const maxWd = await getMaxWithdrawableEth(wallet.publicKey);
+                if (maxWd <= 0) {
+                    bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientEth', userId)}`);
+                    return;
+                }
+                if (finalAmount > maxWd + 1e-12) {
+                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)} — ${await t('subscribe.insufficientEth', userId)}`);
+                    return;
+                }
+
                 try {
                     await transferETH(bot, chatId, userId, finalAmount, index, finalAddress);
                     editEthereumWalletsMessage(bot, chatId, userId, messageId);
-                } catch (error) {
+                } catch (error: any) {
                     console.error('Ethereum withdraw error:', error);
-                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
+                    const detail = error?.reason || error?.message || String(error);
+                    bot.sendMessage(chatId, `${await t('errors.transactionFailed', userId)}${detail ? `: ${detail}` : ""}`);
                 }
                 return;
             }
@@ -2756,6 +2807,7 @@ ${amount} SOL ⇄ <code>${solToAddress}</code>
             const index = Number(sel_action.replace('wallets_withdraw_100_', ''));
             if (isNaN(index)) return;
             await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            cleanupUserTextHandler(userId);
             const userChain = await getUserChain(userId);
             const wallet = userChain === "ethereum" ? user.ethereumWallets?.[index] : user.wallets?.[index];
             if (!wallet) {
@@ -2763,8 +2815,7 @@ ${amount} SOL ⇄ <code>${solToAddress}</code>
                 return;
             }
             if (userChain === "ethereum") {
-                const balance = await getEthereumBalance(wallet.publicKey);
-                const maxSendable = balance;
+                const maxSendable = await getMaxWithdrawableEth(wallet.publicKey);
                 if (maxSendable <= 0) {
                     bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientEth', userId)}`);
                     return;
@@ -2873,6 +2924,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         } else if (sel_action?.startsWith('wallets_withdraw_')) {
             const index = Number(sel_action.split('wallets_withdraw_')[1])
             if (!isNaN(index)) {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                cleanupUserTextHandler(userId);
                 const userChain = await getUserChain(userId);
                 const withdrawMessage = userChain === "ethereum"
                     ? await t('messages.withdraw1_ethereum', userId)
@@ -2897,10 +2950,21 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         bot.once('text', createUserTextHandler(userId, async (reply) => {
                             const text = (reply.text || '').trim();
                             if (userChain === "ethereum" ? isEvmAddress(text) : isValidSolanaAddress(text)) {
+                                bot.sendMessage(
+                                    chatId,
+                                    `${await t('errors.invalidAmount', userId)}\n${withdrawMessage}`,
+                                );
                                 return;
                             }
-                            const raw = text.replace(",", ".");
-                            const amount = Number(raw);
+                            let rawAmt = text.replace(/\s/g, "");
+                            const lc = rawAmt.lastIndexOf(",");
+                            const ld = rawAmt.lastIndexOf(".");
+                            if (lc > ld) {
+                                rawAmt = rawAmt.replace(/\./g, "").replace(",", ".");
+                            } else {
+                                rawAmt = rawAmt.replace(/,/g, "");
+                            }
+                            const amount = Number(rawAmt);
                             if (isNaN(amount) || amount <= 0) {
                                 bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
                                 return;
@@ -2910,10 +2974,9 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             bot.deleteMessage(chatId, sentMessage1.message_id).catch(() => { });
 
                             if (userChain === "ethereum") {
-                                const balance = await getEthereumBalance(wallet.publicKey);
-                                const maxSendable = balance;
+                                const maxSendable = await getMaxWithdrawableEth(wallet.publicKey);
 
-                                if (amount > balance) {
+                                if (amount > maxSendable + 1e-12) {
                                     bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)} - ${await t('subscribe.insufficientEth', userId)}`);
                                     return;
                                 }

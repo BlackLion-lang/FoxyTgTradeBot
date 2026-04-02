@@ -14,7 +14,7 @@ const userSchema = new mongoose.Schema(
         },
         language: {
             type: String,
-            default: "en"
+            enum: ["en", "fr"],
         },
         chain: {
             type: String,
@@ -346,8 +346,8 @@ const userSchema = new mongoose.Schema(
         // Copy Trading / Monitor Wallets: target Solana addresses to watch and copy on Pump.fun launches
         copyTrade: {
             type: {
-                enabled: { type: Boolean, default: true }, // on/off for the whole copy trading module
-                mode: { type: String, default: "auto", enum: ["auto", "manual"] }, // auto = bot buys on new token; manual = notify only, user clicks Buy
+                enabled: { type: Boolean, default: false }, // on/off for the whole copy trading module
+                mode: { type: String, default: "manual", enum: ["auto", "manual"] }, // auto = bot buys on new token; manual = notify only, user clicks Buy
                 tpSlEnabled: { type: Boolean, default: true },     // on/off for TP/SL on copy-trade positions
                 takeProfitPercent: { type: Number, default: 10 },   // TP % for copy-trade positions only
                 stopLossPercent: { type: Number, default: -40 },    // SL % for copy-trade positions only

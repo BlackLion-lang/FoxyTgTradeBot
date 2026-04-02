@@ -416,7 +416,7 @@ export const sendSellMessageWithAddress = async (
         `${await t('quickSell.p10', userId)} ${(amount * tokenAmount / 100).toFixed(2)} ${symbol} ⇄ \n` +
         `${await t('quickSell.p11', userId)} : ${user.settings.slippage.sell_slippage}% \n\n` +
         `<strong><em>${await t('quickSell.p12', userId)}</em></strong>`
-    const sent = bot.sendMessage(
+    const pendingSwapMessage = bot.sendMessage(
         chatId,
         text,
         {
@@ -433,9 +433,16 @@ export const sendSellMessageWithAddress = async (
             },
         },
     );
-
+    const deletePendingSwapMessage = async () => {
+        try {
+            const m = await pendingSwapMessage;
+            await bot.deleteMessage(chatId, m.message_id);
+        } catch {
+            // already deleted or not found
+        }
+    };
     setTimeout(async () => {
-        bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
+        bot.deleteMessage(chatId, (await pendingSwapMessage).message_id).catch(() => {});
     }, 10000);
 
     // Define the SwapResult interface
@@ -458,6 +465,7 @@ export const sendSellMessageWithAddress = async (
     ).then(async (result: SwapResult) => {
         // Handle the result of the swap
         if (result.success && active_wallet) {
+            await deletePendingSwapMessage();
             const orders = await limitOrderData.find({ status: "Pending" });
             for (const order of orders) {
                 if (order.token_mint === tokenAddress) {
@@ -674,9 +682,9 @@ export const sendSellMessageWithAddress = async (
                 `${await t('quickSell.p9', userId)} ${tokenAmount.toFixed(2)} ${symbol}\n` +
                 `${await t('quickSell.p10', userId)} ${(amount * tokenAmount / 100).toFixed(2)} ${symbol} ⇄ \n` +
                 `${await t('quickSell.p11', userId)} : ${user.settings.slippage.sell_slippage}% \n\n` +
-                `${await t('quickSell.failed', userId)}`;
+                `<strong>${await t('quickSell.failed', userId)}</strong>`;
 
-            const sent = await bot.sendMessage(
+            await bot.sendMessage(
                 chatId,
                 failText,
                 {
@@ -694,9 +702,7 @@ export const sendSellMessageWithAddress = async (
                     },
                 },
             );
-            setTimeout(async () => {
-                bot.deleteMessage(chatId, (await sent).message_id).catch(() => { });
-            }, 10000);
+            sendMenu(bot, chatId, userId, messageId);
         }
     });
 };
