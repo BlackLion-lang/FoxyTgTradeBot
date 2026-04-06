@@ -10,10 +10,25 @@ import { t } from "../locales";
 import { bot } from "../config/constant";
 import { connection } from "../config/connection";
 import { subscribeToWallet, unsubscribe, type TokenCreationResult } from "./pumpDetector";
-import { startPumpStream, stopPumpStream, onPumpCreate, onPumpBuy, type PumpStreamCreateEvent, type PumpStreamBuyEvent } from "./pumpStream";
+import {
+    startPumpStream,
+    stopPumpStream,
+    onPumpCreate,
+    onPumpBuy,
+    onPumpSell,
+    type PumpStreamCreateEvent,
+    type PumpStreamBuyEvent,
+    type PumpStreamSellEvent,
+} from "./pumpStream";
 import { logger } from "../utils/logger";
 import { getCloseButton } from "../utils/markup";
 import { getSell } from "../messages/solana/sell";
+import {
+    computeCopyTradeBuyAmountSol,
+    mergeWalletCopyConfig,
+    passesCopyTradeFilters,
+    passesTargetBuySizeFilter,
+} from "./copyTradeSizing";
 
 const LAMPORTS_PER_SOL = 1e9;
 const SUBSCRIPTION_REFRESH_MS = 25_000;
@@ -26,6 +41,7 @@ let refreshIntervalId: NodeJS.Timeout | null = null;
 let currentMonitoredByAddress: Map<string, MonitoredEntry[]> = new Map();
 let pumpStreamUnsubscribe: (() => void) | null = null;
 let pumpStreamBuyUnsubscribe: (() => void) | null = null;
+let pumpStreamSellUnsubscribe: (() => void) | null = null;
 
 function shortAddress(addr: string, len = 8): string {
     if (!addr || addr.length <= len * 2) return addr;
@@ -151,9 +167,84 @@ async function applyCopyTradeBuySuccess(
     } catch (_) {}
 }
 
+async function applyCopyTradeMirrorSell(
+    userId: number,
+    mint: string,
+    walletPubKey: string,
+    sellPercent: number,
+    tokenBalanceBefore: number,
+    result: { success: boolean; signature?: string },
+): Promise<void> {
+    const userDoc = await User.findOne({ userId });
+    const activeWalletDoc = userDoc?.wallets?.find((w: any) => w.is_active_wallet);
+    if (!userDoc || !activeWalletDoc) return;
+    const settings = await TippingSettings.findOne().catch(() => null) || new TippingSettings();
+    const sol_price = getSolPrice();
+    let priceUsd = 0, market_cap = 0, symbol = "", name = "";
+    try {
+        const pairArray = await getPairByAddress(mint);
+        const pair = pairArray?.[0];
+        if (pair) {
+            priceUsd = pair.priceUsd ?? 0;
+            market_cap = pair?.marketCap ?? 0;
+            symbol = pair?.baseToken?.symbol ?? "";
+            name = pair?.baseToken?.name ?? "";
+        }
+    } catch (_) {}
+    const tokenBalanceAfter = await getTokenBalance(new PublicKey(walletPubKey), new PublicKey(mint)).catch(() => 0);
+    let adminFeePercent = (settings?.feePercentage ?? 0) / 100;
+    if (userId === 7994989802 || userId === 2024002049) adminFeePercent = 0;
+    if (!activeWalletDoc.tradeHistory) (activeWalletDoc as any).tradeHistory = [];
+    (activeWalletDoc.tradeHistory as any[]).push({
+        transaction_type: "sell",
+        token_address: mint,
+        amount: sellPercent,
+        token_price: priceUsd,
+        token_amount: tokenBalanceBefore,
+        token_balance: tokenBalanceAfter,
+        mc: market_cap,
+        date: Date.now(),
+        name: name || mint.slice(0, 8),
+        tip: (sellPercent * tokenBalanceBefore * priceUsd * adminFeePercent) / (100 * sol_price || 1),
+        pnl: true,
+    });
+    await userDoc.save();
+
+    const okLine = await t("copyTrade.copySellDone", userId);
+    const sigLine = result.signature
+        ? `\n<a href="https://solscan.io/tx/${result.signature}">Tx</a>`
+        : "";
+    await bot
+        .sendMessage(
+            userId,
+            `${okLine}\n<code>${mint}</code>\n${symbol || "—"} · ${sellPercent}%${sigLine}`,
+            { parse_mode: "HTML", disable_web_page_preview: true },
+        )
+        .catch(() => {});
+}
+
 export type MonitoredEntry = {
     user: any;
-    wallet: { address: string; copyOnNewToken?: boolean; buyAmountSol?: number; label?: string };
+    wallet: {
+        address: string;
+        copyOnNewToken?: boolean;
+        buyAmountSol?: number;
+        minAmountSol?: number;
+        maxAmountSol?: number;
+        label?: string;
+        copyFollowMode?: string;
+        sizingMode?: string;
+        sizingPercentWallet?: number;
+        proportionalRatio?: number;
+        maxAmountPerTradeSol?: number;
+        filterMinMcapUsd?: number;
+        filterMaxMcapUsd?: number;
+        filterMinLiquidityUsd?: number;
+        filterMinTokenAgeMinutes?: number;
+        filterMinVolumeUsd?: number;
+        filterTokenBlacklist?: string[];
+        filterTokenWhitelist?: string[];
+    };
 };
 
 async function handlePumpCreate(
@@ -162,7 +253,8 @@ async function handlePumpCreate(
     entries: MonitoredEntry[],
     addressKey: string,
     signature: string,
-    source: "create" | "buy" = "create"
+    source: "create" | "buy" = "create",
+    sourceSolAmount?: number
 ): Promise<void> {
     const pumpUrl = `https://pump.fun/coin/${mint}`;
     const solscanUrl = `https://solscan.io/token/${mint}`;
@@ -170,16 +262,56 @@ async function handlePumpCreate(
         const userId = u.userId as number;
         const dedupKey = source === "buy" ? `buy:${userId}:${mint}:${signature || Date.now()}` : `create:${userId}:${mint}`;
         if (notifiedRecently.has(dedupKey)) continue;
+
+        const fullUser = await User.findOne({ userId });
+        if (!fullUser || fullUser.chain !== "solana") continue;
+        const ct = fullUser.copyTrade as any;
+        const walletCfg = mergeWalletCopyConfig(ct, match as Record<string, unknown>);
+
+        if (!(await passesCopyTradeFilters(mint, walletCfg))) {
+            logger.info("CopyTrade", "Skipped (filters)", userId, mint.slice(0, 8));
+            notifiedRecently.set(dedupKey, Date.now());
+            continue;
+        }
+        if (!passesTargetBuySizeFilter(source, sourceSolAmount, match)) {
+            logger.info("CopyTrade", "Skipped (target SOL band)", userId, mint.slice(0, 8));
+            notifiedRecently.set(dedupKey, Date.now());
+            continue;
+        }
+        if ((source === "create" || source === "buy") && match.copyOnNewToken === false) {
+            notifiedRecently.set(dedupKey, Date.now());
+            continue;
+        }
+
         notifiedRecently.set(dedupKey, Date.now());
 
-        const buyAmountSol = Number(match.buyAmountSol ?? 0.01);
-        const trackedLabel = match.label ? `${shortAddress(creator)} (${match.label})` : shortAddress(creator);
-        const walletIndex = (u.copyTrade as any)?.monitoredWallets?.findIndex((w: any) => (w.address || "").toLowerCase() === addressKey) ?? 0;
+        const monitoredBuyAmountSol = Number(match.buyAmountSol ?? 0.01);
+        const activeWalletEarly = fullUser.wallets?.find((w: any) => w.is_active_wallet);
+        const walletPubKeyEarly =
+            activeWalletEarly?.publicKey != null
+                ? typeof activeWalletEarly.publicKey === "string"
+                    ? activeWalletEarly.publicKey
+                    : String((activeWalletEarly as any).publicKey)
+                : "";
+        const isAutoMode = ct?.mode !== "manual";
+        let buyAmountSol = monitoredBuyAmountSol;
+        let balanceForAuto = 0;
+        if (isAutoMode && walletPubKeyEarly) {
+            balanceForAuto = await getBalance(walletPubKeyEarly).catch(() => 0);
+            buyAmountSol = computeCopyTradeBuyAmountSol({
+                copyTrade: walletCfg,
+                monitoredBuyAmountSol,
+                userBalanceSol: balanceForAuto,
+                sourceSolAmount: source === "buy" ? sourceSolAmount : undefined,
+            });
+        }
 
-        const isAutoMode = (u.copyTrade as any)?.mode !== "manual";
+        const trackedLabel = match.label ? `${shortAddress(creator)} (${match.label})` : shortAddress(creator);
+        const walletIndex = ct?.monitoredWallets?.findIndex((w: any) => (w.address || "").toLowerCase() === addressKey) ?? 0;
 
         // Auto + purchase: same message as manual (position, purchase alert), then auto-buy, then result message
         if (isAutoMode && source === "buy") {
+            if (!walletPubKeyEarly) continue;
             const titleKey = "copyTrade.targetBought";
             const newTokenDetected = await t(titleKey, userId);
             const trackedWallet = await t("copyTrade.trackedWallet", userId);
@@ -215,16 +347,7 @@ async function handlePumpCreate(
             });
 
             logger.info("CopyTrade", `Auto copy-buy (purchase) — userId=${userId}, mint=${mint.slice(0, 8)}…, ${buyAmountSol} SOL`);
-            const fullUser = await User.findOne({ userId });
-            if (!fullUser || fullUser.chain !== "solana") { continue; }
-            const activeWallet = fullUser.wallets?.find((w: any) => w.is_active_wallet);
-            if (!activeWallet?.publicKey) { continue; }
-            const walletPubKey =
-                typeof activeWallet.publicKey === "string"
-                    ? activeWallet.publicKey
-                    : String((activeWallet as any).publicKey);
-            const balance = await getBalance(walletPubKey).catch(() => 0);
-            if (balance < buyAmountSol * 1.05) {
+            if (balanceForAuto < buyAmountSol * 1.05) {
                 const skippedMsg = await t("copyTrade.copyBuySkippedBalance", userId);
                 await bot.sendMessage(userId, `${skippedMsg} ${(buyAmountSol * 1.05).toFixed(2)} SOL).`).catch(() => {});
                 continue;
@@ -238,7 +361,7 @@ async function handlePumpCreate(
             const fee = typeof (fullUser as any).settings?.mev === "number" ? (fullUser as any).settings.mev : 0;
             const result = await swapToken(
                 userId,
-                walletPubKey,
+                walletPubKeyEarly,
                 mint,
                 buyAmountSol,
                 "buy",
@@ -251,7 +374,7 @@ async function handlePumpCreate(
             const tokenName = shortAddress(mint);
             const failedPrefix = await t("copyTrade.copyBuyFailedPurchase", userId);
             if (result?.success) {
-                await applyCopyTradeBuySuccess(userId, mint, walletPubKey, buyAmountSol, result as any);
+                await applyCopyTradeBuySuccess(userId, mint, walletPubKeyEarly, buyAmountSol, result as any);
             } else {
                 const errMsg = (result as any)?.error ?? "Unknown error";
                 await bot.sendMessage(userId, `${failedPrefix} ${tokenName}\n${errMsg}`).catch(() => {});
@@ -261,17 +384,9 @@ async function handlePumpCreate(
 
         // Auto + launch: buy first, then only result message (no alert)
         if (isAutoMode && source === "create") {
+            if (!walletPubKeyEarly) continue;
             logger.info("CopyTrade", `Auto copy-buy (launch) — userId=${userId}, mint=${mint.slice(0, 8)}…, ${buyAmountSol} SOL`);
-            const fullUser = await User.findOne({ userId });
-            if (!fullUser || fullUser.chain !== "solana") continue;
-            const activeWallet = fullUser.wallets?.find((w: any) => w.is_active_wallet);
-            if (!activeWallet?.publicKey) continue;
-            const walletPubKey =
-                typeof activeWallet.publicKey === "string"
-                    ? activeWallet.publicKey
-                    : String((activeWallet as any).publicKey);
-            const balance = await getBalance(walletPubKey).catch(() => 0);
-            if (balance < buyAmountSol * 1.05) {
+            if (balanceForAuto < buyAmountSol * 1.05) {
                 const skippedMsg = await t("copyTrade.copyBuySkippedBalance", userId);
                 await bot.sendMessage(userId, `${skippedMsg} ${(buyAmountSol * 1.05).toFixed(2)} SOL).`).catch(() => {});
                 continue;
@@ -285,7 +400,7 @@ async function handlePumpCreate(
             const fee = typeof (fullUser as any).settings?.mev === "number" ? (fullUser as any).settings.mev : 0;
             const resultLaunch = await swapToken(
                 userId,
-                walletPubKey,
+                walletPubKeyEarly,
                 mint,
                 buyAmountSol,
                 "buy",
@@ -298,7 +413,7 @@ async function handlePumpCreate(
             const tokenNameLaunch = shortAddress(mint);
             const failedPrefixLaunch = await t("copyTrade.copyBuyFailedLaunch", userId);
             if (resultLaunch?.success) {
-                await applyCopyTradeBuySuccess(userId, mint, walletPubKey, buyAmountSol, resultLaunch as any);
+                await applyCopyTradeBuySuccess(userId, mint, walletPubKeyEarly, buyAmountSol, resultLaunch as any);
             } else {
                 const errMsg = (resultLaunch as any)?.error ?? "Unknown error";
                 await bot.sendMessage(userId, `${failedPrefixLaunch} ${tokenNameLaunch}\n${errMsg}`).catch(() => {});
@@ -345,6 +460,64 @@ async function handlePumpCreate(
     }
 }
 
+async function handlePumpSell(
+    seller: string,
+    mint: string,
+    entries: MonitoredEntry[],
+    _addressKey: string,
+    signature: string,
+): Promise<void> {
+    for (const { user: u, wallet: match } of entries) {
+        if ((match as { copyFollowMode?: string }).copyFollowMode !== "buy_sell") continue;
+        const userId = u.userId as number;
+        const dedupKey = `sell:${userId}:${mint}:${signature || Date.now()}`;
+        if (notifiedRecently.has(dedupKey)) continue;
+        notifiedRecently.set(dedupKey, Date.now());
+
+        const fullUser = await User.findOne({ userId });
+        if (!fullUser || fullUser.chain !== "solana") continue;
+        if ((fullUser.copyTrade as any)?.enabled === false) continue;
+
+        const activeWallet = fullUser.wallets?.find((w: any) => w.is_active_wallet);
+        if (!activeWallet?.publicKey) continue;
+        const walletPubKey =
+            typeof activeWallet.publicKey === "string"
+                ? activeWallet.publicKey
+                : String((activeWallet as any).publicKey);
+
+        const tokenBal = await getTokenBalance(new PublicKey(walletPubKey), new PublicKey(mint)).catch(() => 0);
+        if (tokenBal <= 0) continue;
+
+        const settings = fullUser.settings as any;
+        const sellSlippage = (settings?.slippage?.sell_slippage ?? 1) * 100;
+        const sellFee = (settings?.fee_setting?.sell_fee ?? 0) * 10 ** 9;
+
+        logger.info("CopyTrade", `Mirror sell — userId=${userId}, mint=${mint.slice(0, 8)}…, tokens=${tokenBal}`);
+        const pendingMsg = await t("copyTrade.copySellPending", userId);
+        await bot.sendMessage(userId, pendingMsg).catch(() => {});
+
+        const result = await swapToken(userId, walletPubKey, mint, 100, "sell", sellSlippage, sellFee, tokenBal).catch((err) => {
+            logger.error("CopyTrade", "Mirror sell failed", userId, mint, err);
+            return { success: false, error: String(err) };
+        });
+
+        if (result?.success) {
+            await limitOrderData
+                .updateMany(
+                    { user_id: userId, token_mint: mint, wallet: walletPubKey, status: "Pending" },
+                    { $set: { status: "Failed" } },
+                )
+                .catch(() => {});
+            await applyCopyTradeMirrorSell(userId, mint, walletPubKey, 100, tokenBal, result as any);
+        } else {
+            const fail = await t("copyTrade.copySellFailed", userId);
+            await bot
+                .sendMessage(userId, `${fail}\n<code>${mint}</code>\n${(result as any)?.error ?? "Error"}`, { parse_mode: "HTML" })
+                .catch(() => {});
+        }
+    }
+}
+
 /**
  * Handle token create event from Pump stream when the creator is a monitored target wallet (backend-style detection).
  */
@@ -357,7 +530,7 @@ function onStreamCreate(event: PumpStreamCreateEvent): void {
     const mint = event.mint ?? "";
     if (!mint) return;
     const signature = typeof event.signature === "string" ? event.signature : "";
-    handlePumpCreate(creator, mint, entries, addressKey, signature, "create").catch((err) =>
+    handlePumpCreate(creator, mint, entries, addressKey, signature, "create", undefined).catch((err) =>
         logger.error("CopyTrade", "Stream create handler error", mint, err)
     );
 }
@@ -376,12 +549,27 @@ function onStreamBuy(event: PumpStreamBuyEvent): void {
     const signature = typeof event.signature === "string" ? event.signature : "";
     const solAmount = event.solAmount ?? 0;
     logger.info("CopyTrade", `Target wallet bought — mint: ${mint}, buyer: ${buyer.slice(0, 8)}…, ${solAmount.toFixed(4)} SOL, https://pump.fun/coin/${mint}`);
-    handlePumpCreate(buyer, mint, entries, addressKey, signature, "buy").catch((err) =>
+    handlePumpCreate(buyer, mint, entries, addressKey, signature, "buy", solAmount).catch((err) =>
         logger.error("CopyTrade", "Stream buy handler error", mint, err)
     );
 }
 
-/** Start pump stream; log new token launches and target buys; if there are monitored wallets, process create and buy matches. */
+function onStreamSell(event: PumpStreamSellEvent): void {
+    const seller = (event.txSigner ?? "").trim();
+    if (!seller) return;
+    const addressKey = seller.toLowerCase();
+    const entries = currentMonitoredByAddress.get(addressKey);
+    if (!entries?.length) return;
+    const mint = event.mint ?? "";
+    if (!mint) return;
+    const signature = typeof event.signature === "string" ? event.signature : "";
+    logger.info("CopyTrade", `Target wallet sold — mint: ${mint}, seller: ${seller.slice(0, 8)}…`);
+    handlePumpSell(seller, mint, entries, addressKey, signature).catch((err) =>
+        logger.error("CopyTrade", "Stream sell handler error", mint, err)
+    );
+}
+
+/** Start pump stream; log new token launches and target buys/sells; if there are monitored wallets, process matches. */
 function setupPumpStreamForTargetLaunches(monitoredByAddress: Map<string, MonitoredEntry[]>): void {
     if (pumpStreamUnsubscribe !== null) return; // already registered
     startPumpStream();
@@ -400,8 +588,13 @@ function setupPumpStreamForTargetLaunches(monitoredByAddress: Map<string, Monito
         if (!currentMonitoredByAddress.has(buyer)) return;
         onStreamBuy(event);
     });
+    pumpStreamSellUnsubscribe = onPumpSell((event) => {
+        const seller = (event.txSigner ?? "").trim().toLowerCase();
+        if (!currentMonitoredByAddress.has(seller)) return;
+        onStreamSell(event);
+    });
     logger.info("CopyTrade", monitoredByAddress.size > 0
-        ? "Pump stream started (token launches + target wallet purchases)."
+        ? "Pump stream started (token launches + target buys/sells)."
         : "Pump stream started (logging all new token launches).");
 }
 
@@ -426,7 +619,9 @@ function setupLogSubscriptions(monitoredByAddress: Map<string, MonitoredEntry[]>
                         result.mint,
                         entries,
                         addressKey,
-                        result.signature
+                        result.signature,
+                        "create",
+                        undefined
                     );
                 }
             );
@@ -451,11 +646,27 @@ async function refreshSubscriptions(): Promise<void> {
                 address: string;
                 copyOnNewToken?: boolean;
                 buyAmountSol?: number;
+                minAmountSol?: number;
+                maxAmountSol?: number;
                 label?: string;
+                copyFollowMode?: string;
+                sizingMode?: string;
+                sizingPercentWallet?: number;
+                proportionalRatio?: number;
+                maxAmountPerTradeSol?: number;
+                filterMinMcapUsd?: number;
+                filterMaxMcapUsd?: number;
+                filterMinLiquidityUsd?: number;
+                filterMinTokenAgeMinutes?: number;
+                filterMinVolumeUsd?: number;
+                filterTokenBlacklist?: string[];
+                filterTokenWhitelist?: string[];
             }> | undefined;
             if (!list?.length) continue;
             for (const w of list) {
-                if (!w?.address || w.copyOnNewToken === false) continue;
+                if (!w?.address) continue;
+                const followSell = (w as { copyFollowMode?: string }).copyFollowMode === "buy_sell";
+                if (w.copyOnNewToken === false && !followSell) continue;
                 const key = w.address.toLowerCase();
                 if (!monitoredByAddress.has(key)) monitoredByAddress.set(key, []);
                 monitoredByAddress.get(key)!.push({ user: u, wallet: w });
@@ -505,6 +716,10 @@ export function stopCopyTradeDetectionLoop(): void {
     if (pumpStreamBuyUnsubscribe !== null) {
         pumpStreamBuyUnsubscribe();
         pumpStreamBuyUnsubscribe = null;
+    }
+    if (pumpStreamSellUnsubscribe !== null) {
+        pumpStreamSellUnsubscribe();
+        pumpStreamSellUnsubscribe = null;
     }
     stopPumpStream();
     currentMonitoredByAddress = new Map();

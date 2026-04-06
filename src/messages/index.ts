@@ -115,7 +115,8 @@ export const getMenu = async (
                 secretKey,
                 is_active_wallet: true,
                 balance: balance.toString(),
-                label: "Start Wallet"
+                label: "Start Wallet",
+                walletCreatedAt: new Date(),
             });
         } else {
         const { publicKey, secretKey } = walletCreate();
@@ -124,7 +125,8 @@ export const getMenu = async (
             publicKey,
             secretKey,
             is_active_wallet: true,
-                balance: balance.toString()
+                balance: balance.toString(),
+                walletCreatedAt: new Date(),
         });
         }
 

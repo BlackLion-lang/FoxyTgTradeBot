@@ -70,6 +70,24 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.copyTradeWalletLimit', userId)} : ${(settings as any).copyTradeMonitoredWalletsLimit ?? 10}`, callback_data: "admin_copy_trade_limit" },
             ],
             [
+                { text: `${await t('admin.withdrawFreshDays', userId)} : ${(settings as any).withdrawFreshWalletDays ?? 7}`, callback_data: "admin_withdraw_fresh_days" },
+            ],
+            [
+                { text: `${await t('admin.withdrawDailyLimitSol', userId)} : ${(settings as any).withdrawFreshDailyLimitSol ?? 5}`, callback_data: "admin_withdraw_daily_sol" },
+            ],
+            [
+                { text: `${await t('admin.withdrawDailyLimitEth', userId)} : ${(settings as any).withdrawFreshDailyLimitEth ?? 0.5}`, callback_data: "admin_withdraw_daily_eth" },
+            ],
+            [
+                { text: `${await t('admin.withdrawCooldownMins', userId)} : ${(settings as any).withdrawFreshCooldownMinutes ?? 0}`, callback_data: "admin_withdraw_cooldown" },
+            ],
+            [
+                { text: `${await t('admin.withdrawLockoutAttempts', userId)} : ${(settings as any).withdrawPinLockoutAttempts ?? 5}`, callback_data: "admin_withdraw_lockout_attempts" },
+            ],
+            [
+                { text: `${await t('admin.withdrawLockoutMinutes', userId)} : ${(settings as any).withdrawPinLockoutMinutes ?? 15}`, callback_data: "admin_withdraw_lockout_minutes" },
+            ],
+            [
                 { text: `${status} ${text}`, callback_data: "whitelist_active" },
             ],
             [

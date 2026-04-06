@@ -26,7 +26,15 @@ const tippingSettingsSchema = new mongoose.Schema({
     },
     default: {}
   },
-  defaultLanguage: { type: String, default: "fr", enum: ["fr", "en"] } // Bot default language for users who have not set one
+  defaultLanguage: { type: String, default: "fr", enum: ["fr", "en"] }, // Bot default language for users who have not set one
+  /** Wallets younger than this many days are "fresh" (daily limits + cooldown apply). */
+  withdrawFreshWalletDays: { type: Number, default: 7 },
+  withdrawFreshDailyLimitSol: { type: Number, default: 5 },
+  withdrawFreshDailyLimitEth: { type: Number, default: 0.5 },
+  /** Minutes after wallet creation before first withdrawal (0 = off). Only for fresh wallets. */
+  withdrawFreshCooldownMinutes: { type: Number, default: 0 },
+  withdrawPinLockoutAttempts: { type: Number, default: 5 },
+  withdrawPinLockoutMinutes: { type: Number, default: 15 },
 })
 
 export const TippingSettings = mongoConnection.model("TippingSettings", tippingSettingsSchema)

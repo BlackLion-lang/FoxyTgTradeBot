@@ -61,7 +61,8 @@ export const getImportWallet = async (
                                     label,
                                     publicKey,
                                     secretKey,
-                                    balance
+                                    balance,
+                                    walletCreatedAt: new Date(),
                                 });
                                 await user.save();
                                 await bot.sendMessage(

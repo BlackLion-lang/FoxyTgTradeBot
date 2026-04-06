@@ -37,15 +37,32 @@ export type PumpStreamBuyEvent = {
     [key: string]: unknown;
 };
 
-export type PumpStreamEvent = PumpStreamCreateEvent | PumpStreamBuyEvent | { txType: "sell"; mint: string; txSigner: string; pool?: string; [key: string]: unknown };
+/** Sell event from pumpapi.io stream (target wallet sold a Pump.fun token). */
+export type PumpStreamSellEvent = {
+    txType: "sell";
+    pool?: string | null;
+    mint: string;
+    txSigner: string;
+    signature?: string;
+    tokenProgram?: string;
+    timestamp?: number | string;
+    [key: string]: unknown;
+};
+
+export type PumpStreamEvent =
+    | PumpStreamCreateEvent
+    | PumpStreamBuyEvent
+    | PumpStreamSellEvent;
 
 export type OnPumpCreateCallback = (event: PumpStreamCreateEvent) => void | Promise<void>;
 export type OnPumpBuyCallback = (event: PumpStreamBuyEvent) => void | Promise<void>;
+export type OnPumpSellCallback = (event: PumpStreamSellEvent) => void | Promise<void>;
 
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 const createCallbacks: Set<OnPumpCreateCallback> = new Set();
 const buyCallbacks: Set<OnPumpBuyCallback> = new Set();
+const sellCallbacks: Set<OnPumpSellCallback> = new Set();
 const statusListeners: Array<(status: "connecting" | "open" | "closed" | "error") => void> = [];
 
 function notifyStatus(status: "connecting" | "open" | "closed" | "error"): void {
@@ -101,6 +118,19 @@ function connect(): void {
                         );
                     } catch (err) {
                         logger.error(TAG, "Buy callback error", err);
+                    }
+                });
+            });
+        } else if (event.txType === "sell" && isPump) {
+            const sellEvent = event as PumpStreamSellEvent;
+            setImmediate(() => {
+                sellCallbacks.forEach((cb) => {
+                    try {
+                        void Promise.resolve(cb(sellEvent)).catch((err) =>
+                            logger.error(TAG, "Sell callback error", err)
+                        );
+                    } catch (err) {
+                        logger.error(TAG, "Sell callback error", err);
                     }
                 });
             });
@@ -165,6 +195,16 @@ export function onPumpBuy(callback: OnPumpBuyCallback): () => void {
     buyCallbacks.add(callback);
     return () => {
         buyCallbacks.delete(callback);
+    };
+}
+
+/**
+ * Register a callback for every Pump sell event from the stream (target wallet sold a token).
+ */
+export function onPumpSell(callback: OnPumpSellCallback): () => void {
+    sellCallbacks.add(callback);
+    return () => {
+        sellCallbacks.delete(callback);
     };
 }
 

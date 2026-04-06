@@ -37,7 +37,6 @@ import { editWalletsMessage, sendWalletsMessageWithImage, sendWalletsMessage } f
 import { editWalletsMessage as editEthereumWalletsMessage } from "./messages/ethereum/wallets";
 import { isEvmAddress } from "./utils/ethereum";
 import { getBalance as getEthereumBalance, getMaxWithdrawableEth } from "./services/ethereum/etherscan";
-import { transferETH } from "./services/ethereum/transfer";
 import { editMenuMessage, sendAdminPanelMessage, sendWelcomeMessage, sendAddUserMessage, sendAddSniperUserMessage, sendMenuMessage, sendMenuMessageWithImage, editAdminPanelMessage, sendMenu, sendSnippingSettingsMessage, editSnippingSettingsMessage } from "./messages";
 import {
     extractTokenAddress,
@@ -49,6 +48,22 @@ import {
 import { walletBackButton, walletsBackMarkup, getCloseButton, getCancelButton } from "./utils/markup";
 import { getUserChain } from "./utils/chain";
 import { User } from "./models/user";
+import { WithdrawalLog } from "./models/withdrawalLog";
+import { SecurityLog } from "./models/securityLog";
+import {
+    parseWithdrawMessageSource,
+    normalizeEthereumAddress,
+    newWithdrawNonce,
+    isWithdrawPinLocked,
+    getWalletCreatedAt,
+    checkWithdrawCooldown,
+    checkFreshDailyLimit,
+    applyWithdrawDailyAfterSuccess,
+    registerWithdrawPinFailure,
+    resetWithdrawPinFailures,
+    clearPendingWithdraw,
+} from "./services/withdrawalSecurity";
+import { executeSolanaNativeWithdraw, executeEthereumNativeWithdraw } from "./services/withdrawalExecute";
 
 /** Atomic sniper subdoc update — avoids Mongoose VersionError when another task updates the same user (e.g. auto-sell, copy trade) while a text reply is pending. */
 async function setSniperField(userId: number, field: string, value: unknown): Promise<void> {
@@ -147,11 +162,14 @@ import {
     editCopyTradeToRemoveMenu,
     editCopyTradeToSettingsMenu,
     editCopyTradeToTpSlMenu,
+    editCopyTradeToWalletSizingMenu,
     editCopyTradeWalletSettings,
     getCopyTradeTpSlMenu,
+    getCopyTradeWalletSizingMenu,
     sendCopyTradeWalletSettings,
     sendCopyTradeWalletSettingsPhoto,
 } from "./messages/solana/copyTrade";
+import { computeCopyTradeBuyAmountSol, mergeWalletCopyConfig, passesCopyTradeFilters } from "./services/copyTradeSizing";
 import { handleSubscriptionAction, sendSubscriptionOptions } from "./subscribe";
 import { sendEthereumBuyMessageWithAddress } from "./messages/ethereum/buy";
 import { swapExactTokenForETHUsingUniswapV2_ } from "./services/ethereum/swap";
@@ -740,6 +758,48 @@ const safeDeleteMessage = async (bot: TelegramBot, chatId: number, messageId: nu
     }
 };
 
+async function promptCopyTradeWalletSizingField(
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    messageId: number,
+    walletIndex: number,
+    promptKey: string,
+): Promise<void> {
+    const prompt = await t(promptKey, userId);
+    const backBtn = await t("copyTrade.back", userId);
+    const backCb = `cwz_${walletIndex}_open`;
+    try {
+        await bot.editMessageCaption(prompt, {
+            chat_id: chatId,
+            message_id: messageId,
+            parse_mode: "HTML",
+            reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: backCb }]] },
+        });
+    } catch {
+        await bot.deleteMessage(chatId, messageId).catch(() => {});
+        await bot.sendMessage(chatId, prompt, {
+            parse_mode: "HTML",
+            reply_markup: { inline_keyboard: [[{ text: `⬅ ${backBtn}`, callback_data: backCb }]] },
+        });
+    }
+}
+
+async function refreshCopyTradeWalletSizingMenu(
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    messageId: number,
+    walletIndex: number,
+): Promise<void> {
+    try {
+        await editCopyTradeToWalletSizingMenu(bot, chatId, userId, messageId, walletIndex);
+    } catch {
+        const { caption, markup } = await getCopyTradeWalletSizingMenu(userId, walletIndex);
+        await bot.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: markup });
+    }
+}
+
 const safeEditMessage = async (bot: TelegramBot, chatId: number, messageId: number, editFn: () => Promise<any>) => {
     try {
         await editFn();
@@ -1310,6 +1370,115 @@ bot.on("callback_query", async (callbackQuery) => {
             });
         }
 
+        if (sel_action === "admin_withdraw_fresh_days") {
+            bot.sendMessage(chatId, `${await t("messages.adminWithdrawFreshDays", userId)}`).then((sentMessage) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const num = Number(reply.text || "");
+                    if (isNaN(num) || num < 0 || num > 365) {
+                        await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
+                    } else {
+                        (settings as any).withdrawFreshWalletDays = num;
+                        await settings.save();
+                        editAdminPanelMessage(bot, chatId, userId, messageId);
+                    }
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 2000);
+                }));
+            });
+        }
+        if (sel_action === "admin_withdraw_daily_sol") {
+            bot.sendMessage(chatId, `${await t("messages.adminWithdrawDailySol", userId)}`).then((sentMessage) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const num = Number(reply.text || "");
+                    if (isNaN(num) || num < 0) {
+                        await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
+                    } else {
+                        (settings as any).withdrawFreshDailyLimitSol = num;
+                        await settings.save();
+                        editAdminPanelMessage(bot, chatId, userId, messageId);
+                    }
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 2000);
+                }));
+            });
+        }
+        if (sel_action === "admin_withdraw_daily_eth") {
+            bot.sendMessage(chatId, `${await t("messages.adminWithdrawDailyEth", userId)}`).then((sentMessage) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const num = Number(reply.text || "");
+                    if (isNaN(num) || num < 0) {
+                        await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
+                    } else {
+                        (settings as any).withdrawFreshDailyLimitEth = num;
+                        await settings.save();
+                        editAdminPanelMessage(bot, chatId, userId, messageId);
+                    }
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 2000);
+                }));
+            });
+        }
+        if (sel_action === "admin_withdraw_cooldown") {
+            bot.sendMessage(chatId, `${await t("messages.adminWithdrawCooldown", userId)}`).then((sentMessage) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const num = Number(reply.text || "");
+                    if (isNaN(num) || num < 0) {
+                        await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
+                    } else {
+                        (settings as any).withdrawFreshCooldownMinutes = num;
+                        await settings.save();
+                        editAdminPanelMessage(bot, chatId, userId, messageId);
+                    }
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 2000);
+                }));
+            });
+        }
+        if (sel_action === "admin_withdraw_lockout_attempts") {
+            bot.sendMessage(chatId, `${await t("messages.adminWithdrawLockoutAttempts", userId)}`).then((sentMessage) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const num = Math.floor(Number(reply.text || ""));
+                    if (isNaN(num) || num < 1 || num > 20) {
+                        await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
+                    } else {
+                        (settings as any).withdrawPinLockoutAttempts = num;
+                        await settings.save();
+                        editAdminPanelMessage(bot, chatId, userId, messageId);
+                    }
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 2000);
+                }));
+            });
+        }
+        if (sel_action === "admin_withdraw_lockout_minutes") {
+            bot.sendMessage(chatId, `${await t("messages.adminWithdrawLockoutMinutes", userId)}`).then((sentMessage) => {
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const num = Math.floor(Number(reply.text || ""));
+                    if (isNaN(num) || num < 1 || num > 1440) {
+                        await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
+                    } else {
+                        (settings as any).withdrawPinLockoutMinutes = num;
+                        await settings.save();
+                        editAdminPanelMessage(bot, chatId, userId, messageId);
+                    }
+                    setTimeout(() => {
+                        safeDeleteMessage(bot, chatId, sentMessage.message_id).catch(() => {});
+                        safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {});
+                    }, 2000);
+                }));
+            });
+        }
+
         if (sel_action === "admin_subscription_price_week") {
             const sent = bot.sendMessage(
                 chatId,
@@ -1582,7 +1751,8 @@ bot.on("callback_query", async (callbackQuery) => {
                     secretKey,
                     is_active_wallet: true,
                     balance: balance.toString(),
-                    label: "Start Wallet"
+                    label: "Start Wallet",
+                    walletCreatedAt: new Date(),
                 });
                 await user.save();
                 wallets = user.ethereumWallets;
@@ -1595,7 +1765,8 @@ bot.on("callback_query", async (callbackQuery) => {
                     publicKey,
                     secretKey,
                     is_active_wallet: true,
-                    balance: balance.toString()
+                    balance: balance.toString(),
+                    walletCreatedAt: new Date(),
                 });
                 await user.save();
                 wallets = user.wallets;
@@ -2577,24 +2748,250 @@ bot.on("callback_query", async (callbackQuery) => {
             }
         }
 
+        if (sel_action?.startsWith("wallets_withdraw_send_")) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const nonce = sel_action.slice("wallets_withdraw_send_".length);
+            const tipSettings = await TippingSettings.findOne() || new TippingSettings();
+            const uW = await User.findOne({ userId });
+            if (!uW) return;
+            const pw = (uW as any).pendingWithdraw;
+            if (!pw || pw.nonce !== nonce || !pw.pinVerified) {
+                await bot.sendMessage(chatId, await t("withdrawal.sessionExpired", userId));
+                return;
+            }
+            if (new Date(pw.expiresAt).getTime() < Date.now()) {
+                await clearPendingWithdraw(userId);
+                await SecurityLog.create({ userId, type: "withdraw_session_expired", detail: "nonce" });
+                await bot.sendMessage(chatId, await t("withdrawal.sessionExpired", userId));
+                return;
+            }
+            const chain = pw.chain as "solana" | "ethereum";
+            const idx = pw.walletIndex;
+            const wSol = uW.wallets?.[idx];
+            const wEth = uW.ethereumWallets?.[idx];
+            const walletRow = chain === "ethereum" ? wEth : wSol;
+            if (!walletRow) {
+                await bot.sendMessage(chatId, `${await t("errors.walletNotFound", userId)}`);
+                return;
+            }
+            const walletCreatedAt = getWalletCreatedAt(uW, walletRow as { walletCreatedAt?: Date });
+            const cd = checkWithdrawCooldown(walletCreatedAt, tipSettings);
+            if (!cd.ok) {
+                await SecurityLog.create({ userId, type: "withdraw_blocked_cooldown", detail: chain });
+                await bot.sendMessage(chatId, await t("withdrawal.cooldown", userId));
+                return;
+            }
+            if (chain === "ethereum") {
+                let ethAmt = Number(pw.amount);
+                if (pw.isFullBalance) {
+                    ethAmt = await getMaxWithdrawableEth(wEth!.publicKey);
+                }
+                const lim = checkFreshDailyLimit(walletCreatedAt, tipSettings, "ethereum", ethAmt, uW);
+                if (!lim.ok) {
+                    await SecurityLog.create({ userId, type: "withdraw_blocked_limit", detail: "eth" });
+                    await bot.sendMessage(chatId, await t("withdrawal.dailyLimitExceeded", userId));
+                    return;
+                }
+                try {
+                    await executeEthereumNativeWithdraw(bot, chatId, userId, idx, pw.toAddress, ethAmt);
+                    await applyWithdrawDailyAfterSuccess(userId, "ethereum", ethAmt);
+                    await WithdrawalLog.create({
+                        userId,
+                        chain: "ethereum",
+                        fromAddress: wEth!.publicKey,
+                        toAddress: pw.toAddress,
+                        amount: ethAmt,
+                        status: "success",
+                    });
+                    await clearPendingWithdraw(userId);
+                    await resetWithdrawPinFailures(userId);
+                    await editEthereumWalletsMessage(bot, chatId, userId, messageId);
+                } catch (error: any) {
+                    console.error("Ethereum withdraw error:", error);
+                    await WithdrawalLog.create({
+                        userId,
+                        chain: "ethereum",
+                        fromAddress: wEth!.publicKey,
+                        toAddress: pw.toAddress,
+                        amount: ethAmt,
+                        status: "failed",
+                        error: error?.message || String(error),
+                    });
+                    const detail = error?.reason || error?.message || String(error);
+                    await bot.sendMessage(chatId, `${await t("errors.transactionFailed", userId)}${detail ? `: ${detail}` : ""}`);
+                }
+                return;
+            }
+            let solAmt = Number(pw.amount);
+            if (pw.isFullBalance && wSol?.publicKey) {
+                const bal = await connection.getBalance(new PublicKey(wSol.publicKey));
+                const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
+                const maxL = Math.max(bal - rentExempt - 10000, 0);
+                solAmt = maxL / LAMPORTS_PER_SOL;
+            }
+            const limSol = checkFreshDailyLimit(walletCreatedAt, tipSettings, "solana", solAmt, uW);
+            if (!limSol.ok) {
+                await SecurityLog.create({ userId, type: "withdraw_blocked_limit", detail: "sol" });
+                await bot.sendMessage(chatId, await t("withdrawal.dailyLimitExceeded", userId));
+                return;
+            }
+            try {
+                const result = await executeSolanaNativeWithdraw(
+                    bot,
+                    chatId,
+                    userId,
+                    wSol as { publicKey: string; secretKey: string },
+                    pw.toAddress,
+                    solAmt,
+                    !!pw.isFullBalance,
+                );
+                await applyWithdrawDailyAfterSuccess(userId, "solana", result.amount);
+                await WithdrawalLog.create({
+                    userId,
+                    chain: "solana",
+                    fromAddress: wSol!.publicKey,
+                    toAddress: pw.toAddress,
+                    amount: result.amount,
+                    txId: result.signature,
+                    status: "success",
+                });
+                await clearPendingWithdraw(userId);
+                await resetWithdrawPinFailures(userId);
+                await sendWalletsMessageWithImage(bot, chatId, userId, messageId);
+            } catch (error: any) {
+                const msg = error?.message || String(error);
+                if (msg !== "CHAIN_ERR") {
+                    console.error("Solana withdraw error:", error);
+                    await bot.sendMessage(chatId, `${await t("errors.transactionFailed", userId)}${msg ? `: ${msg}` : ""}`);
+                }
+                await WithdrawalLog.create({
+                    userId,
+                    chain: "solana",
+                    fromAddress: wSol!.publicKey,
+                    toAddress: pw.toAddress,
+                    amount: solAmt,
+                    status: "failed",
+                    error: msg,
+                });
+            }
+            return;
+        }
+
         if (sel_action?.startsWith('wallets_withdraw_confirm_')) {
             await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
-            const parts = sel_action.split('wallets_withdraw_confirm_')[1].split('_');
-            const index = Number(parts[0]);
-            const ethToAddress = parts[1] || null;
-            const ethAmount = parts[2] ? Number(parts[2]) : null;
+            const tipSettings = await TippingSettings.findOne() || new TippingSettings();
+            const uW = await User.findOne({ userId });
+            if (!uW) return;
+            if (!(uW as any).pinHash) {
+                await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
+                });
+                return;
+            }
+            if (isWithdrawPinLocked(uW as { withdrawPinLockedUntil?: unknown })) {
+                await bot.sendMessage(
+                    chatId,
+                    `${await t("withdrawal.lockedUntil", userId)} ${(uW as any).withdrawPinLockedUntil ? new Date((uW as any).withdrawPinLockedUntil).toISOString() : ""}`,
+                );
+                return;
+            }
+
+            const indexMatch = sel_action.match(/^wallets_withdraw_confirm_(\d+)(?:_full)?$/);
+            if (!indexMatch) return;
+            const index = Number(indexMatch[1]);
+            const isFullBalance = sel_action.endsWith("_full");
 
             const userChain = await getUserChain(userId);
+            const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+            const finalizeWithdrawAfterPin = async (uDoc: any) => {
+                const pw = uDoc.pendingWithdraw;
+                if (!pw) return;
+                (uDoc as any).pendingWithdraw.pinVerified = true;
+                uDoc.markModified("pendingWithdraw");
+                await uDoc.save();
+                const currency = pw.chain === "ethereum" ? await t("currencySymbol_ethereum", userId) : await t("currencySymbol_solana", userId);
+                await bot.sendMessage(
+                    chatId,
+                    `<strong>${await t("withdrawal.finalReview", userId)}</strong>\n\n` +
+                        `${await t("withdrawal.p10", userId)} <code>${esc(String(pw.amount))} ${currency}</code>\n` +
+                        `${await t("withdrawal.p9", userId)}:\n<code>${esc(pw.toAddress)}</code>\n\n` +
+                        `${await t("withdrawal.p11", userId)}`,
+                    {
+                        parse_mode: "HTML",
+                        reply_markup: {
+                            inline_keyboard: [
+                                [
+                                    { text: await t("withdrawal.sendNow", userId), callback_data: `wallets_withdraw_send_${pw.nonce}` },
+                                    { text: await t("backWallet", userId), callback_data: "wallets_back" },
+                                ],
+                                [await getCancelButton(userId, "wallets_withdraw_cancel")],
+                            ],
+                        },
+                    },
+                );
+            };
+
+            const runWithdrawPinChallenge = async () => {
+                const pinPromptMsg = await bot.sendMessage(chatId, await t("withdrawal.enterPin", userId), { reply_markup: { force_reply: true } });
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    const pin = (reply.text || "").trim();
+                    setTimeout(() => {
+                        bot.deleteMessage(chatId, pinPromptMsg.message_id).catch(() => {});
+                        bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                    }, 5000);
+                    const u1 = await User.findOne({ userId });
+                    if (!u1 || (u1 as any).pendingPinAction !== "withdraw" || !(u1 as any).pendingWithdraw) {
+                        return;
+                    }
+                    const ok =
+                        /^\d{4,8}$/.test(pin) &&
+                        verifyPin(pin, (u1 as any).pinHash || "", (u1 as any).pinSalt || "");
+                    if (!ok) {
+                        await registerWithdrawPinFailure(userId, tipSettings);
+                        await SecurityLog.create({ userId, type: "withdraw_pin_fail", detail: userChain });
+                        const wrongMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                        setTimeout(() => bot.deleteMessage(chatId, wrongMsg.message_id).catch(() => {}), 5000);
+                        const retryMsg = await bot.sendMessage(chatId, await t("withdrawal.enterPin", userId), { reply_markup: { force_reply: true } });
+                        bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
+                            const pinRetry = (replyRetry.text || "").trim();
+                            setTimeout(() => {
+                                bot.deleteMessage(chatId, retryMsg.message_id).catch(() => {});
+                                bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
+                            }, 5000);
+                            const uR = await User.findOne({ userId });
+                            if (!uR || (uR as any).pendingPinAction !== "withdraw" || !(uR as any).pendingWithdraw) {
+                                return;
+                            }
+                            const okRetry =
+                                /^\d{4,8}$/.test(pinRetry) &&
+                                verifyPin(pinRetry, (uR as any).pinHash || "", (uR as any).pinSalt || "");
+                            if (!okRetry) {
+                                await clearPendingWithdraw(userId);
+                                const wrong2 = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                                setTimeout(() => bot.deleteMessage(chatId, wrong2.message_id).catch(() => {}), 5000);
+                                return;
+                            }
+                            await resetWithdrawPinFailures(userId);
+                            await finalizeWithdrawAfterPin(uR);
+                        }));
+                        return;
+                    }
+                    await resetWithdrawPinFailures(userId);
+                    await finalizeWithdrawAfterPin(u1);
+                }));
+            };
 
             if (userChain === "ethereum") {
                 const wallet = user.ethereumWallets[index];
                 if (!wallet) {
-                    bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
+                    bot.sendMessage(chatId, `${await t("errors.walletNotFound", userId)}`);
                     return;
                 }
 
-                let finalAmount = ethAmount != null && !isNaN(ethAmount) && ethAmount > 0 ? ethAmount : null;
-                let finalAddress = ethToAddress;
+                let finalAmount: number | null = null;
+                let finalAddress: string | null = null;
 
                 const withdrawParseSource = `${textOrCaption}`.replace(/\u00a0/g, " ");
                 const parseEthAmountFromMessage = (src: string): number | null => {
@@ -2622,186 +3019,153 @@ bot.on("callback_query", async (callbackQuery) => {
                 }
 
                 if (!finalAmount || isNaN(finalAmount) || finalAmount <= 0) {
-                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)}`);
+                    bot.sendMessage(chatId, `${await t("errors.invalidAmount", userId)}`);
                     return;
                 }
 
                 if (!finalAddress || !isEvmAddress(finalAddress)) {
-                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)}`);
+                    bot.sendMessage(chatId, `${await t("errors.invalidwallet", userId)}`);
+                    return;
+                }
+
+                let normalizedEth: string;
+                try {
+                    normalizedEth = normalizeEthereumAddress(finalAddress);
+                } catch {
+                    await bot.sendMessage(chatId, await t("withdrawal.invalidChecksum", userId));
                     return;
                 }
 
                 const maxWd = await getMaxWithdrawableEth(wallet.publicKey);
                 if (maxWd <= 0) {
-                    bot.sendMessage(chatId, `❌ ${await t('subscribe.insufficientEth', userId)}`);
+                    bot.sendMessage(chatId, `❌ ${await t("subscribe.insufficientEth", userId)}`);
                     return;
                 }
-                if (finalAmount > maxWd + 1e-12) {
-                    bot.sendMessage(chatId, `${await t('errors.invalidAmount', userId)} — ${await t('subscribe.insufficientEth', userId)}`);
+                if (isFullBalance) {
+                    finalAmount = maxWd;
+                } else if (finalAmount > maxWd + 1e-12) {
+                    bot.sendMessage(chatId, `${await t("errors.invalidAmount", userId)} — ${await t("subscribe.insufficientEth", userId)}`);
                     return;
                 }
 
-                try {
-                    await transferETH(bot, chatId, userId, finalAmount, index, finalAddress);
-                    editEthereumWalletsMessage(bot, chatId, userId, messageId);
-                } catch (error: any) {
-                    console.error('Ethereum withdraw error:', error);
-                    const detail = error?.reason || error?.message || String(error);
-                    bot.sendMessage(chatId, `${await t('errors.transactionFailed', userId)}${detail ? `: ${detail}` : ""}`);
+                const walletCreatedAt = getWalletCreatedAt(uW as { createdAt?: unknown }, wallet as { walletCreatedAt?: unknown });
+                const cd = checkWithdrawCooldown(walletCreatedAt, tipSettings);
+                if (!cd.ok) {
+                    await SecurityLog.create({ userId, type: "withdraw_blocked_cooldown", detail: "eth" });
+                    await bot.sendMessage(chatId, await t("withdrawal.cooldown", userId));
+                    return;
                 }
+                const daily = checkFreshDailyLimit(walletCreatedAt, tipSettings, "ethereum", finalAmount, uW);
+                if (!daily.ok) {
+                    await SecurityLog.create({ userId, type: "withdraw_blocked_limit", detail: "eth" });
+                    await bot.sendMessage(chatId, await t("withdrawal.dailyLimitExceeded", userId));
+                    return;
+                }
+
+                const nonce = newWithdrawNonce();
+                const expiresAt = new Date(Date.now() + 15 * 60_000);
+                (uW as any).pendingWithdraw = {
+                    chain: "ethereum",
+                    walletIndex: index,
+                    toAddress: normalizedEth,
+                    amount: finalAmount,
+                    isFullBalance,
+                    nonce,
+                    expiresAt,
+                    pinVerified: false,
+                };
+                (uW as any).pendingPinAction = "withdraw";
+                uW.markModified("pendingWithdraw");
+                await uW.save();
+                await runWithdrawPinChallenge();
                 return;
             }
 
-            const toAddressMatch = text.match(/([1-9A-HJ-NP-Za-km-z]{32,44})/);
-            const amountMatch = text.match(/([\d.]+)\s*SOL/i);
+            const withdrawParseSourceSol = parseWithdrawMessageSource(text, caption);
+            const toAddressMatch = withdrawParseSourceSol.match(/([1-9A-HJ-NP-Za-km-z]{32,44})/);
+            const amountMatch = withdrawParseSourceSol.match(/([\d.]+)\s*SOL/i);
 
             const solToAddress = toAddressMatch ? toAddressMatch[1] : null;
             const amountStr = amountMatch ? amountMatch[1] : null;
-            console.log(solToAddress, amountStr)
-            const wallet = user.wallets[index]
-            if (amountStr !== null) {
-                const amount = Number(amountStr)
-                bot.sendMessage(chatId, `<strong>${await t('withdrawal.p1', userId)}</strong>
-<code>${wallet.publicKey}</code>
-
-<strong><em>🟡 ${await t('withdrawal.p2', userId)}</em></strong>
-${amount} SOL ⇄ <code>${solToAddress}  </code>
-
-<strong><em>🟡 ${await t('withdrawal.p3', userId)}</em> — ${await t('withdrawal.p4', userId)}</strong>`, {
-                    parse_mode: 'HTML',
-                    disable_web_page_preview: true,
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: `${await t('withdrawal.view', userId)}`, url: `https://solscan.io/tx/` }
-                            ]
-                        ]
-                    }
-                })
-
-                let decrypted: string;
-                try {
-                    decrypted = decryptSecretKey(wallet.secretKey);
-                } catch (error: any) {
-                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${wallet.publicKey}:`, error.message);
-                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
-                    return;
-                }
-
-                let senderKeypair: Keypair;
-                try {
-                    senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted));
-                } catch (error: any) {
-                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to create keypair from decrypted key for wallet ${wallet.publicKey}:`, error.message);
-                    bot.sendMessage(chatId, `${await t('errors.invalidwallet', userId)} - ${await t('errors.invalidKeyFormat', userId) || 'Invalid key format. Please re-import this wallet.'}`);
-                    return;
-                }
-
-                const receiverPublicKey = new PublicKey(solToAddress || '')
-
-                const balance = await connection.getBalance(senderKeypair.publicKey);
-                const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
-                const maxSendable = Math.max(balance - rentExempt - 10000, 0);
-
-                let amountInLamports = Math.floor((amount || 0) * LAMPORTS_PER_SOL);
-                if (amountInLamports > maxSendable) {
-                    amountInLamports = maxSendable;
-                }
-
-                if (amountInLamports <= 0) {
-                    throw new Error("Not enough balance to send after rent exemption.");
-                }
-
-                console.log('Sending (lamports):', amountInLamports);
-
-                const latestBlockhash = await connection.getLatestBlockhash("finalized");
-
-                const instructions = [
-                    ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 2000 }),
-                    ComputeBudgetProgram.setComputeUnitLimit({ units: 50_000 }),
-                    SystemProgram.transfer({
-                        fromPubkey: senderKeypair.publicKey,
-                        toPubkey: receiverPublicKey,
-                        lamports: amountInLamports,
-                    }),
-                ];
-
-                const message = new TransactionMessage({
-                    payerKey: senderKeypair.publicKey,
-                    recentBlockhash: latestBlockhash.blockhash,
-                    instructions,
-                }).compileToV0Message();
-
-                const tx = new VersionedTransaction(message);
-                tx.sign([senderKeypair]);
-
-                const sim = await connection.simulateTransaction(tx, {
-                    sigVerify: false,
-                    replaceRecentBlockhash: true,
-                });
-                if (sim.value.err) {
-                    console.error("Simulation failed:", sim.value.err);
-                    throw new Error("Simulation failed");
-                }
-
-                console.log("Simulation OK. Sending transaction...");
-
-                const signature = await connection.sendRawTransaction(tx.serialize(), {
-                    skipPreflight: false,
-                    preflightCommitment: "processed",
-                });
-                console.log("Tx signature:", signature);
-
-                const confirmation = await connection.confirmTransaction(
-                    {
-                        signature,
-                        blockhash: latestBlockhash.blockhash,
-                        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-                    },
-                    "confirmed"
-                );
-                if (confirmation.value.err) {
-                    bot.sendMessage(chatId, `<strong>${await t('withdrawal.p1', userId)}</strong>
-<code>${wallet.publicKey}</code>
-
-<strong><em>🔴 ${await t('withdrawal.p2', userId)}</em></strong>
-${amount} SOL ⇄ <code>${solToAddress}</code>
-
-<strong><em>🔴 ${await t('withdrawal.p5', userId)}</em> — <a href="https://solscan.io/tx/${signature}">${await t('withdrawal.p4', userId)}</a></strong>`, {
-                        parse_mode: 'HTML',
-                        disable_web_page_preview: true,
-                        reply_markup: {
-                            inline_keyboard: [
-                                [
-                                    { text: `${await t('withdrawal.view', userId)}`, url: `https://solscan.io/tx/${signature}` }
-                                ]
-                            ]
-                        }
-                    })
-                    sendWalletsMessageWithImage(bot, chatId, userId, messageId);
-                } else {
-                    bot.sendMessage(chatId, `<strong>${await t('withdrawal.p1', userId)}</strong>
-<code>${wallet.publicKey}</code>
-
-<strong><em>🟢 ${await t('withdrawal.p2', userId)}</em></strong>
-${amount} SOL ⇄ <code>${solToAddress}</code>
-
-<strong><em>🟢 ${await t('withdrawal.p6', userId)}</em> — <a href="https://solscan.io/tx/${signature}">${await t('withdrawal.p4', userId)}</a></strong>`, {
-                        parse_mode: 'HTML',
-                        disable_web_page_preview: true,
-                        reply_markup: {
-                            inline_keyboard: [
-                                [
-                                    { text: `${await t('withdrawal.view', userId)}`, url: `https://solscan.io/tx/${signature}` }
-                                ]
-                            ]
-                        }
-                    })
-                    sendWalletsMessageWithImage(bot, chatId, userId, messageId);
-                }
-            } else {
-                bot.sendMessage(chatId, `${await t('errors.invalidWithdrawal', userId)}`)
+            const walletSol = user.wallets[index];
+            if (amountStr === null || !walletSol) {
+                bot.sendMessage(chatId, `${await t("errors.invalidWithdrawal", userId)}`);
+                return;
             }
+            if (!solToAddress || !isValidSolanaAddress(solToAddress)) {
+                bot.sendMessage(chatId, `${await t("errors.invalidwallet", userId)}`);
+                return;
+            }
+            const amount = Number(amountStr);
+            if (isNaN(amount) || amount <= 0) {
+                bot.sendMessage(chatId, `${await t("errors.invalidAmount", userId)}`);
+                return;
+            }
+
+            let decrypted: string;
+            try {
+                decrypted = decryptSecretKey(walletSol.secretKey);
+            } catch (error: any) {
+                console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${walletSol.publicKey}:`, error.message);
+                bot.sendMessage(chatId, `${await t("errors.invalidwallet", userId)} - ${await t("errors.decryptionFailed", userId) || "Decryption failed. Please re-import this wallet."}`);
+                return;
+            }
+
+            let senderKeypair: Keypair;
+            try {
+                senderKeypair = Keypair.fromSecretKey(bs58.decode(decrypted));
+            } catch (error: any) {
+                console.error(`[${new Date().toLocaleString()}] ❌ Failed to create keypair from decrypted key for wallet ${walletSol.publicKey}:`, error.message);
+                bot.sendMessage(chatId, `${await t("errors.invalidwallet", userId)} - ${await t("errors.invalidKeyFormat", userId) || "Invalid key format. Please re-import this wallet."}`);
+                return;
+            }
+
+            const balance = await connection.getBalance(senderKeypair.publicKey);
+            const rentExempt = await connection.getMinimumBalanceForRentExemption(0);
+            const maxSendableLamports = Math.max(balance - rentExempt - 10000, 0);
+            const maxSendable = maxSendableLamports / LAMPORTS_PER_SOL;
+            let finalAmountSol = amount;
+            if (isFullBalance) {
+                finalAmountSol = maxSendable;
+            } else if (amount > maxSendable + 1e-12) {
+                bot.sendMessage(chatId, `❌ ${await t("subscribe.insufficientSol", userId)}`);
+                return;
+            }
+            if (finalAmountSol <= 0) {
+                bot.sendMessage(chatId, `❌ ${await t("subscribe.insufficientSol", userId)}`);
+                return;
+            }
+
+            const walletCreatedAtSol = getWalletCreatedAt(uW as { createdAt?: unknown }, walletSol as { walletCreatedAt?: unknown });
+            const cdSol = checkWithdrawCooldown(walletCreatedAtSol, tipSettings);
+            if (!cdSol.ok) {
+                await SecurityLog.create({ userId, type: "withdraw_blocked_cooldown", detail: "sol" });
+                await bot.sendMessage(chatId, await t("withdrawal.cooldown", userId));
+                return;
+            }
+            const dailySol = checkFreshDailyLimit(walletCreatedAtSol, tipSettings, "solana", finalAmountSol, uW);
+            if (!dailySol.ok) {
+                await SecurityLog.create({ userId, type: "withdraw_blocked_limit", detail: "sol" });
+                await bot.sendMessage(chatId, await t("withdrawal.dailyLimitExceeded", userId));
+                return;
+            }
+
+            const nonceSol = newWithdrawNonce();
+            const expiresAtSol = new Date(Date.now() + 15 * 60_000);
+            (uW as any).pendingWithdraw = {
+                chain: "solana",
+                walletIndex: index,
+                toAddress: solToAddress,
+                amount: finalAmountSol,
+                isFullBalance,
+                nonce: nonceSol,
+                expiresAt: expiresAtSol,
+                pinVerified: false,
+            };
+            (uW as any).pendingPinAction = "withdraw";
+            uW.markModified("pendingWithdraw");
+            await uW.save();
+            await runWithdrawPinChallenge();
 
         } else if (sel_action?.startsWith('wallets_withdraw_100_')) {
             const index = Number(sel_action.replace('wallets_withdraw_100_', ''));
@@ -2846,7 +3210,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 reply_markup: {
                                     inline_keyboard: [
                                         [
-                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
+                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}_full` },
                                             { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' },
                                         ],
                                         [await getCancelButton(userId, "wallets_withdraw_cancel")],
@@ -2912,7 +3276,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 reply_markup: {
                                     inline_keyboard: [
                                         [
-                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}` },
+                                            { text: `${await t('withdrawal.confirm', userId)}`, callback_data: `wallets_withdraw_confirm_${index}_full` },
                                             { text: `${await t('backWallet', userId)}`, callback_data: 'wallets_back' },
                                         ],
                                     ],
@@ -3194,6 +3558,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "wallets_withdraw_cancel") {
             await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             cleanupUserTextHandler(userId);
+            await clearPendingWithdraw(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             const userChain = await getUserChain(userId);
             if (userChain === "ethereum") {
@@ -5381,6 +5746,105 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             await editCopyTradeToSettingsMenu(bot, chatId, userId, messageId);
             return;
         }
+        const cwzMatch = typeof sel_action === "string" ? sel_action.match(/^cwz_(\d+)_(open|mode|follow|pct|ratio|max|fm|fM|fl|fa|fv|bl|wl)$/) : null;
+        if (cwzMatch) {
+            const wzi = parseInt(cwzMatch[1], 10);
+            const kind = cwzMatch[2];
+            const uWz = await User.findOne({ userId });
+            if (!uWz?.copyTrade?.monitoredWallets?.[wzi]) {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Invalid wallet" }).catch(() => {});
+                return;
+            }
+            if (kind === "open") {
+                await editCopyTradeToWalletSizingMenu(bot, chatId, userId, messageId, wzi);
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                return;
+            }
+            if (kind === "follow") {
+                const w = uWz.copyTrade!.monitoredWallets![wzi] as { copyFollowMode?: string };
+                const next = w.copyFollowMode === "buy_sell" ? "buy_only" : "buy_sell";
+                await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.copyFollowMode`]: next } });
+                await runCopyTradeDetection();
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                await editCopyTradeWalletSettings(bot, chatId, userId, messageId, wzi);
+                return;
+            }
+            if (kind === "mode") {
+                const w = uWz.copyTrade!.monitoredWallets![wzi] as unknown as Record<string, unknown>;
+                const merged = mergeWalletCopyConfig(uWz.copyTrade as any, w);
+                const cur = String(merged.sizingMode || "fixed");
+                const order = ["fixed", "percent_wallet", "proportional_source"];
+                const mi = Math.max(0, order.indexOf(cur));
+                const next = order[(mi + 1) % order.length];
+                await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.sizingMode`]: next } });
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                await editCopyTradeToWalletSizingMenu(bot, chatId, userId, messageId, wzi);
+                return;
+            }
+            const cwzNumFields: Record<string, { field: string; prompt: string; ok: (n: number) => boolean }> = {
+                pct: { field: "sizingPercentWallet", prompt: "copyTrade.enterWalletPct", ok: (n) => !isNaN(n) && n >= 0 && n <= 100 },
+                ratio: { field: "proportionalRatio", prompt: "copyTrade.enterRatio", ok: (n) => !isNaN(n) && n > 0 },
+                max: { field: "maxAmountPerTradeSol", prompt: "copyTrade.enterMaxSol", ok: (n) => !isNaN(n) && n >= 0 },
+                fm: { field: "filterMinMcapUsd", prompt: "copyTrade.enterMinMcap", ok: (n) => !isNaN(n) && n >= 0 },
+                fM: { field: "filterMaxMcapUsd", prompt: "copyTrade.enterMaxMcap", ok: (n) => !isNaN(n) && n >= 0 },
+                fl: { field: "filterMinLiquidityUsd", prompt: "copyTrade.enterMinLiq", ok: (n) => !isNaN(n) && n >= 0 },
+                fa: { field: "filterMinTokenAgeMinutes", prompt: "copyTrade.enterMinAge", ok: (n) => !isNaN(n) && n >= 0 },
+                fv: { field: "filterMinVolumeUsd", prompt: "copyTrade.enterMinVol", ok: (n) => !isNaN(n) && n >= 0 },
+            };
+            const numSpec = cwzNumFields[kind];
+            if (numSpec) {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                await promptCopyTradeWalletSizingField(bot, chatId, userId, messageId, wzi, numSpec.prompt);
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                    const raw = (reply.text || "").trim().replace(",", ".");
+                    const num = Number(raw);
+                    if (!numSpec.ok(num)) {
+                        await bot.sendMessage(chatId, await t("copyTrade.invalidNumber", userId)).catch(() => {});
+                        return;
+                    }
+                    await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.${numSpec.field}`]: num } });
+                    await refreshCopyTradeWalletSizingMenu(bot, chatId, userId, messageId, wzi);
+                }));
+                return;
+            }
+            if (kind === "bl") {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                await promptCopyTradeWalletSizingField(bot, chatId, userId, messageId, wzi, "copyTrade.enterBlacklist");
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                    const text = (reply.text || "").trim().toLowerCase();
+                    const arr =
+                        text === "clear"
+                            ? []
+                            : text
+                                  .split(/[,\n]+/)
+                                  .map((x) => x.trim())
+                                  .filter(Boolean);
+                    await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.filterTokenBlacklist`]: arr } });
+                    await refreshCopyTradeWalletSizingMenu(bot, chatId, userId, messageId, wzi);
+                }));
+                return;
+            }
+            if (kind === "wl") {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                await promptCopyTradeWalletSizingField(bot, chatId, userId, messageId, wzi, "copyTrade.enterWhitelist");
+                bot.once("text", createUserTextHandler(userId, async (reply) => {
+                    setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
+                    const text = (reply.text || "").trim().toLowerCase();
+                    const arr =
+                        text === "clear"
+                            ? []
+                            : text
+                                  .split(/[,\n]+/)
+                                  .map((x) => x.trim())
+                                  .filter(Boolean);
+                    await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.filterTokenWhitelist`]: arr } });
+                    await refreshCopyTradeWalletSizingMenu(bot, chatId, userId, messageId, wzi);
+                }));
+                return;
+            }
+        }
         if (sel_action?.startsWith("copyTrade_buy_")) {
             await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const rest = sel_action.replace("copyTrade_buy_", "");
@@ -5405,7 +5869,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 await bot.sendMessage(chatId, "❌ Monitored wallet not found.").catch(() => {});
                 return;
             }
-            const buyAmountSol = Number(monitored.buyAmountSol ?? 0.01);
+            const walletCfgBuy = mergeWalletCopyConfig(fullUser.copyTrade as any, monitored as any);
+            if (!(await passesCopyTradeFilters(mint, walletCfgBuy))) {
+                await bot.sendMessage(chatId, await t("copyTrade.skippedByFilters", userId), { parse_mode: "HTML" }).catch(() => {});
+                return;
+            }
             const activeWallet = fullUser.wallets?.find((w: any) => w.is_active_wallet);
             if (!activeWallet?.publicKey) {
                 await bot.sendMessage(chatId, "❌ No active wallet set.").catch(() => {});
@@ -5413,6 +5881,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             }
             const walletPubKey = typeof activeWallet.publicKey === "string" ? activeWallet.publicKey : String((activeWallet as any).publicKey);
             const balance = await getBalance(walletPubKey).catch(() => 0);
+            const buyAmountSol = computeCopyTradeBuyAmountSol({
+                copyTrade: walletCfgBuy,
+                monitoredBuyAmountSol: Number(monitored.buyAmountSol ?? 0.01),
+                userBalanceSol: balance,
+            });
             if (balance < buyAmountSol * 1.05) {
                 await bot.sendMessage(chatId, `❌ ${await t("subscribe.insufficientSol", userId)}`).catch(() => {});
                 return;
@@ -7318,11 +7791,18 @@ const main = async () => {
 
     startCopyTradeDetectionLoop();
 
-    const settings = await TippingSettings.findOne() || new TippingSettings();
+    let settings = await TippingSettings.findOne() || new TippingSettings();
     if (!settings) throw new Error("Tipping settings not found!");
-    setInterval(async () => {
-        settings.BotStatus = new Date();
+    if (!settings._id) {
         await settings.save();
+    }
+    const tippingSettingsId = settings._id;
+    setInterval(async () => {
+        try {
+            await TippingSettings.updateOne({ _id: tippingSettingsId }, { $set: { BotStatus: new Date() } });
+        } catch (e) {
+            console.error("BotStatus heartbeat failed:", e);
+        }
     }, 20000);
 };
 

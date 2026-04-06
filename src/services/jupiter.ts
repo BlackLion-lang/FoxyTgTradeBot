@@ -1,13 +1,17 @@
+/**
+ * Solana swaps via Jupiter Lite API:
+ * 1) Legacy swap tx only (`asLegacyTransaction` on quote + swap) — no address lookup tables.
+ * 2) After a successful swap, optional admin fee as a separate legacy `SystemProgram.transfer`,
+ *    clamped so the wallet stays at/above native account minimum rent (+ small tx-fee buffer).
+ */
 import { connection } from "../config/connection";
 import {
-    TransactionMessage,
-    VersionedTransaction,
+    Transaction,
+    TransactionInstruction,
     PublicKey,
     Keypair,
     SystemProgram,
     LAMPORTS_PER_SOL,
-    TransactionInstruction,
-    AddressLookupTableAccount,
 } from "@solana/web3.js";
 import axios from "axios";
 import dotenv from "dotenv";
@@ -20,9 +24,32 @@ import { TippingSettings } from "../models/tipSettings";
 
 dotenv.config();
 
+const JUPITER_LITE_SWAP_V1 = "https://lite-api.jup.ag/swap/v1";
+const WSOL_MINT = "So11111111111111111111111111111111111111112";
+
 const MEMO_PROGRAM = new PublicKey("MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr");
+/** Serialized legacy transaction size limit (Solana packet / default RPC). */
+const MAX_LEGACY_TX_BYTES = 1232;
 const SWAP_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 400;
+
+/**
+ * Headroom so after `transfer(lamports)` the fee payer still pays this tx's network fee
+ * and stays at/above rent-exempt minimum (simulation otherwise: insufficient funds for rent).
+ */
+const TX_FEE_BUFFER_LAMPORTS = 22_000;
+
+/** After swap, RPC balance can lag; brief retries before giving up on the fee transfer. */
+const ADMIN_FEE_BALANCE_RETRIES = 3;
+const ADMIN_FEE_RETRY_DELAY_MS = 450;
+
+let cachedRentReserveLamports: number | null = null;
+
+async function getNativeAccountRentReserveLamports(): Promise<number> {
+    if (cachedRentReserveLamports != null) return cachedRentReserveLamports;
+    cachedRentReserveLamports = await connection.getMinimumBalanceForRentExemption(0);
+    return cachedRentReserveLamports;
+}
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -41,109 +68,127 @@ function keypairFromDecryptedSecret(privateKeyBase64: string): Keypair {
     return Keypair.fromSecretKey(secretKeyBytes.slice(0, 32));
 }
 
-type BuildParams = {
-    transactionBase64: string;
-    quoteData: Record<string, unknown>;
-    action: "buy" | "sell";
-    active_wallet: string;
-    adminWallet: PublicKey;
-    adminFeePercent: number;
-    includeMemo: boolean;
-    memoText: string;
-};
+/**
+ * Max SOL we can send out in the follow-up fee tx while keeping the wallet rent-exempt + tx buffer.
+ */
+async function clampFeeLamports(balanceLamports: number, requestedFeeLamports: number): Promise<number> {
+    if (requestedFeeLamports <= 0) return 0;
+    const reserve = await getNativeAccountRentReserveLamports();
+    const maxSend = balanceLamports - reserve - TX_FEE_BUFFER_LAMPORTS;
+    if (maxSend <= 0) return 0;
+    return Math.min(requestedFeeLamports, Math.floor(maxSend));
+}
 
 /**
- * Rebuild Jupiter v0 tx with optional memo + fee, sign, serialize.
- * Drops memo and retries caller when "encoding overruns" / oversized tx (common with dense routes).
+ * Deserialize Jupiter swap as legacy (`asLegacyTransaction` on quote + swap).
+ * Optional memo is **appended** after Jupiter (never prepended): prepending ran before the swap
+ * and caused "insufficient funds for rent" on intermediate accounts during simulation.
+ * Blockhash refreshed; signed.
  */
-async function buildSignSerializeSwap(
-    p: BuildParams,
-    feeInstructionIn: TransactionInstruction | undefined,
+function signLegacyJupiterSwap(
+    transactionBase64: string,
     wallet: Keypair,
-): Promise<{ serialized: Uint8Array; blockhash: string; lastValidBlockHeight: number }> {
-    let feeInstruction = feeInstructionIn;
-    const originalTx = VersionedTransaction.deserialize(Buffer.from(p.transactionBase64, "base64"));
+    includeMemo: boolean,
+    memoText: string,
+    recentBlockhash: string,
+): Transaction {
+    const tx = Transaction.from(Buffer.from(transactionBase64, "base64"));
+    tx.feePayer = wallet.publicKey;
+    tx.recentBlockhash = recentBlockhash;
 
-    const resolvedLookupTables = await Promise.all(
-        originalTx.message.addressTableLookups.map(async (lookup) => {
-            const table = await connection.getAddressLookupTable(lookup.accountKey);
-            return table.value;
-        }),
+    if (includeMemo) {
+        const memoIx = new TransactionInstruction({
+            keys: [],
+            programId: MEMO_PROGRAM,
+            data: Buffer.from(memoText, "utf8"),
+        });
+        tx.instructions.push(memoIx);
+    }
+
+    tx.sign(wallet);
+    return tx;
+}
+
+function isLegacyTxTooLargeError(message: string): boolean {
+    return (
+        message.includes("encoding overruns") ||
+        message.includes("too large") ||
+        message.includes(String(MAX_LEGACY_TX_BYTES))
     );
+}
 
-    const validLookupTables = resolvedLookupTables.filter((t): t is AddressLookupTableAccount => t !== null);
-    if (validLookupTables.length !== resolvedLookupTables.length) {
-        throw new Error("Failed to resolve all address lookup tables.");
+/**
+ * Second transaction: native SOL transfer to `adminWallet`. Legacy tx, no ALTs.
+ * Skips or reduces fee if post-swap balance would drop below rent reserve + fee-tx buffer.
+ * (Swap priority fees reduce SOL; if the wallet was tight, the follow-up may send partial or skip.)
+ */
+async function sendAdminFeeAfterSwap(
+    wallet: Keypair,
+    adminWallet: PublicKey,
+    feeLamportsRequested: number,
+): Promise<string | undefined> {
+    if (feeLamportsRequested <= 0) return undefined;
+
+    const reserve = await getNativeAccountRentReserveLamports();
+    let balance = await connection.getBalance(wallet.publicKey, "finalized");
+    let feeLamports = await clampFeeLamports(balance, feeLamportsRequested);
+
+    for (let r = 1; r < ADMIN_FEE_BALANCE_RETRIES && feeLamports <= 0; r++) {
+        await sleep(ADMIN_FEE_RETRY_DELAY_MS * r);
+        balance = await connection.getBalance(wallet.publicKey, "finalized");
+        feeLamports = await clampFeeLamports(balance, feeLamportsRequested);
     }
 
-    if (p.action === "sell") {
-        if (!feeInstruction) {
-            const outAmountRaw = p.quoteData.outAmount ?? p.quoteData.outAmountLamports ?? p.quoteData.outAmountString;
-            const estimatedSolOut = Number(outAmountRaw);
-            if (Number.isNaN(estimatedSolOut)) {
-                throw new Error("Could not parse quote outAmount for admin fee calculation.");
-            }
-            const adminFeeLamports = Math.floor(estimatedSolOut * p.adminFeePercent);
-            feeInstruction = SystemProgram.transfer({
-                fromPubkey: new PublicKey(p.active_wallet),
-                toPubkey: p.adminWallet,
-                lamports: adminFeeLamports,
-            });
-        }
+    if (feeLamports <= 0) {
+        console.warn(
+            `[jupiter] Admin fee not sent to ${adminWallet.toBase58()}: requested ${feeLamportsRequested} lamports, ` +
+                `balance ${balance} lamports (need > ${reserve + TX_FEE_BUFFER_LAMPORTS} + fee after swap fees).`,
+        );
+        return undefined;
+    }
+    if (feeLamports < feeLamportsRequested) {
+        console.warn(
+            `[jupiter] Admin fee reduced from ${feeLamportsRequested} to ${feeLamports} lamports (rent + buffer; ` +
+                `often high swap priority fees). Destination ${adminWallet.toBase58()}.`,
+        );
     }
 
-    const decompiled = TransactionMessage.decompile(originalTx.message, {
-        addressLookupTableAccounts: validLookupTables,
+    const adminBal = await connection.getBalance(adminWallet, "finalized");
+    if (adminBal === 0 && feeLamports < reserve) {
+        console.warn(
+            `[jupiter] Admin fee skipped: first SOL to ${adminWallet.toBase58()} must be ≥ ${reserve} lamports ` +
+                `(rent-exempt); this fee is ${feeLamports} lamports. Send ~0.001 SOL to the admin wallet once, ` +
+                `or rely on larger trades so the fee exceeds rent.`,
+        );
+        return undefined;
+    }
+
+    const ix = SystemProgram.transfer({
+        fromPubkey: wallet.publicKey,
+        toPubkey: adminWallet,
+        lamports: feeLamports,
     });
 
-    const baseInstructions = decompiled.instructions as TransactionInstruction[];
+    const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");
+    const tx = new Transaction().add(ix);
+    tx.feePayer = wallet.publicKey;
+    tx.recentBlockhash = blockhash;
+    tx.sign(wallet);
 
-    const memoIx = new TransactionInstruction({
-        keys: [],
-        programId: MEMO_PROGRAM,
-        data: Buffer.from(p.memoText, "utf8"),
+    const sig = await connection.sendRawTransaction(tx.serialize(), {
+        skipPreflight: false,
+        maxRetries: 3,
     });
 
-    const instructionList: TransactionInstruction[] = p.includeMemo
-        ? p.action === "buy"
-            ? [memoIx, ...(feeInstruction ? [feeInstruction] : []), ...baseInstructions]
-            : [memoIx, ...baseInstructions, ...(feeInstruction ? [feeInstruction] : [])]
-        : p.action === "buy"
-          ? [...(feeInstruction ? [feeInstruction] : []), ...baseInstructions]
-          : [...baseInstructions, ...(feeInstruction ? [feeInstruction] : [])];
-
-    const latestBlockhash = await connection.getLatestBlockhash("finalized");
-
-    const updatedMessage = new TransactionMessage({
-        payerKey: new PublicKey(p.active_wallet),
-        recentBlockhash: latestBlockhash.blockhash,
-        instructions: instructionList,
-    });
-
-    const compiledV0 = updatedMessage.compileToV0Message();
-    const lookupTableAccounts = await Promise.all(
-        compiledV0.addressTableLookups.map(async (l) => {
-            const table = await connection.getAddressLookupTable(l.accountKey);
-            return table.value;
-        }),
+    const conf = await connection.confirmTransaction(
+        { signature: sig, blockhash, lastValidBlockHeight },
+        "confirmed",
     );
-
-    const finalLookupTables = lookupTableAccounts.filter((t): t is AddressLookupTableAccount => t !== null);
-    const finalV0Message = updatedMessage.compileToV0Message(finalLookupTables);
-    const rebuiltTx = new VersionedTransaction(finalV0Message);
-
-    rebuiltTx.sign([wallet]);
-
-    const serialized = rebuiltTx.serialize();
-    if (serialized.length > 1232) {
-        throw new Error(`Transaction too large: ${serialized.length} bytes (max 1232)`);
+    if (conf.value.err) {
+        throw new Error(`Admin fee tx failed: ${JSON.stringify(conf.value.err)}`);
     }
-
-    return {
-        serialized,
-        blockhash: latestBlockhash.blockhash,
-        lastValidBlockHeight: latestBlockhash.lastValidBlockHeight,
-    };
+    console.log(`[jupiter] Admin fee ${feeLamports} lamports → ${adminWallet.toBase58()} https://solscan.io/tx/${sig}/`);
+    return sig;
 }
 
 export async function swapToken(
@@ -155,7 +200,7 @@ export async function swapToken(
     slippage?: number,
     fee?: number,
     tokenAmount?: number,
-): Promise<{ success: boolean; error?: string; signature?: string }> {
+): Promise<{ success: boolean; error?: string; signature?: string; feeSignature?: string }> {
     try {
         const settings = await TippingSettings.findOne();
         if (!settings) throw new Error("Tipping settings not found!");
@@ -167,12 +212,11 @@ export async function swapToken(
         if (!user) throw new Error("No User");
 
         const adminWallet = new PublicKey(settings.adminSolAddress.publicKey);
-        let adminFeePercent: number;
-        if (user.userId === 7994989802 || user.userId === 2024002049) {
-            adminFeePercent = 0;
-        } else {
+        let adminFeePercent = 0;
+        if (user.userId !== 7994989802 && user.userId !== 2024002049) {
             adminFeePercent = settings.feePercentage / 100;
         }
+
         const memoText = "Trade via FoxyBoTracker";
         const MEVFee = await getRecommendedMEVTip(user.settings.auto_tip);
 
@@ -184,20 +228,15 @@ export async function swapToken(
         let inputMint: string;
         let outputMint: string;
         let amount: number;
-        let feeInstructionBuy: TransactionInstruction | undefined;
+        /** Planned admin fee (lamports) for the follow-up tx — from buy math or sell quote. */
+        let plannedAdminFeeLamports = 0;
 
         if (action === "buy") {
             const originalLamports = Math.floor(tokenPercent * LAMPORTS_PER_SOL);
-            const adminFeeLamports = Math.floor(originalLamports * adminFeePercent);
-            const adjustLamports = originalLamports - adminFeeLamports;
+            plannedAdminFeeLamports = Math.floor(originalLamports * adminFeePercent);
+            const adjustLamports = originalLamports - plannedAdminFeeLamports;
 
-            feeInstructionBuy = SystemProgram.transfer({
-                fromPubkey: new PublicKey(active_wallet),
-                toPubkey: adminWallet,
-                lamports: adminFeeLamports,
-            });
-
-            inputMint = "So11111111111111111111111111111111111111112";
+            inputMint = WSOL_MINT;
             outputMint = tokenAddress;
             amount = adjustLamports;
         } else if (action === "sell") {
@@ -207,7 +246,7 @@ export async function swapToken(
             const tokenUnits = Math.floor((tokenAmount * tokenPercent * 10 ** tokenDecimal) / 100);
 
             inputMint = tokenAddress;
-            outputMint = "So11111111111111111111111111111111111111112";
+            outputMint = WSOL_MINT;
             amount = tokenUnits;
         } else {
             throw new Error("Unsupported action. Use 'buy' or 'sell'.");
@@ -222,8 +261,12 @@ export async function swapToken(
         }
 
         const wallet = keypairFromDecryptedSecret(privateKeyBase64);
+        const activePk = new PublicKey(active_wallet);
+        if (!wallet.publicKey.equals(activePk)) {
+            throw new Error("Active wallet public key does not match the signing keypair.");
+        }
 
-        const quoteUrl = `https://lite-api.jup.ag/swap/v1/quote`;
+        const quoteUrl = `${JUPITER_LITE_SWAP_V1}/quote`;
         let lastError = "Swap failed";
 
         for (let attempt = 1; attempt <= SWAP_ATTEMPTS; attempt++) {
@@ -235,6 +278,7 @@ export async function swapToken(
                         amount,
                         slippageBps: slippage,
                         restrictIntermediateTokens: true,
+                        asLegacyTransaction: true,
                     },
                     headers: { Accept: "application/json" },
                     timeout: 25_000,
@@ -245,11 +289,22 @@ export async function swapToken(
                     throw new Error("Failed to retrieve quote from Jupiter.");
                 }
 
+                if (action === "sell" && adminFeePercent > 0) {
+                    const outAmountRaw = quoteData.outAmount ?? quoteData.outAmountLamports ?? quoteData.outAmountString;
+                    const estimatedSolOut = Number(outAmountRaw);
+                    if (Number.isNaN(estimatedSolOut)) {
+                        throw new Error("Could not parse quote outAmount for admin fee calculation.");
+                    }
+                    plannedAdminFeeLamports = Math.floor(estimatedSolOut * adminFeePercent);
+                }
+
                 const swapResponse = await axios.post(
-                    "https://lite-api.jup.ag/swap/v1/swap",
+                    `${JUPITER_LITE_SWAP_V1}/swap`,
                     {
                         quoteResponse: quoteData,
-                        userPublicKey: new PublicKey(active_wallet).toString(),
+                        userPublicKey: activePk.toString(),
+                        asLegacyTransaction: true,
+                        wrapAndUnwrapSol: true,
                         dynamicComputeUnitLimit: true,
                         dynamicSlippage: !!user?.settings.mev,
                         computeUnitPriceMicroLamports: user?.settings.mev
@@ -268,40 +323,28 @@ export async function swapToken(
                     throw new Error("Failed to get swap transaction from Jupiter.");
                 }
 
-                const buildBase = {
-                    transactionBase64,
-                    quoteData,
-                    action: action as "buy" | "sell",
-                    active_wallet,
-                    adminWallet,
-                    adminFeePercent,
-                    memoText,
+                const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash("finalized");
+
+                const buildSerialized = (withMemo: boolean): Uint8Array => {
+                    const swapTx = signLegacyJupiterSwap(transactionBase64, wallet, withMemo, memoText, blockhash);
+                    const ser = swapTx.serialize();
+                    if (ser.length > MAX_LEGACY_TX_BYTES) {
+                        throw new Error(`${MAX_LEGACY_TX_BYTES}: ${ser.length}`);
+                    }
+                    return ser;
                 };
 
+                /** Memo is appended after Jupiter. If tx too large, drop memo. If send sim fails, drop memo and resend. */
+                let swapUsedMemo = true;
                 let serialized: Uint8Array;
-                let bh: string;
-                let lvh: number;
-
                 try {
-                    ({ serialized, blockhash: bh, lastValidBlockHeight: lvh } = await buildSignSerializeSwap(
-                        { ...buildBase, includeMemo: true },
-                        action === "buy" ? feeInstructionBuy : undefined,
-                        wallet,
-                    ));
-                } catch (e1) {
-                    const m1 = errMsg(e1);
-                    if (
-                        m1.includes("encoding overruns") ||
-                        m1.includes("too large") ||
-                        m1.includes("1232")
-                    ) {
-                        ({ serialized, blockhash: bh, lastValidBlockHeight: lvh } = await buildSignSerializeSwap(
-                            { ...buildBase, includeMemo: false },
-                            action === "buy" ? feeInstructionBuy : undefined,
-                            wallet,
-                        ));
+                    serialized = buildSerialized(true);
+                } catch (eSz) {
+                    if (isLegacyTxTooLargeError(errMsg(eSz))) {
+                        serialized = buildSerialized(false);
+                        swapUsedMemo = false;
                     } else {
-                        throw e1;
+                        throw eSz;
                     }
                 }
 
@@ -309,13 +352,31 @@ export async function swapToken(
                     skipPreflight: process.env.SKIP_PREFLIGHT === "true",
                     maxRetries: 5,
                 };
-                const signature = await connection.sendRawTransaction(serialized, sendOptions);
+
+                let signature: string;
+                try {
+                    signature = await connection.sendRawTransaction(serialized, sendOptions);
+                } catch (sendErr) {
+                    const sm = errMsg(sendErr);
+                    const simFailed =
+                        sm.includes("Simulation failed") ||
+                        sm.includes("simulation failed") ||
+                        sm.includes("insufficient funds for rent");
+                    if (swapUsedMemo && simFailed) {
+                        console.warn("[jupiter] Retrying swap without memo after RPC simulation failure.");
+                        serialized = buildSerialized(false);
+                        swapUsedMemo = false;
+                        signature = await connection.sendRawTransaction(serialized, sendOptions);
+                    } else {
+                        throw sendErr;
+                    }
+                }
 
                 const confirmation = await connection.confirmTransaction(
                     {
                         signature,
-                        blockhash: bh,
-                        lastValidBlockHeight: lvh,
+                        blockhash,
+                        lastValidBlockHeight,
                     },
                     "confirmed",
                 );
@@ -326,8 +387,18 @@ export async function swapToken(
                     );
                 }
 
-                console.log(`Transaction successful: https://solscan.io/tx/${signature}/`);
-                return { success: true, signature };
+                console.log(`Swap successful: https://solscan.io/tx/${signature}/`);
+
+                let feeSignature: string | undefined;
+                if (plannedAdminFeeLamports > 0) {
+                    try {
+                        feeSignature = await sendAdminFeeAfterSwap(wallet, adminWallet, plannedAdminFeeLamports);
+                    } catch (feeErr) {
+                        console.error("[jupiter] Admin fee transfer failed (swap already succeeded):", errMsg(feeErr));
+                    }
+                }
+
+                return { success: true, signature, feeSignature };
             } catch (e) {
                 lastError = errMsg(e);
                 console.error(`swapToken attempt ${attempt}/${SWAP_ATTEMPTS}:`, lastError);

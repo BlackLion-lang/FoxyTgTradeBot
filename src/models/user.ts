@@ -50,6 +50,7 @@ const userSchema = new mongoose.Schema(
                         type: String,
                         default: "Start Wallet",
                     },
+                    walletCreatedAt: { type: Date },
 
                     tradeHistory: [
                         {
@@ -92,6 +93,7 @@ const userSchema = new mongoose.Schema(
                         type: String,
                         default: "Start Wallet",
                     },
+                    walletCreatedAt: { type: Date },
                     tradeHistory: [
                         {
                             token_address: String,
@@ -129,6 +131,25 @@ const userSchema = new mongoose.Schema(
         pendingPinAction: { type: String, default: "" },
         pendingExportWalletIndex: { type: Number, default: -1 },
         pendingExportChain: { type: String, default: "" },
+        /** Pending withdrawal after Confirm, before PIN / final Send (see withdrawalSecurity). */
+        pendingWithdraw: {
+            type: {
+                chain: { type: String, enum: ["solana", "ethereum"] },
+                walletIndex: { type: Number },
+                toAddress: { type: String },
+                amount: { type: Number },
+                isFullBalance: { type: Boolean, default: false },
+                nonce: { type: String },
+                expiresAt: { type: Date },
+                pinVerified: { type: Boolean, default: false },
+            },
+            default: undefined,
+        },
+        withdrawPinFailures: { type: Number, default: 0 },
+        withdrawPinLockedUntil: { type: Date },
+        withdrawDailyUtcDay: { type: String, default: "" },
+        withdrawDailySol: { type: Number, default: 0 },
+        withdrawDailyEth: { type: Number, default: 0 },
         referrals: {
             type: [
                 {
@@ -351,15 +372,39 @@ const userSchema = new mongoose.Schema(
                 tpSlEnabled: { type: Boolean, default: true },     // on/off for TP/SL on copy-trade positions
                 takeProfitPercent: { type: Number, default: 10 },   // TP % for copy-trade positions only
                 stopLossPercent: { type: Number, default: -40 },    // SL % for copy-trade positions only
+                // Legacy global sizing/filters (optional); per-wallet fields below override when set
+                sizingMode: { type: String, default: "fixed", enum: ["fixed", "percent_wallet", "proportional_source"] },
+                sizingPercentWallet: { type: Number, default: 5 },
+                proportionalRatio: { type: Number, default: 1 },
+                maxAmountPerTradeSol: { type: Number, default: 10 },
+                filterMinMcapUsd: { type: Number, default: 0 },
+                filterMaxMcapUsd: { type: Number, default: 0 },
+                filterMinLiquidityUsd: { type: Number, default: 0 },
+                filterMinTokenAgeMinutes: { type: Number, default: 0 },
+                filterMinVolumeUsd: { type: Number, default: 0 },
+                filterTokenBlacklist: { type: [String], default: [] },
+                filterTokenWhitelist: { type: [String], default: [] },
                 monitoredWallets: {
                     type: [
                         {
                             address: { type: String, required: true },
                             label: { type: String, default: "" },
                             minAmountSol: { type: Number, default: 0 },
-                            maxAmountSol: { type: Number, default: 100 },
+                            maxAmountSol: { type: Number, default: 0 },
                             copyOnNewToken: { type: Boolean, default: true },
                             buyAmountSol: { type: Number, default: 0.01 },
+                            copyFollowMode: { type: String, default: "buy_only", enum: ["buy_only", "buy_sell"] },
+                            sizingMode: { type: String, enum: ["fixed", "percent_wallet", "proportional_source"] },
+                            sizingPercentWallet: { type: Number },
+                            proportionalRatio: { type: Number },
+                            maxAmountPerTradeSol: { type: Number },
+                            filterMinMcapUsd: { type: Number },
+                            filterMaxMcapUsd: { type: Number },
+                            filterMinLiquidityUsd: { type: Number },
+                            filterMinTokenAgeMinutes: { type: Number },
+                            filterMinVolumeUsd: { type: Number },
+                            filterTokenBlacklist: { type: [String], default: undefined },
+                            filterTokenWhitelist: { type: [String], default: undefined },
                         }
                     ],
                     default: [],

@@ -34,7 +34,7 @@ export const getCreateWallet = async (
                 const { publicKey, secretKey } = walletCreate();
                 const balance = await getBalance(publicKey);
                 const encrypted = encryptSecretKey(secretKey);
-                user.wallets.push({ label, publicKey, secretKey: encrypted, balance });
+                user.wallets.push({ label, publicKey, secretKey: encrypted, balance, walletCreatedAt: new Date() });
                 await user.save();
                 function escapeMarkdownV2(text: string): string {
                     return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');

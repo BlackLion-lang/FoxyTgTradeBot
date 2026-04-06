@@ -63,7 +63,8 @@ export const getImportWallet = async (
                                         label,
                                         publicKey,
                                         secretKey,
-                                        is_active_wallet: ethereumWallets.length === 0
+                                        is_active_wallet: ethereumWallets.length === 0,
+                                        walletCreatedAt: new Date(),
                                     });
                                     await user.save();
                                     await bot.sendMessage(

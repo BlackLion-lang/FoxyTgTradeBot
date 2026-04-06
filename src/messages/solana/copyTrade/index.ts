@@ -2,6 +2,7 @@ import TelegramBot from "node-telegram-bot-api";
 import { User } from "../../../models/user";
 import { t } from "../../../locales";
 import { getCloseButton } from "../../../utils/markup";
+import { mergeWalletCopyConfig } from "../../../services/copyTradeSizing";
 
 const MONITORED_MAX = 20;
 const ADDRESS_SHORT_LEN = 6;
@@ -134,17 +135,30 @@ export async function getCopyTradeWalletSettings(
     const remove = await t("copyTrade.remove", userId);
     const back = await t("copyTrade.back", userId);
     const label = await t("copyTrade.label", userId);
+    const copyModeBuyOnly = await t("copyTrade.copyModeBuyOnly", userId);
+    const copyModeBuySell = await t("copyTrade.copyModeBuySell", userId);
+    const sizingFilters = await t("copyTrade.sizingFilters", userId);
+    const copyModeLabel = await t("copyTrade.copyMode", userId);
+    const isBuySell = (w as { copyFollowMode?: string }).copyFollowMode === "buy_sell";
 
     const caption =
         `<strong>⚙️ ${settingsFor}</strong> <code>${shortAddress(w.address)}</code>\n\n` +
         `• ${copyOnNewToken} : ${w.copyOnNewToken ? "✅" : "❌"}\n` +
+        `• ${copyModeLabel} : ${isBuySell ? copyModeBuySell : copyModeBuyOnly}\n` +
         `• ${buyAmount} : ${w.buyAmountSol ?? 0.01} SOL\n` +
         `• ${minAmount} : ${w.minAmountSol ?? 0} SOL\n` +
-        `• ${maxAmount} : ${w.maxAmountSol ?? 100} SOL\n` +
+        `• ${maxAmount} : ${(w.maxAmountSol ?? 0) > 0 ? `${w.maxAmountSol} SOL` : await t("copyTrade.noMaxTargetSol", userId)}\n` +
         (w.label ? `• ${label} : ${w.label}\n` : "");
 
     const inline_keyboard: TelegramBot.InlineKeyboardButton[][] = [
         [{ text: `${copyOnNewToken} ${w.copyOnNewToken ? "✅" : "❌"}`, callback_data: `copyTrade_toggle_${walletIndex}` }],
+        [
+            {
+                text: isBuySell ? `🔁 ${copyModeBuySell}` : `📥 ${copyModeBuyOnly}`,
+                callback_data: `cwz_${walletIndex}_follow`,
+            },
+        ],
+        [{ text: `📐 ${sizingFilters}`, callback_data: `cwz_${walletIndex}_open` }],
         [{ text: `${buyAmount}`, callback_data: `copyTrade_buyAmount_${walletIndex}` }],
         [
             { text: `${minAmount}`, callback_data: `copyTrade_minAmount_${walletIndex}` },
@@ -288,6 +302,127 @@ export async function editCopyTradeToTpSlMenu(
     messageId: number
 ): Promise<void> {
     const { caption, markup } = await getCopyTradeTpSlMenu(userId);
+    await bot.editMessageCaption(caption, {
+        chat_id: chatId,
+        message_id: messageId,
+        parse_mode: "HTML",
+        reply_markup: markup,
+    });
+}
+
+export async function getCopyTradeWalletSizingMenu(
+    userId: number,
+    walletIndex: number,
+): Promise<{ caption: string; markup: TelegramBot.InlineKeyboardMarkup }> {
+    const user = (await User.findOne({ userId })) || new User();
+    const list = user.copyTrade?.monitoredWallets || [];
+    const w = list[walletIndex];
+    if (!w) {
+        return getCopyTradeWalletSettings(userId, walletIndex);
+    }
+    const ct = (user.copyTrade as any) || {};
+    const cfg = mergeWalletCopyConfig(ct, w as unknown as Record<string, unknown>);
+    const num = (v: unknown, def: number): number => {
+        const n = Number(v ?? def);
+        return Number.isFinite(n) ? n : def;
+    };
+    const mode = String(cfg.sizingMode || "fixed");
+    const pct = num(cfg.sizingPercentWallet, 5);
+    const ratio = num(cfg.proportionalRatio, 1);
+    const maxCap = num(cfg.maxAmountPerTradeSol, 10);
+    const minM = num(cfg.filterMinMcapUsd, 0);
+    const maxM = num(cfg.filterMaxMcapUsd, 0);
+    const minL = num(cfg.filterMinLiquidityUsd, 0);
+    const ageMin = num(cfg.filterMinTokenAgeMinutes, 0);
+    const minV = num(cfg.filterMinVolumeUsd, 0);
+    const bl = (cfg.filterTokenBlacklist as string[] | undefined)?.length ?? 0;
+    const wl = (cfg.filterTokenWhitelist as string[] | undefined)?.length ?? 0;
+
+    const title = await t("copyTrade.sizingMenuTitle", userId);
+    const modeFixed = await t("copyTrade.modeFixed", userId);
+    const modePct = await t("copyTrade.modePercentWallet", userId);
+    const modeProp = await t("copyTrade.modeProportional", userId);
+    const modeLine = await t("copyTrade.sizingCurrentMode", userId);
+    const sumWalletPct = await t("copyTrade.summaryWalletPercent", userId);
+    const sumRatio = await t("copyTrade.summaryRatio", userId);
+    const sumMax = await t("copyTrade.summaryMaxSol", userId);
+    const sumMinM = await t("copyTrade.summaryMinMcap", userId);
+    const sumMaxM = await t("copyTrade.summaryMaxMcap", userId);
+    const sumLiq = await t("copyTrade.summaryMinLiq", userId);
+    const sumAge = await t("copyTrade.summaryMinAge", userId);
+    const sumVol = await t("copyTrade.summaryMinVol", userId);
+    const sumBl = await t("copyTrade.summaryBlacklist", userId);
+    const sumWl = await t("copyTrade.summaryWhitelist", userId);
+    const tapCycle = await t("copyTrade.tapModeCycle", userId);
+    const back = await t("copyTrade.back", userId);
+
+    const modeLabel = mode === "percent_wallet" ? modePct : mode === "proportional_source" ? modeProp : modeFixed;
+    const off = await t("copyTrade.filterOff", userId);
+
+    const perWalletNote = await t("copyTrade.sizingPerWalletNote", userId);
+
+    const caption =
+        `<strong>📐 ${title}</strong>\n\n` +
+        `${perWalletNote}\n\n` +
+        `${modeLine} <strong>${modeLabel}</strong>\n` +
+        `• ${sumWalletPct} : ${pct}%\n` +
+        `• ${sumRatio} : ${ratio}\n` +
+        `• ${sumMax} : ${maxCap > 0 ? `${maxCap} SOL` : off}\n\n` +
+        `<strong>${await t("copyTrade.filtersSection", userId)}</strong>\n` +
+        `• ${sumMinM} : ${minM > 0 ? `$${minM}` : off}\n` +
+        `• ${sumMaxM} : ${maxM > 0 ? `$${maxM}` : off}\n` +
+        `• ${sumLiq} : ${minL > 0 ? `$${minL}` : off}\n` +
+        `• ${sumAge} : ${ageMin > 0 ? `${ageMin} min` : off}\n` +
+        `• ${sumVol} : ${minV > 0 ? `$${minV}` : off}\n` +
+        `• ${sumBl} : ${bl}\n` +
+        `• ${sumWl} : ${wl > 0 ? wl : off}`;
+
+    const setPct = await t("copyTrade.btnSetWalletPct", userId);
+    const setRatio = await t("copyTrade.btnSetRatio", userId);
+    const setMax = await t("copyTrade.btnSetMaxSol", userId);
+    const bMinM = await t("copyTrade.btnMinMcap", userId);
+    const bMaxM = await t("copyTrade.btnMaxMcap", userId);
+    const bLiq = await t("copyTrade.btnMinLiq", userId);
+    const bAge = await t("copyTrade.btnMinAge", userId);
+    const bVol = await t("copyTrade.btnMinVol", userId);
+    const bBl = await t("copyTrade.btnBlacklist", userId);
+    const bWl = await t("copyTrade.btnWhitelist", userId);
+
+    const i = walletIndex;
+    const inline_keyboard: TelegramBot.InlineKeyboardButton[][] = [
+        [{ text: `🔁 ${tapCycle}: ${modeLabel}`, callback_data: `cwz_${i}_mode` }],
+        [
+            { text: setPct, callback_data: `cwz_${i}_pct` },
+            { text: setRatio, callback_data: `cwz_${i}_ratio` },
+        ],
+        [{ text: setMax, callback_data: `cwz_${i}_max` }],
+        [
+            { text: bMinM, callback_data: `cwz_${i}_fm` },
+            { text: bMaxM, callback_data: `cwz_${i}_fM` },
+        ],
+        [
+            { text: bLiq, callback_data: `cwz_${i}_fl` },
+            { text: bAge, callback_data: `cwz_${i}_fa` },
+        ],
+        [{ text: bVol, callback_data: `cwz_${i}_fv` }],
+        [
+            { text: bBl, callback_data: `cwz_${i}_bl` },
+            { text: bWl, callback_data: `cwz_${i}_wl` },
+        ],
+        [{ text: `⬅ ${back}`, callback_data: `copyTrade_settings_${i}` }],
+    ];
+
+    return { caption, markup: { inline_keyboard } };
+}
+
+export async function editCopyTradeToWalletSizingMenu(
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    messageId: number,
+    walletIndex: number,
+): Promise<void> {
+    const { caption, markup } = await getCopyTradeWalletSizingMenu(userId, walletIndex);
     await bot.editMessageCaption(caption, {
         chat_id: chatId,
         message_id: messageId,

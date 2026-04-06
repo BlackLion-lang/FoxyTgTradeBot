@@ -66,6 +66,12 @@ export interface Translations {
         defaultLanguage: string;
         languageEn: string;
         languageFr: string;
+        withdrawFreshDays: string;
+        withdrawDailyLimitSol: string;
+        withdrawDailyLimitEth: string;
+        withdrawCooldownMins: string;
+        withdrawLockoutAttempts: string;
+        withdrawLockoutMinutes: string;
     };
 
     //welcome
@@ -532,6 +538,14 @@ export interface Translations {
         confirm: string;
         view: string;
         withdraw100: string;
+        enterPin: string;
+        sendNow: string;
+        finalReview: string;
+        lockedUntil: string;
+        cooldown: string;
+        dailyLimitExceeded: string;
+        sessionExpired: string;
+        invalidChecksum: string;
     }
 
     //Tp & Sl
@@ -761,6 +775,54 @@ export interface Translations {
         tpSlOnlyCopy: string;
         selectWalletToRemove: string;
         noWalletsToRemove: string;
+        sizingFilters: string;
+        noMaxTargetSol: string;
+        sizingMenuTitle: string;
+        modeFixed: string;
+        modePercentWallet: string;
+        modeProportional: string;
+        sizingCurrentMode: string;
+        summaryWalletPercent: string;
+        summaryRatio: string;
+        summaryMaxSol: string;
+        summaryMinMcap: string;
+        summaryMaxMcap: string;
+        summaryMinLiq: string;
+        summaryMinAge: string;
+        summaryMinVol: string;
+        summaryBlacklist: string;
+        summaryWhitelist: string;
+        tapModeCycle: string;
+        filtersSection: string;
+        filterOff: string;
+        btnSetWalletPct: string;
+        btnSetRatio: string;
+        btnSetMaxSol: string;
+        btnMinMcap: string;
+        btnMaxMcap: string;
+        btnMinLiq: string;
+        btnMinAge: string;
+        btnMinVol: string;
+        btnBlacklist: string;
+        btnWhitelist: string;
+        enterWalletPct: string;
+        enterRatio: string;
+        enterMaxSol: string;
+        enterMinMcap: string;
+        enterMaxMcap: string;
+        enterMinLiq: string;
+        enterMinAge: string;
+        enterMinVol: string;
+        enterBlacklist: string;
+        enterWhitelist: string;
+        skippedByFilters: string;
+        copyMode: string;
+        copyModeBuyOnly: string;
+        copyModeBuySell: string;
+        sizingPerWalletNote: string;
+        copySellPending: string;
+        copySellDone: string;
+        copySellFailed: string;
     }
 
     //Messages
@@ -825,6 +887,12 @@ export interface Translations {
         enterreferral_ethereum: string;
         enterreferralSettings: string;
         copyTradeWalletLimit: string;
+        adminWithdrawFreshDays: string;
+        adminWithdrawDailySol: string;
+        adminWithdrawDailyEth: string;
+        adminWithdrawCooldown: string;
+        adminWithdrawLockoutAttempts: string;
+        adminWithdrawLockoutMinutes: string;
         refreshLimit: string;
         refreshwarning: string;
         fee: string;
