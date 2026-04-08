@@ -581,16 +581,13 @@ function onStreamSell(event: PumpStreamSellEvent): void {
     );
 }
 
-/** Start pump stream; log new token launches and target buys/sells; if there are monitored wallets, process matches. */
+/** Start pump stream; handle target buys/sells and (when relevant) new launches for monitored dev wallets. */
 function setupPumpStreamForTargetLaunches(monitoredByAddress: Map<string, MonitoredEntry[]>): void {
     if (pumpStreamUnsubscribe !== null) return; // already registered
     startPumpStream();
     pumpStreamUnsubscribe = onPumpCreate((event) => {
         const mint = event.mint ?? "";
         const creator = (event.txSigner ?? "").trim();
-        if (mint && creator) {
-            logger.info("CopyTrade", `New token launch — mint: ${mint}, dev wallet: ${creator}, https://pump.fun/coin/${mint}`);
-        }
         const signer = creator.toLowerCase();
         if (!currentMonitoredByAddress.has(signer)) return;
         onStreamCreate(event);
@@ -607,7 +604,7 @@ function setupPumpStreamForTargetLaunches(monitoredByAddress: Map<string, Monito
     });
     logger.info("CopyTrade", monitoredByAddress.size > 0
         ? "Pump stream started (token launches + target buys/sells)."
-        : "Pump stream started (logging all new token launches).");
+        : "Pump stream started.");
 }
 
 function setupLogSubscriptions(monitoredByAddress: Map<string, MonitoredEntry[]>): void {

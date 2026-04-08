@@ -2,6 +2,11 @@ import * as dotenv from "dotenv";
 
 dotenv.config();
 
+/** Silences node-telegram-bot-api DeprecationWarning about file content-type (see NTBA_FIX_350 in library). */
+if (process.env.NTBA_FIX_350 === undefined) {
+    process.env.NTBA_FIX_350 = "1";
+}
+
 const MODE = String(process.env.MODE ?? "").trim().toLowerCase();
 
 /** `MODE=production` — suppress routine logs. Any other value (including empty) matches development-style logging. */

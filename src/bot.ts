@@ -7835,14 +7835,11 @@ let isCheckingAutoSell = false;
 
 export async function checkAndAutoSell() {
     if (isCheckingAutoSell) {
-        console.log("⏳ Auto-sell check already in progress, skipping...");
         return;
     }
 
     isCheckingAutoSell = true;
     try {
-        console.log("🔍 Running auto-sell check...");
-
         const orders = await limitOrderData.find({ status: "Pending" });
 
         for (const order of orders) {
