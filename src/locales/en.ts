@@ -605,8 +605,11 @@ export const en: Translations = {
         withdraw100: "100% removal",
         enterPin: "Enter your security PIN to continue.",
         sendNow: "Send now",
-        finalReview: "Final review — verify the destination address",
+        finalReview: "💸 Final review — verify the destination address",
         lockedUntil: "PIN entry locked. Try again after:",
+        pinLockoutExceeded:
+            "You have tried {attempts} times. Please wait {minutes} minutes before you can try again.",
+        pinLockoutStillLocked: "PIN entry is locked. Try again in about {minutes} minute(s).",
         cooldown: "This wallet is new. Please wait before withdrawing.",
         dailyLimitExceeded: "Daily withdrawal limit for fresh wallets exceeded.",
         sessionExpired: "This withdrawal request expired. Start again from Wallets.",

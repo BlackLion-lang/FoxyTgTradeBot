@@ -32,7 +32,7 @@ import {
 } from "./copyTradeSizing";
 
 const LAMPORTS_PER_SOL = 1e9;
-const SUBSCRIPTION_REFRESH_MS = 25_000;
+const SUBSCRIPTION_REFRESH_MS = Math.max(10_000, Number(process.env.COPY_TRADE_REFRESH_MS ?? "60000"));
 const RECENT_DEDUP_MS = 120_000;
 
 const notifiedRecently = new Map<string, number>();

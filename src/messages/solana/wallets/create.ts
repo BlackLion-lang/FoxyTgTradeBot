@@ -90,6 +90,11 @@ export const getCreateWallet = async (
                                 `🔒 ${await t("createWallet.keysNeverShare", userId)}\n\n` +
                                 `${await t("createWallet.keysFileHint", userId)}`,
                             parse_mode: "HTML",
+                            reply_markup: {
+                                inline_keyboard: [
+                                    [{ text: await t("privateKey.deleteMessage", userId), callback_data: "private_keys_file_delete" }],
+                                ],
+                            },
                         },
                         {
                             filename: fileName,

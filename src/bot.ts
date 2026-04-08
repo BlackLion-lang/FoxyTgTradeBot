@@ -1,4 +1,4 @@
-import "./utils/runtimeMode";
+import { isDevelopmentMode } from "./utils/runtimeMode";
 import TelegramBot from "node-telegram-bot-api";
 import { CommandHandler } from "./commands";
 import {
@@ -193,6 +193,9 @@ import { ethers } from "ethers";
 
 
 const userRefreshCounts = new Map(); // key: userId, value: { count: number, lastReset: timestamp }
+
+/** PIN entry prompts per flow before abort (withdraw, export, change/remove PIN). */
+const PIN_VERIFICATION_ATTEMPTS = 3;
 
 interface UserLocalDataDictionary {
     [key: number]: {
@@ -823,14 +826,51 @@ const safeEditMessage = async (bot: TelegramBot, chatId: number, messageId: numb
     }
 };
 
+/**
+ * Telegram shows a loading spinner until the callback query is answered. We ack empty early (see handler);
+ * optional feedback tries a popup first, then a short chat message if the query was already answered.
+ */
+async function notifyCallbackQuery(
+    bot: TelegramBot,
+    chatId: number,
+    callbackQueryId: string,
+    text: string,
+    showAlert = false,
+): Promise<void> {
+    const ok = await bot
+        .answerCallbackQuery(callbackQueryId, { text, show_alert: showAlert })
+        .then(() => true)
+        .catch(() => false);
+    if (!ok && chatId) {
+        await bot.sendMessage(chatId, text).catch(() => {});
+    }
+}
+
 bot.on("callback_query", async (callbackQuery) => {
-    console.log("debug callback_query", `\x1b[35m${callbackQuery.data}\x1b[0m`);
+    if (isDevelopmentMode()) {
+        console.log("debug callback_query", `\x1b[35m${callbackQuery.data}\x1b[0m`);
+    }
     try {
+        const from = callbackQuery.from;
+        if (!from) {
+            await bot.answerCallbackQuery(callbackQuery.id).catch(() => {});
+            return;
+        }
+        const userId = from.id;
+        const callbackQueryId = callbackQuery.id;
+
+        const [users] = await Promise.all([
+            User.findOne({ userId }),
+            bot.answerCallbackQuery(callbackQueryId).catch(() => {}),
+        ]);
+        if (!users) {
+            return;
+        }
+
         const sel_action = callbackQuery.data;
         const callbackQueryDate = callbackQuery?.message?.date || 0;
         const ctx = callbackQuery.message;
         const text = ctx?.text || "";
-        const from = callbackQuery.from;
         const channelType = ctx?.chat.type;
         const caption = callbackQuery.message?.caption || "";
         /** Buy/sell screens are usually photos with the mint in caption — text-only match missed the token. */
@@ -842,13 +882,13 @@ bot.on("callback_query", async (callbackQuery) => {
         const SPAM_LIMIT = 10;
         const SPAM_WINDOW_MS = 30 * 1000; // 
 
-        if (tokenAddress) {
-            console.log("Extracted Token Address:", tokenAddress);
-        } else {
-            console.log("No token address found in message text or caption");
+        if (isDevelopmentMode()) {
+            if (tokenAddress) {
+                console.log("Extracted Token Address:", tokenAddress);
+            } else {
+                console.log("No token address found in message text or caption");
+            }
         }
-
-        const userId = from.id;
 
         const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back",
             "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions",
@@ -858,14 +898,11 @@ bot.on("callback_query", async (callbackQuery) => {
         if (navigationActions.includes(sel_action || "")) {
             cleanupUserTextHandler(userId);
         }
-        const users = await User.findOne({ userId });
-        if (!users) return; // Skip if user doesn't exist
         // Parse token balance in a language-agnostic way (EN/FR).
         // Fallback to on-chain balance in sell handlers when this is missing.
         const tokenBalanceMatch = textOrCaption.match(/(?:Token\s*Balance|Solde\s*en\s*tokens)\s*:\s*([\d.]+)/i);
         let tokenBalance: any = tokenBalanceMatch?.[1];
         const solAmount = caption.match(/Wallet Balance: ([\d.]+) SOL/)?.[1];
-        const callbackQueryId = callbackQuery.id;
         const currentKeyboard = callbackQuery.message?.reply_markup;
         const chatId = ctx?.chat.id || 0;
         const messageId = ctx?.message_id || 0;
@@ -882,7 +919,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "menu_close") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             return;
@@ -892,7 +928,6 @@ bot.on("callback_query", async (callbackQuery) => {
         if (!settings) throw new Error("Tipping settings not found!");
 
         if (sel_action === "admin_panel") {
-            console.log('debug-> admin panel messsage');
             await safeDeleteMessage(bot, chatId, messageId);
             sendAdminPanelMessage(bot, chatId, userId);
         }
@@ -1651,7 +1686,7 @@ bot.on("callback_query", async (callbackQuery) => {
             await settings.save();
             await editAdminPanelMessage(bot, chatId, userId, messageId);
             const langLabel = (settings as any).defaultLanguage === "en" ? await t("admin.languageEn", userId) : await t("admin.languageFr", userId);
-            await bot.answerCallbackQuery(callbackQueryId, { text: `${await t("admin.defaultLanguage", userId)}: ${langLabel}` }).catch(() => {});
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, `${await t("admin.defaultLanguage", userId)}: ${langLabel}`);
         }
 
         if (sel_action === "admin_wallet_name") {
@@ -1820,10 +1855,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     },
                 };
                 sendWelcomeMessage(bot, chatId, userId, messageId, userTelegramId);
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: await t('messages.accessDenied'),
-                    show_alert: true,
-                });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t('messages.accessDenied'), true);
                 return;
             }
         }
@@ -1949,13 +1981,11 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "menu_back") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             sendMenu(bot, chatId, userId, messageId);
         }
         if (sel_action === "menu_close") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
         }
@@ -1966,13 +1996,13 @@ bot.on("callback_query", async (callbackQuery) => {
         if (sel_action === "select_chain_solana" || sel_action === "select_chain_ethereum") {
             const user = await User.findOne({ userId });
             if (!user) {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "User not found" });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "User not found");
                 return;
             }
             const newChain = sel_action === "select_chain_solana" ? "solana" : "ethereum";
             user.chain = newChain;
             await user.save();
-            await bot.answerCallbackQuery(callbackQueryId, { text: `Switched to ${newChain === "solana" ? "Solana" : "Ethereum"}` });
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, `Switched to ${newChain === "solana" ? "Solana" : "Ethereum"}`);
             await safeDeleteMessage(bot, chatId, messageId);
             CommandHandler.chain(bot, { chat: { id: chatId }, from: { id: userId } } as TelegramBot.Message, null);
         }
@@ -1981,7 +2011,6 @@ bot.on("callback_query", async (callbackQuery) => {
             sendMenu(bot, chatId, userId, messageId);
         }
         if (sel_action === "buy") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             const userChain = await getUserChain(userId);
             if (userChain === "ethereum") {
@@ -2020,10 +2049,13 @@ bot.on("callback_query", async (callbackQuery) => {
             console.log(`User ${userId} refresh count: ${spamData.count}`);
 
             if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQuery.id,
+                    `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    true,
+                );
                 return;
             }
             console.log('debug buy_refresh', sel_action);
@@ -2038,9 +2070,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     const { BuyEdit: EthereumBuyEdit } = await import("./commands/ethereum/buy");
                     await EthereumBuyEdit(bot, chatId, userId, messageId, ethTokenAddress);
                 } else {
-                    await bot.answerCallbackQuery(callbackQuery.id, {
-                        text: "❌ Could not find Ethereum token address in message",
-                    });
+                    await notifyCallbackQuery(bot, chatId, callbackQuery.id, "❌ Could not find Ethereum token address in message");
                 }
             } else {
                 await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
@@ -2072,10 +2102,13 @@ bot.on("callback_query", async (callbackQuery) => {
             console.log(`User ${userId} refresh count: ${spamData.count}`);
 
             if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQuery.id,
+                    `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    true,
+                );
                 return;
             }
             console.log('debug manual_refresh', sel_action);
@@ -2093,65 +2126,7 @@ bot.on("callback_query", async (callbackQuery) => {
                             const { BuyEdit: EthereumBuyEdit } = await import("./commands/ethereum/buy");
                             await EthereumBuyEdit(bot, chatId, userId, refreshMessageId, ethTokenAddress);
                         } else {
-                            await bot.answerCallbackQuery(callbackQuery.id, {
-                                text: "❌ Could not find Ethereum token address in message",
-                            });
-                        }
-                    } catch (error) {
-                        console.error('Error refreshing buy menu:', error);
-                    }
-                }
-            }
-            return;
-        }
-
-        if (sel_action === "manual_refresh") {
-            const now = Date.now();
-            let spamData = userRefreshCounts.get(userId)
-
-            if (!spamData) {
-                console.log("New user, initializing...");
-                spamData = { count: 1, lastReset: now };
-            } else {
-                const diff = now - spamData.lastReset;
-                console.log(`⏱ Time since last reset: ${diff} ms`);
-
-                if (diff > SPAM_WINDOW_MS) {
-                    console.log("⏰ Resetting count due to time window");
-                    spamData.count = 1;
-                    spamData.lastReset = now;
-                } else {
-                    spamData.count += 1;
-                }
-            }
-
-            userRefreshCounts.set(userId, spamData);
-            console.log(`User ${userId} refresh count: ${spamData.count}`);
-
-            if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
-                return;
-            }
-
-            const userChain = await getUserChain(userId);
-            if (userChain === "ethereum") {
-                const refreshMessageId = user.manual_message_id || messageId;
-                if (refreshMessageId) {
-                    try {
-                        const messageText = text || caption || "";
-                        const ethAddressMatch = messageText.match(/(0x[a-fA-F0-9]{40})/);
-                        const ethTokenAddress = ethAddressMatch ? ethAddressMatch[1] : (tokenAddress && isEvmAddress(tokenAddress) ? tokenAddress : null);
-
-                        if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
-                            const { BuyEdit: EthereumBuyEdit } = await import("./commands/ethereum/buy");
-                            await EthereumBuyEdit(bot, chatId, userId, refreshMessageId, ethTokenAddress);
-                        } else {
-                            await bot.answerCallbackQuery(callbackQuery.id, {
-                                text: "❌ Could not find Ethereum token address in message",
-                            });
+                            await notifyCallbackQuery(bot, chatId, callbackQuery.id, "❌ Could not find Ethereum token address in message");
                         }
                     } catch (error) {
                         console.error('Error refreshing buy menu:', error);
@@ -2188,10 +2163,13 @@ bot.on("callback_query", async (callbackQuery) => {
             console.log(`User ${userId} refresh count: ${spamData.count}`);
 
             if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQuery.id,
+                    `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    true,
+                );
                 return;
             }
             console.log('debug sell_refresh', sel_action);
@@ -2206,9 +2184,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     const { SellEdit: EthereumSellEdit } = await import("./commands/ethereum/sell");
                     await EthereumSellEdit(bot, chatId, userId, messageId, ethTokenAddress);
                 } else {
-                    await bot.answerCallbackQuery(callbackQuery.id, {
-                        text: "❌ Could not find Ethereum token address in message",
-                    });
+                    await notifyCallbackQuery(bot, chatId, callbackQuery.id, "❌ Could not find Ethereum token address in message");
                 }
             } else {
                 await editSellMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
@@ -2222,10 +2198,7 @@ bot.on("callback_query", async (callbackQuery) => {
             const sniperTokenList = users?.sniper?.tokenlist || [];
 
             if (isNaN(tokenIndex) || tokenIndex < 0 || tokenIndex >= sniperTokenList.length) {
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: `${await t('errors.notToken', userId)}`,
-                    show_alert: true,
-                });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, `${await t('errors.notToken', userId)}`, true);
                 return;
             }
 
@@ -2233,14 +2206,10 @@ bot.on("callback_query", async (callbackQuery) => {
             const sniperBuyAmount = Number(users?.sniper?.buy_amount)
 
             if (sniperBuyAmount <= 0) {
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: `${await t('errors.invalidAmount', userId)}`,
-                    show_alert: true,
-                });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, `${await t('errors.invalidAmount', userId)}`, true);
                 return;
             }
 
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             await sendBuyMessageWithAddress(
                 bot,
                 chatId,
@@ -2298,7 +2267,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action && sel_action.startsWith("buy_amount_")) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             const userChain = await getUserChain(userId);
             if (userChain === "ethereum") {
                 const amountIndex = sel_action.split("buy_amount_")[1];
@@ -2344,20 +2312,13 @@ bot.on("callback_query", async (callbackQuery) => {
         if (sel_action && sel_action.startsWith("buy_") && sel_action !== "buy_x" && sel_action !== "buy_amount_x" && !sel_action.startsWith("buy_amount_") && !sel_action.startsWith("buy_gas_eth_")) {
             const chainBuy = await getUserChain(userId);
             if (chainBuy !== "solana") {
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: await t("errors.notToken", userId),
-                    show_alert: true,
-                }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
                 return;
             }
             if (!tokenAddress || !isValidSolanaAddress(tokenAddress)) {
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: await t("errors.notToken", userId),
-                    show_alert: true,
-                }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
                 return;
             }
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             handleBuyAction(
                 sel_action as BuyAction,
                 bot,
@@ -2370,7 +2331,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "buy_x") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const userChain = await getUserChain(userId);
             const buyXMessage = userChain === "ethereum"
                 ? await t('messages.buy_x_ethereum', userId)
@@ -2426,7 +2386,6 @@ bot.on("callback_query", async (callbackQuery) => {
             `${await t('dangerZoneMessage.p6', userId)}`;
 
         if (sel_action === "sell") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             const userChain = await getUserChain(userId);
             if (userChain === "ethereum") {
@@ -2487,7 +2446,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if ((sel_action === "sell_10" || sel_action === "sell_20" || sel_action === "sell_50" || sel_action === "sell_75" || sel_action === "sell_100" || sel_action === "sell_x")) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             const userChain = await getUserChain(userId);
             if (userChain === "ethereum") {
                 let sellPercent: number;
@@ -2580,7 +2538,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action && sel_action.startsWith("sell_") && sel_action !== "sell_x" && sel_action !== "sell_10" && sel_action !== "sell_20" && sel_action !== "sell_50" && sel_action !== "sell_75" && sel_action !== "sell_100" && !sel_action?.startsWith("sell_gas_eth_")) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             handleSellAction(
                 sel_action as SellAction,
                 bot,
@@ -2654,7 +2611,7 @@ bot.on("callback_query", async (callbackQuery) => {
         if (sel_action === "bundle_buy") {
             const user = await User.findOne({ userId });
             if (user && user.chain === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Bundle functions are only available for Solana" });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Bundle functions are only available for Solana");
                 return;
             }
             await bundleBuySell.handleBundleBuy(User, callbackQuery, tokenAddress);
@@ -2664,7 +2621,7 @@ bot.on("callback_query", async (callbackQuery) => {
         if (sel_action === "bundle_sell") {
             const user = await User.findOne({ userId });
             if (user && user.chain === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Bundle functions are only available for Solana" });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Bundle functions are only available for Solana");
                 return;
             }
             await bundleBuySell.handleBundleSell(User, callbackQuery, tokenAddress);
@@ -2672,7 +2629,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "wallets") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             if (userChain === "ethereum") {
@@ -2708,10 +2664,13 @@ bot.on("callback_query", async (callbackQuery) => {
             console.log(`User ${userId} refresh count: ${spamData.count}`);
 
             if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQuery.id,
+                    `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    true,
+                );
                 return;
             }
 
@@ -2760,7 +2719,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action?.startsWith("wallets_withdraw_send_")) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const nonce = sel_action.slice("wallets_withdraw_send_".length);
             const tipSettings = await TippingSettings.findOne() || new TippingSettings();
             const uW = await User.findOne({ userId });
@@ -2889,7 +2847,6 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action?.startsWith('wallets_withdraw_confirm_')) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const tipSettings = await TippingSettings.findOne() || new TippingSettings();
             const uW = await User.findOne({ userId });
             if (!uW) return;
@@ -2901,10 +2858,12 @@ bot.on("callback_query", async (callbackQuery) => {
                 return;
             }
             if (isWithdrawPinLocked(uW as { withdrawPinLockedUntil?: unknown })) {
-                await bot.sendMessage(
-                    chatId,
-                    `${await t("withdrawal.lockedUntil", userId)} ${(uW as any).withdrawPinLockedUntil ? new Date((uW as any).withdrawPinLockedUntil).toISOString() : ""}`,
-                );
+                const until = (uW as any).withdrawPinLockedUntil
+                    ? new Date((uW as any).withdrawPinLockedUntil).getTime()
+                    : Date.now();
+                const minsLeft = Math.max(1, Math.ceil((until - Date.now()) / 60_000));
+                const lockText = (await t("withdrawal.pinLockoutStillLocked", userId)).replace("{minutes}", String(minsLeft));
+                await bot.sendMessage(chatId, lockText);
                 return;
             }
 
@@ -2945,53 +2904,58 @@ bot.on("callback_query", async (callbackQuery) => {
             };
 
             const runWithdrawPinChallenge = async () => {
-                const pinPromptMsg = await bot.sendMessage(chatId, await t("withdrawal.enterPin", userId), { reply_markup: { force_reply: true } });
-                bot.once("text", createUserTextHandler(userId, async (reply) => {
-                    const pin = (reply.text || "").trim();
-                    setTimeout(() => {
-                        bot.deleteMessage(chatId, pinPromptMsg.message_id).catch(() => {});
-                        bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                    }, 5000);
-                    const u1 = await User.findOne({ userId });
-                    if (!u1 || (u1 as any).pendingPinAction !== "withdraw" || !(u1 as any).pendingWithdraw) {
-                        return;
-                    }
-                    const ok =
-                        /^\d{4,8}$/.test(pin) &&
-                        verifyPin(pin, (u1 as any).pinHash || "", (u1 as any).pinSalt || "");
-                    if (!ok) {
-                        await registerWithdrawPinFailure(userId, tipSettings);
-                        await SecurityLog.create({ userId, type: "withdraw_pin_fail", detail: userChain });
-                        const wrongMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, wrongMsg.message_id).catch(() => {}), 5000);
-                        const retryMsg = await bot.sendMessage(chatId, await t("withdrawal.enterPin", userId), { reply_markup: { force_reply: true } });
-                        bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
-                            const pinRetry = (replyRetry.text || "").trim();
+                const promptLabel = await t("withdrawal.enterPin", userId);
+
+                const askOnce = async (attemptsLeft: number): Promise<void> => {
+                    const pinPromptMsg = await bot.sendMessage(chatId, promptLabel, { reply_markup: { force_reply: true } });
+                    await new Promise<void>((resolve) => {
+                        bot.once("text", createUserTextHandler(userId, async (reply) => {
+                            const pin = (reply.text || "").trim();
                             setTimeout(() => {
-                                bot.deleteMessage(chatId, retryMsg.message_id).catch(() => {});
-                                bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
+                                bot.deleteMessage(chatId, pinPromptMsg.message_id).catch(() => {});
+                                bot.deleteMessage(chatId, reply.message_id).catch(() => {});
                             }, 5000);
-                            const uR = await User.findOne({ userId });
-                            if (!uR || (uR as any).pendingPinAction !== "withdraw" || !(uR as any).pendingWithdraw) {
+                            const u1 = await User.findOne({ userId });
+                            if (!u1 || (u1 as any).pendingPinAction !== "withdraw" || !(u1 as any).pendingWithdraw) {
+                                resolve();
                                 return;
                             }
-                            const okRetry =
-                                /^\d{4,8}$/.test(pinRetry) &&
-                                verifyPin(pinRetry, (uR as any).pinHash || "", (uR as any).pinSalt || "");
-                            if (!okRetry) {
+                            const ok =
+                                /^\d{4,8}$/.test(pin) &&
+                                verifyPin(pin, (u1 as any).pinHash || "", (u1 as any).pinSalt || "");
+                            if (ok) {
+                                await resetWithdrawPinFailures(userId);
+                                await finalizeWithdrawAfterPin(u1);
+                                resolve();
+                                return;
+                            }
+                            const pinFail = await registerWithdrawPinFailure(userId, tipSettings);
+                            if (pinFail) {
+                                await SecurityLog.create({ userId, type: "withdraw_pin_fail", detail: userChain });
+                            }
+                            if (pinFail?.lockedNow) {
+                                const lockMsg = (await t("withdrawal.pinLockoutExceeded", userId))
+                                    .replace("{attempts}", String(pinFail.attemptsThatTriggeredLockout))
+                                    .replace("{minutes}", String(pinFail.lockoutMinutes));
+                                await bot.sendMessage(chatId, lockMsg);
                                 await clearPendingWithdraw(userId);
-                                const wrong2 = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, wrong2.message_id).catch(() => {}), 5000);
+                                resolve();
                                 return;
                             }
-                            await resetWithdrawPinFailures(userId);
-                            await finalizeWithdrawAfterPin(uR);
+                            const wrongMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongMsg.message_id).catch(() => {}), 5000);
+                            if (attemptsLeft <= 1) {
+                                await clearPendingWithdraw(userId);
+                                resolve();
+                                return;
+                            }
+                            await askOnce(attemptsLeft - 1);
+                            resolve();
                         }));
-                        return;
-                    }
-                    await resetWithdrawPinFailures(userId);
-                    await finalizeWithdrawAfterPin(u1);
-                }));
+                    });
+                };
+
+                await askOnce(PIN_VERIFICATION_ATTEMPTS);
             };
 
             if (userChain === "ethereum") {
@@ -3181,7 +3145,6 @@ bot.on("callback_query", async (callbackQuery) => {
         } else if (sel_action?.startsWith('wallets_withdraw_100_')) {
             const index = Number(sel_action.replace('wallets_withdraw_100_', ''));
             if (isNaN(index)) return;
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             cleanupUserTextHandler(userId);
             const userChain = await getUserChain(userId);
             const wallet = userChain === "ethereum" ? user.ethereumWallets?.[index] : user.wallets?.[index];
@@ -3299,7 +3262,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         } else if (sel_action?.startsWith('wallets_withdraw_')) {
             const index = Number(sel_action.split('wallets_withdraw_')[1])
             if (!isNaN(index)) {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 cleanupUserTextHandler(userId);
                 const userChain = await getUserChain(userId);
                 const withdrawMessage = userChain === "ethereum"
@@ -3567,7 +3529,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         }
 
         if (sel_action === "wallets_withdraw_cancel") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             cleanupUserTextHandler(userId);
             await clearPendingWithdraw(userId);
             await safeDeleteMessage(bot, chatId, messageId);
@@ -3646,66 +3607,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 });
                 return;
             }
-            const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-            bot.once("text", createUserTextHandler(userId, async (reply) => {
-                const pin = (reply.text || "").trim();
-                setTimeout(() => {
-                    bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
-                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                }, 5000);
-                const u = await User.findOne({ userId });
-                if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                    const wrongMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                    setTimeout(() => bot.deleteMessage(chatId, wrongMsg.message_id).catch(() => {}), 5000);
-                    const retryMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-                    bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
-                        const pinRetry = (replyRetry.text || "").trim();
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, retryMsg.message_id).catch(() => {});
-                            bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
-                        }, 5000);
-                        const uR = await User.findOne({ userId });
-                        if (!uR || !verifyPin(pinRetry, (uR as any).pinHash || "", (uR as any).pinSalt || "")) {
-                            const wrongMsg2 = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, wrongMsg2.message_id).catch(() => {}), 5000);
-                            sendSettingsMessageWithImage(bot, chatId, userId);
-                            return;
-                        }
-                        const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                        bot.once("text", createUserTextHandler(userId, async (reply2) => {
-                            const newPin = (reply2.text || "").trim();
-                            setTimeout(() => {
-                                bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
-                                bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
-                            }, 5000);
-                            try {
-                                if (!/^\d{4,8}$/.test(newPin)) {
-                                    const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                                    setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                                    return;
-                                }
-                                const { hash, salt } = hashPin(newPin);
-                                const u2 = await User.findOne({ userId });
-                                if (!u2) return;
-                                (u2 as any).pinHash = hash;
-                                (u2 as any).pinSalt = salt;
-                                await u2.save();
-                                const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
-                                const userChain = await getUserChain(userId);
-                                if (userChain === "ethereum") {
-                                    sendPrivateKeyEthereumWalletMessageWithImage(bot, chatId, userId);
-                                } else {
-                                    sendPrivateKeyWalletMessageWithImage(bot, chatId, userId);
-                                }
-                            } catch (err: any) {
-                                const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                            }
-                        }));
-                    }));
-                    return;
-                }
+            const promptNewPinAfterWalletVerify = async () => {
                 const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
                 bot.once("text", createUserTextHandler(userId, async (reply2) => {
                     const newPin = (reply2.text || "").trim();
@@ -3738,7 +3640,37 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
                     }
                 }));
-            }));
+            };
+
+            const askCurrentPinForWalletChange = async (attemptsLeft: number): Promise<void> => {
+                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+                await new Promise<void>((resolve) => {
+                    bot.once("text", createUserTextHandler(userId, async (reply) => {
+                        const pin = (reply.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                        }, 5000);
+                        const u = await User.findOne({ userId });
+                        if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                            const wrongMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongMsg.message_id).catch(() => {}), 5000);
+                            if (attemptsLeft <= 1) {
+                                sendSettingsMessageWithImage(bot, chatId, userId);
+                                resolve();
+                                return;
+                            }
+                            await askCurrentPinForWalletChange(attemptsLeft - 1);
+                            resolve();
+                            return;
+                        }
+                        await promptNewPinAfterWalletVerify();
+                        resolve();
+                    }));
+                });
+            };
+
+            void askCurrentPinForWalletChange(PIN_VERIFICATION_ATTEMPTS);
             return;
         }
 
@@ -3782,126 +3714,96 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             (user as any).pendingExportChain = userChain;
             await user.save();
 
-            const exportPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterPinToExport", userId), { reply_markup: { force_reply: true } });
-            bot.once("text", createUserTextHandler(userId, async (reply) => {
-                const pin = (reply.text || "").trim();
-                setTimeout(() => {
-                    bot.deleteMessage(chatId, exportPinPromptMsg.message_id).catch(() => {});
-                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                }, 5000);
-                const u = await User.findOne({ userId });
-                if (!u || (u as any).pendingPinAction !== "export" || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                    const wrongExportMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                    setTimeout(() => bot.deleteMessage(chatId, wrongExportMsg.message_id).catch(() => {}), 5000);
-                    const retryExportMsg = await bot.sendMessage(chatId, await t("pin.enterPinToExport", userId), { reply_markup: { force_reply: true } });
-                    bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
-                        const pinRetry = (replyRetry.text || "").trim();
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, retryExportMsg.message_id).catch(() => {});
-                            bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
-                        }, 5000);
-                        const uRetry = await User.findOne({ userId });
-                        if (!uRetry || (uRetry as any).pendingPinAction !== "export" || !verifyPin(pinRetry, (uRetry as any).pinHash || "", (uRetry as any).pinSalt || "")) {
-                            (uRetry as any).pendingPinAction = "";
-                            (uRetry as any).pendingExportWalletIndex = -1;
-                            (uRetry as any).pendingExportChain = "";
-                            await uRetry?.save();
-                            const wrongRetryMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, wrongRetryMsg.message_id).catch(() => {}), 5000);
-                            sendSettingsMessageWithImage(bot, chatId, userId);
-                            return;
-                        }
-                        const idx = (uRetry as any).pendingExportWalletIndex as number;
-                        const chain = (uRetry as any).pendingExportChain as string;
-                        (uRetry as any).pendingPinAction = "";
-                        (uRetry as any).pendingExportWalletIndex = -1;
-                        (uRetry as any).pendingExportChain = "";
-                        await uRetry.save();
-                        let wallet = chain === "ethereum" ? uRetry.ethereumWallets?.[idx] : uRetry.wallets?.[idx];
-                        if (!wallet) {
-                            await bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
-                            return;
-                        }
-                        const { secretKey, publicKey, label } = wallet;
-                        let decrypted: string;
-                        try {
-                            decrypted = decryptSecretKey(secretKey);
-                        } catch (error: any) {
-                            await bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed.'}`);
-                            return;
-                        }
-                        if (!decrypted || !publicKey) {
-                            await bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)}`);
-                            return;
-                        }
-                        const imagePath = "./src/assets/privateKey.jpg";
-                        const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                        const scanUrl = chain === "ethereum" ? `https://etherscan.io/address/${publicKey}` : `https://solscan.io/account/${publicKey}`;
-                        const p4 = await t("privateKey.p4", userId);
-                        await bot.sendPhoto(chatId, imagePath, {
-                            caption:
-                                `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
-                                `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
-                                `${esc(await t("privateKey.p3", userId))}\n${esc(await t("privateKey.promptReveal", userId))}\n\n` +
-                                `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
-                                `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
-                            parse_mode: "HTML",
-                            reply_markup: {
-                                inline_keyboard: [[{ text: `${await t("privateKey.revealKey", userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
-                            },
-                        });
-                    }));
+            const sendExportPrivateKeyPhotoAfterVerify = async (uVerified: any) => {
+                const idx = (uVerified as any).pendingExportWalletIndex as number;
+                const chain = (uVerified as any).pendingExportChain as string;
+                (uVerified as any).pendingPinAction = "";
+                (uVerified as any).pendingExportWalletIndex = -1;
+                (uVerified as any).pendingExportChain = "";
+                await uVerified.save();
+
+                let wallet;
+                if (chain === "ethereum") {
+                    wallet = uVerified.ethereumWallets?.[idx];
+                } else {
+                    wallet = uVerified.wallets?.[idx];
+                }
+                if (!wallet) {
+                    await bot.sendMessage(chatId, `${await t("errors.walletNotFound", userId)}`);
                     return;
                 }
-                    const idx = (u as any).pendingExportWalletIndex as number;
-                    const chain = (u as any).pendingExportChain as string;
-                    (u as any).pendingPinAction = "";
-                    (u as any).pendingExportWalletIndex = -1;
-                    (u as any).pendingExportChain = "";
-                    await u.save();
 
-                    let wallet;
-                    if (chain === "ethereum") {
-                        wallet = u.ethereumWallets?.[idx];
-                    } else {
-                        wallet = u.wallets?.[idx];
-                    }
-                    if (!wallet) {
-                        await bot.sendMessage(chatId, `${await t('errors.walletNotFound', userId)}`);
-                        return;
-                    }
+                const { secretKey, publicKey, label } = wallet;
+                let decrypted: string;
+                try {
+                    decrypted = decryptSecretKey(secretKey);
+                } catch (error: any) {
+                    console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${publicKey}:`, error.message);
+                    await bot.sendMessage(
+                        chatId,
+                        `${await t("errors.invalidsecretkey", userId)} - ${(await t("errors.decryptionFailed", userId)) || "Decryption failed. Please re-import this wallet."}`,
+                    );
+                    return;
+                }
+                if (!decrypted || !publicKey) {
+                    await bot.sendMessage(chatId, `${await t("errors.invalidsecretkey", userId)}`);
+                    return;
+                }
 
-                    const { secretKey, publicKey, label } = wallet;
-                    let decrypted: string;
-                    try {
-                        decrypted = decryptSecretKey(secretKey);
-                    } catch (error: any) {
-                        console.error(`[${new Date().toLocaleString()}] ❌ Failed to decrypt wallet secret key for wallet ${publicKey}:`, error.message);
-                        await bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)} - ${await t('errors.decryptionFailed', userId) || 'Decryption failed. Please re-import this wallet.'}`);
-                        return;
-                    }
-                    if (!decrypted || !publicKey) {
-                        await bot.sendMessage(chatId, `${await t('errors.invalidsecretkey', userId)}`);
-                        return;
-                    }
+                const imagePath = "./src/assets/privateKey.jpg";
+                const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                const scanUrl = chain === "ethereum" ? `https://etherscan.io/address/${publicKey}` : `https://solscan.io/account/${publicKey}`;
+                const p4 = await t("privateKey.p4", userId);
+                await bot.sendPhoto(chatId, imagePath, {
+                    caption:
+                        `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
+                        `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
+                        `${esc(await t("privateKey.p3", userId))}\n${esc(await t("privateKey.promptReveal", userId))}\n\n` +
+                        `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
+                        `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
+                    parse_mode: "HTML",
+                    reply_markup: {
+                        inline_keyboard: [[{ text: `${await t("privateKey.revealKey", userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
+                    },
+                });
+            };
 
-                    const imagePath = "./src/assets/privateKey.jpg";
-                    const esc = (s: string) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-                    const scanUrl = chain === "ethereum" ? `https://etherscan.io/address/${publicKey}` : `https://solscan.io/account/${publicKey}`;
-                    const p4 = await t("privateKey.p4", userId);
-                    await bot.sendPhoto(chatId, imagePath, {
-                        caption:
-                            `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
-                            `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
-                            `${esc(await t("privateKey.p3", userId))}\n${esc(await t("privateKey.promptReveal", userId))}\n\n` +
-                            `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
-                            `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
-                        parse_mode: "HTML",
-                        reply_markup: {
-                            inline_keyboard: [[{ text: `${await t("privateKey.revealKey", userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
-                        },
-                    });
-                }));
+            const askExportPin = async (attemptsLeft: number): Promise<void> => {
+                const exportPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterPinToExport", userId), { reply_markup: { force_reply: true } });
+                await new Promise<void>((resolve) => {
+                    bot.once("text", createUserTextHandler(userId, async (reply) => {
+                        const pin = (reply.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, exportPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                        }, 5000);
+                        const u = await User.findOne({ userId });
+                        if (!u || (u as any).pendingPinAction !== "export" || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                            const wrongExportMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongExportMsg.message_id).catch(() => {}), 5000);
+                            if (attemptsLeft <= 1) {
+                                const uFail = await User.findOne({ userId });
+                                if (uFail) {
+                                    (uFail as any).pendingPinAction = "";
+                                    (uFail as any).pendingExportWalletIndex = -1;
+                                    (uFail as any).pendingExportChain = "";
+                                    await uFail.save();
+                                }
+                                sendSettingsMessageWithImage(bot, chatId, userId);
+                                resolve();
+                                return;
+                            }
+                            await askExportPin(attemptsLeft - 1);
+                            resolve();
+                            return;
+                        }
+                        await sendExportPrivateKeyPhotoAfterVerify(u);
+                        resolve();
+                    }));
+                });
+            };
+
+            void askExportPin(PIN_VERIFICATION_ATTEMPTS);
             return;
         }
 
@@ -3971,6 +3873,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     inline_keyboard: [[{ text: `${await t("privateKey.deleteMessage", userId)}`, callback_data: "wallets_export_confirm_delete" }]],
                 },
             });
+            return;
+        }
+
+        if (sel_action === "private_keys_file_delete") {
+            await safeDeleteMessage(bot, chatId, messageId);
             return;
         }
 
@@ -4106,7 +4013,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "bundled_wallets") {
             const user = await User.findOne({ userId });
             if (user && user.chain === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Bundle functions are only available for Solana" });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Bundle functions are only available for Solana");
                 return;
             }
             await bundleWalletMenu.showBundleWalletMenu(User, callbackQuery, cleanupUserTextHandler, createUserTextHandler);
@@ -4135,9 +4042,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "bundle_fund_cancel") {
             delete fundBundleWalletModule.fundState[userId];
-            await bot.answerCallbackQuery(callbackQueryId, {
-                text: await t("bundleWallets.fundingCancelledToast", userId),
-            }).catch(() => {});
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("bundleWallets.fundingCancelledToast", userId));
             await bot.deleteMessage(chatId, messageId).catch(() => {});
             await bot.sendMessage(chatId, `❌ ${await t("bundleWallets.fundingCancelled", userId)}`, {
                 parse_mode: "Markdown",
@@ -4147,7 +4052,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "bundle_fund_back") {
             delete fundBundleWalletModule.fundState[userId];
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             await bundleWalletMenu.showBundleWalletMenu(User, callbackQuery, cleanupUserTextHandler, createUserTextHandler);
             return;
         }
@@ -4294,7 +4198,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         }
 
         if (sel_action == "positions") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             const userChain = await getUserChain(userId);
@@ -4338,10 +4241,13 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             console.log(`User ${userId} refresh count: ${spamData.count}`);
 
             if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQuery.id,
+                    `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    true,
+                );
                 return;
             }
 
@@ -4377,10 +4283,13 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             console.log(`User ${userId} refresh count: ${spamData.count}`);
 
             if (spamData.count >= SPAM_LIMIT) {
-                await bot.answerCallbackQuery(callbackQuery.id, {
-                    text: `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
-                    show_alert: true
-                });
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQuery.id,
+                    `${await t('messages.refreshwarning', userId)}\n${await t('messages.refreshLimit', userId)}`,
+                    true,
+                );
                 return;
             }
 
@@ -4585,13 +4494,9 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const page = Number(delMenuSol[2]);
             const pairs = await getActivePositionsForDeletionSolana(userId, current_wallet);
             if (!pairs.length) {
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: await t("positions.noPositionsFound", userId),
-                    show_alert: true,
-                }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("positions.noPositionsFound", userId), true);
                 return;
             }
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const u = await User.findOne({ userId });
             const rows = pairs.map((p, idx) => [
                 {
@@ -4628,7 +4533,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         const delCancelSol = sel_action?.match(/^positions_delete_cancel_sol_(\d+)_(\d+)$/);
         if (delCancelSol) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const current_wallet = Number(delCancelSol[1]);
             const page = Number(delCancelSol[2]);
             const u = await User.findOne({ userId });
@@ -4645,7 +4549,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const pairs = await getActivePositionsForDeletionSolana(userId, current_wallet);
             const target = pairs[tokenIdx];
             if (!target) {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Invalid", show_alert: true }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Invalid", true);
                 return;
             }
             const fresh = await User.findOne({ userId });
@@ -4658,9 +4562,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 { user_id: userId, wallet: w.publicKey, token_mint: target.mint, status: "Pending" },
                 { $set: { status: "Failed" } },
             );
-            await bot.answerCallbackQuery(callbackQueryId, {
-                text: await t("positions.deletePositionDone", userId),
-            }).catch(() => {});
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("positions.deletePositionDone", userId));
             const lab = w.label ?? "Wallet";
             await editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, lab);
             return;
@@ -4672,13 +4574,9 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const page = Number(delMenuEth[2]);
             const pairs = await getActivePositionsForDeletionEthereum(userId, current_wallet);
             if (!pairs.length) {
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: await t("positions.noPositionsFound", userId),
-                    show_alert: true,
-                }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("positions.noPositionsFound", userId), true);
                 return;
             }
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const rows = pairs.map((p, idx) => [
                 {
                     text: `🗑️ ${p.label}`,
@@ -4714,7 +4612,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         const delCancelEth = sel_action?.match(/^positions_delete_cancel_eth_(\d+)_(\d+)$/);
         if (delCancelEth) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const current_wallet = Number(delCancelEth[1]);
             const page = Number(delCancelEth[2]);
             const u = await User.findOne({ userId });
@@ -4731,7 +4628,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const pairs = await getActivePositionsForDeletionEthereum(userId, current_wallet);
             const target = pairs[tokenIdx];
             if (!target) {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Invalid", show_alert: true }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Invalid", true);
                 return;
             }
             const fresh = await User.findOne({ userId });
@@ -4754,9 +4651,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 },
                 { $set: { status: "Failed" } },
             );
-            await bot.answerCallbackQuery(callbackQueryId, {
-                text: await t("positions.deletePositionDone", userId),
-            }).catch(() => {});
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("positions.deletePositionDone", userId));
             const lab = w.label ?? "Wallet";
             await editEthereumPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, lab);
             return;
@@ -4764,7 +4659,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         // Setting
         if (sel_action === "settings") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => { });
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
             sendSettingsMessageWithImage(bot, chatId, userId, messageId);
@@ -4873,9 +4767,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     user.settings.option_gas_eth = selectedGas;
                     await user.save();
 
-                    await bot.answerCallbackQuery(callbackQuery.id, {
-                        text: `⛽ Gas set to ${selectedGas} Gwei`,
-                    });
+                    await notifyCallbackQuery(bot, chatId, callbackQuery.id, `⛽ Gas set to ${selectedGas} Gwei`);
 
                     const refreshMessageId = user.manual_message_id || messageId;
                     if (refreshMessageId) {
@@ -4888,9 +4780,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
                                 await editBuyMessageWithAddress(bot, chatId, userId, refreshMessageId, ethTokenAddress);
                             } else {
-                                await bot.answerCallbackQuery(callbackQuery.id, {
-                                    text: "❌ Could not find Ethereum token address in message",
-                                });
+                                await notifyCallbackQuery(bot, chatId, callbackQuery.id, "❌ Could not find Ethereum token address in message");
                             }
                         } catch (error) {
                             console.error('Error refreshing buy menu:', error);
@@ -4911,9 +4801,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     user.settings.option_gas_eth = selectedGas;
                     await user.save();
 
-                    await bot.answerCallbackQuery(callbackQuery.id, {
-                        text: `⛽ Gas set to ${selectedGas} Gwei`,
-                    });
+                    await notifyCallbackQuery(bot, chatId, callbackQuery.id, `⛽ Gas set to ${selectedGas} Gwei`);
 
                     const refreshMessageId = user.manual_message_id || messageId;
                     if (refreshMessageId) {
@@ -4926,9 +4814,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             if (ethTokenAddress && isEvmAddress(ethTokenAddress)) {
                                 await editEthereumSellMessageWithAddress(bot, chatId, userId, refreshMessageId, ethTokenAddress);
                             } else {
-                                await bot.answerCallbackQuery(callbackQuery.id, {
-                                    text: "❌ Could not find Ethereum token address in message",
-                                });
+                                await notifyCallbackQuery(bot, chatId, callbackQuery.id, "❌ Could not find Ethereum token address in message");
                             }
                         } catch (error) {
                             console.error('Error refreshing sell menu:', error);
@@ -5402,61 +5288,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 });
                 return;
             }
-            const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-            bot.once("text", createUserTextHandler(userId, async (reply) => {
-                const pin = (reply.text || "").trim();
-                setTimeout(() => {
-                    bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
-                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                }, 5000);
-                const u = await User.findOne({ userId });
-                if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                    const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                    setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
-                    const retryMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-                    bot.once("text", createUserTextHandler(userId, async (replyRetry) => {
-                        const pinRetry = (replyRetry.text || "").trim();
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, retryMsg.message_id).catch(() => {});
-                            bot.deleteMessage(chatId, replyRetry.message_id).catch(() => {});
-                        }, 5000);
-                        const uR = await User.findOne({ userId });
-                        if (!uR || !verifyPin(pinRetry, (uR as any).pinHash || "", (uR as any).pinSalt || "")) {
-                            const wrongPinMsg2 = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg2.message_id).catch(() => {}), 5000);
-                            sendSettingsMessageWithImage(bot, chatId, userId);
-                            return;
-                        }
-                        const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                        bot.once("text", createUserTextHandler(userId, async (reply2) => {
-                            const newPin = (reply2.text || "").trim();
-                            setTimeout(() => {
-                                bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
-                                bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
-                            }, 5000);
-                            try {
-                                if (!/^\d{4,8}$/.test(newPin)) {
-                                    const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                                    setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                                    return;
-                                }
-                                const { hash, salt } = hashPin(newPin);
-                                const u2 = await User.findOne({ userId });
-                                if (!u2) return;
-                                (u2 as any).pinHash = hash;
-                                (u2 as any).pinSalt = salt;
-                                await u2.save();
-                                const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
-                                sendSettingsMessageWithImage(bot, chatId, userId);
-                            } catch (err: any) {
-                                const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                                setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                            }
-                        }));
-                    }));
-                    return;
-                }
+            const promptNewPinAfterSettingsVerify = async () => {
                 const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
                 bot.once("text", createUserTextHandler(userId, async (reply2) => {
                     const newPin = (reply2.text || "").trim();
@@ -5484,7 +5316,37 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
                     }
                 }));
-            }));
+            };
+
+            const askCurrentPinForSettingsChange = async (attemptsLeft: number): Promise<void> => {
+                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+                await new Promise<void>((resolve) => {
+                    bot.once("text", createUserTextHandler(userId, async (reply) => {
+                        const pin = (reply.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                        }, 5000);
+                        const u = await User.findOne({ userId });
+                        if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                            const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
+                            if (attemptsLeft <= 1) {
+                                sendSettingsMessageWithImage(bot, chatId, userId);
+                                resolve();
+                                return;
+                            }
+                            await askCurrentPinForSettingsChange(attemptsLeft - 1);
+                            resolve();
+                            return;
+                        }
+                        await promptNewPinAfterSettingsVerify();
+                        resolve();
+                    }));
+                });
+            };
+
+            void askCurrentPinForSettingsChange(PIN_VERIFICATION_ATTEMPTS);
             return;
         }
 
@@ -5497,26 +5359,39 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 sendSettingsMessageWithImage(bot, chatId, userId);
                 return;
             }
-            const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-            bot.once("text", createUserTextHandler(userId, async (reply) => {
-                const pin = (reply.text || "").trim();
-                setTimeout(() => {
-                    bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
-                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                }, 5000);
-                const u = await User.findOne({ userId });
-                if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                    const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                    setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
-                    sendSettingsMessageWithImage(bot, chatId, userId);
-                    return;
-                }
-                (u as any).pinHash = "";
-                (u as any).pinSalt = "";
-                await u.save();
-                await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
-                sendSettingsMessageWithImage(bot, chatId, userId);
-            }));
+            const askCurrentPinForRemove = async (attemptsLeft: number): Promise<void> => {
+                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+                await new Promise<void>((resolve) => {
+                    bot.once("text", createUserTextHandler(userId, async (reply) => {
+                        const pin = (reply.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                        }, 5000);
+                        const u = await User.findOne({ userId });
+                        if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                            const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
+                            if (attemptsLeft <= 1) {
+                                sendSettingsMessageWithImage(bot, chatId, userId);
+                                resolve();
+                                return;
+                            }
+                            await askCurrentPinForRemove(attemptsLeft - 1);
+                            resolve();
+                            return;
+                        }
+                        (u as any).pinHash = "";
+                        (u as any).pinSalt = "";
+                        await u.save();
+                        await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
+                        sendSettingsMessageWithImage(bot, chatId, userId);
+                        resolve();
+                    }));
+                });
+            };
+
+            void askCurrentPinForRemove(PIN_VERIFICATION_ATTEMPTS);
             return;
         }
 
@@ -5685,13 +5560,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 );
             }
             await user.save();
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             await editAutoSellMessage(bot, chatId, userId, messageId);
             return;
         }
 
         if (sel_action === "autoSell_no_activity_period") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const sentMessage = await bot.sendMessage(chatId, await t("autoSell.noActivityPrompt", userId));
             bot.once("text", createUserTextHandler(userId, async (reply) => {
                 const raw = (reply.text || "").trim();
@@ -5724,7 +5597,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const { getUserChain } = await import("./utils/chain");
             const userChain = await getUserChain(userId);
             if (userChain === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 return;
             }
             user.settings.auto_sell = user.settings.auto_sell ?? {};
@@ -5732,7 +5604,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 user.settings.auto_sell?.sellOnDevSellEnabled_solana ?? false
             );
             await user.save();
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             await editAutoSellMessage(bot, chatId, userId, messageId);
             return;
         }
@@ -5740,10 +5611,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "autoSell_dev_sell_min_sol") {
             const { getUserChain } = await import("./utils/chain");
             if ((await getUserChain(userId)) === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 return;
             }
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const sentMessage = await bot.sendMessage(chatId, await t("autoSell.devSellPromptMinSol", userId));
             bot.once("text", createUserTextHandler(userId, async (reply) => {
                 const raw = (reply.text || "").trim().replace(",", ".");
@@ -5768,10 +5637,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "autoSell_dev_sell_supply_pct") {
             const { getUserChain } = await import("./utils/chain");
             if ((await getUserChain(userId)) === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 return;
             }
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const sentMessage = await bot.sendMessage(chatId, await t("autoSell.devSellPromptSupply", userId));
             bot.once("text", createUserTextHandler(userId, async (reply) => {
                 const raw = (reply.text || "").trim().replace(",", ".");
@@ -5796,10 +5663,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "autoSell_dev_sell_position_pct") {
             const { getUserChain } = await import("./utils/chain");
             if ((await getUserChain(userId)) === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 return;
             }
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const sentMessage = await bot.sendMessage(chatId, await t("autoSell.devSellPromptPosition", userId));
             bot.once("text", createUserTextHandler(userId, async (reply) => {
                 const raw = (reply.text || "").trim().replace(",", ".");
@@ -5931,13 +5796,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             }
         }
         else if (sel_action === "authenticate") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             await sendAuthenticateVerifyMessage(bot, chatId, userId);
             return;
         }
 
         if (sel_action === "authenticate_cancel") {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             if (messageId) await bot.deleteMessage(chatId, messageId).catch(() => {});
             return;
         }
@@ -5945,7 +5808,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "sniper") {
             const userCheck = await User.findOne({ userId });
             if (userCheck && userCheck.chain === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Sniper functions are only available for Solana" });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Sniper functions are only available for Solana");
                 return;
             }
             safeDeleteMessage(bot, chatId, messageId);
@@ -5978,7 +5841,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "copyTrade") {
             const userCheck = await User.findOne({ userId });
             if (userCheck && userCheck.chain === "ethereum") {
-                await bot.answerCallbackQuery(callbackQueryId, { text: await t("copyTrade.title", userId) + " is only available for Solana." });
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("copyTrade.title", userId) + " is only available for Solana.");
                 return;
             }
             await safeDeleteMessage(bot, chatId, messageId);
@@ -5997,9 +5860,12 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 await u.save();
                 await runCopyTradeDetection();
                 await editCopyTradeToMain(bot, chatId, userId, messageId);
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: (u.copyTrade as any)?.enabled ? (await t("copyTrade.enabledOn", userId)) : (await t("copyTrade.enabledOff", userId)),
-                }).catch(() => {});
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQueryId,
+                    (u.copyTrade as any)?.enabled ? (await t("copyTrade.enabledOn", userId)) : (await t("copyTrade.enabledOff", userId)),
+                );
             }
             return;
         }
@@ -6011,9 +5877,12 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 await u.save();
                 await runCopyTradeDetection();
                 await editCopyTradeToMain(bot, chatId, userId, messageId);
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: (u.copyTrade as any)?.mode === "auto" ? (await t("copyTrade.modeAuto", userId)) : (await t("copyTrade.modeManual", userId)),
-                }).catch(() => {});
+                await notifyCallbackQuery(
+                    bot,
+                    chatId,
+                    callbackQueryId,
+                    (u.copyTrade as any)?.mode === "auto" ? (await t("copyTrade.modeAuto", userId)) : (await t("copyTrade.modeManual", userId)),
+                );
             }
             return;
         }
@@ -6026,11 +5895,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             if (u) {
                 const current = (u.copyTrade as any)?.tpSlEnabled !== false;
                 await User.updateOne({ userId }, { $set: { "copyTrade.tpSlEnabled": !current } });
-                await bot.answerCallbackQuery(callbackQueryId, {
-                    text: !current ? await t("copyTrade.tpSlOn", userId) : await t("copyTrade.tpSlOff", userId),
-                }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, !current ? await t("copyTrade.tpSlOn", userId) : await t("copyTrade.tpSlOff", userId));
             } else {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             }
             await editCopyTradeToTpSlMenu(bot, chatId, userId, messageId);
             return;
@@ -6119,12 +5985,11 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const kind = cwzMatch[2];
             const uWz = await User.findOne({ userId });
             if (!uWz?.copyTrade?.monitoredWallets?.[wzi]) {
-                await bot.answerCallbackQuery(callbackQueryId, { text: "Invalid wallet" }).catch(() => {});
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, "Invalid wallet");
                 return;
             }
             if (kind === "open") {
                 await editCopyTradeToWalletSizingMenu(bot, chatId, userId, messageId, wzi);
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 return;
             }
             if (kind === "follow") {
@@ -6132,7 +5997,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 const next = w.copyFollowMode === "buy_sell" ? "buy_only" : "buy_sell";
                 await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.copyFollowMode`]: next } });
                 await runCopyTradeDetection();
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 await editCopyTradeWalletSettings(bot, chatId, userId, messageId, wzi);
                 return;
             }
@@ -6144,7 +6008,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 const mi = Math.max(0, order.indexOf(cur));
                 const next = order[(mi + 1) % order.length];
                 await User.updateOne({ userId }, { $set: { [`copyTrade.monitoredWallets.${wzi}.sizingMode`]: next } });
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 await editCopyTradeToWalletSizingMenu(bot, chatId, userId, messageId, wzi);
                 return;
             }
@@ -6160,7 +6023,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             };
             const numSpec = cwzNumFields[kind];
             if (numSpec) {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 await promptCopyTradeWalletSizingField(bot, chatId, userId, messageId, wzi, numSpec.prompt);
                 bot.once("text", createUserTextHandler(userId, async (reply) => {
                     setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
@@ -6176,7 +6038,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 return;
             }
             if (kind === "bl") {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 await promptCopyTradeWalletSizingField(bot, chatId, userId, messageId, wzi, "copyTrade.enterBlacklist");
                 bot.once("text", createUserTextHandler(userId, async (reply) => {
                     setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
@@ -6194,7 +6055,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 return;
             }
             if (kind === "wl") {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 await promptCopyTradeWalletSizingField(bot, chatId, userId, messageId, wzi, "copyTrade.enterWhitelist");
                 bot.once("text", createUserTextHandler(userId, async (reply) => {
                     setTimeout(() => safeDeleteMessage(bot, chatId, reply.message_id).catch(() => {}), 5000);
@@ -6213,7 +6073,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             }
         }
         if (sel_action?.startsWith("copyTrade_buy_")) {
-            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
             const rest = sel_action.replace("copyTrade_buy_", "");
             const lastUnderscore = rest.lastIndexOf("_");
             if (lastUnderscore === -1) {
@@ -6579,7 +6438,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const user = await User.findOne({ userId });
             const currentCount = user?.copyTrade?.monitoredWallets?.length ?? 0;
             if (currentCount >= limit) {
-                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
                 const errMsg = `${await t("errors.copyTradeWalletLimitReached", userId)} ${limit}.`;
                 await bot.sendMessage(chatId, errMsg).catch(() => {});
                 return;
@@ -7784,15 +7642,19 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
     } catch (error: any) {
         console.error("Error handling callback query:", error);
-        // Answer the callback query to prevent "loading" state
         try {
             const errorUserId = callbackQuery.from?.id || 0;
-            await bot.answerCallbackQuery(callbackQuery.id, {
-                text: `${await t('errors.errorOccurred', errorUserId)}`,
-                show_alert: false
-            });
-        } catch (answerError) {
-            // Ignore errors when answering callback query
+            const errChatId = callbackQuery.message?.chat.id;
+            const msg = `${await t('errors.errorOccurred', errorUserId)}`;
+            const ok = await bot
+                .answerCallbackQuery(callbackQuery.id, { text: msg, show_alert: false })
+                .then(() => true)
+                .catch(() => false);
+            if (!ok && errChatId) {
+                await bot.sendMessage(errChatId, msg).catch(() => {});
+            }
+        } catch {
+            // ignore
         }
     }
 });
@@ -8230,7 +8092,7 @@ const main = async () => {
         updateSolanaPrice();
     }, 60000);
 
-    const AUTO_SELL_CHECK_INTERVAL = 5000;
+    const AUTO_SELL_CHECK_INTERVAL = Math.max(3000, Number(process.env.AUTO_SELL_CHECK_INTERVAL_MS ?? "15000"));
 
     setInterval(() => {
         checkAndAutoSell();
@@ -8239,7 +8101,9 @@ const main = async () => {
     setInterval(async () => {
         try {
             const users = await User.find({ "sniper.is_snipping": true });
-            console.log(`👥 Found ${users.length} active snipers.`);
+            if (isDevelopmentMode()) {
+                console.log(`👥 Found ${users.length} active snipers.`);
+            }
             for (const user of users) {
                 if (user.userId != null && typeof user.userId === 'number') {
                     await runSniper(user.userId);

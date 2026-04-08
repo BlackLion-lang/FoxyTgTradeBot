@@ -8,6 +8,11 @@ import { PublicKey } from "@solana/web3.js";
 
 dotenv.config();
 
+/** Long-poll Telegram less often to reduce HTTPS traffic; override with TELEGRAM_POLLING_INTERVAL_MS (ms, min 100). */
+const TELEGRAM_POLL_INTERVAL_MS = Math.max(100, Number(process.env.TELEGRAM_POLLING_INTERVAL_MS ?? "1000"));
+/** getUpdates timeout in seconds (Telegram allows up to ~50); higher = fewer reconnects on slow links. */
+const TELEGRAM_POLL_TIMEOUT_SEC = Math.max(1, Number(process.env.TELEGRAM_POLLING_TIMEOUT_SEC ?? "25"));
+
 export const BINDING_PORT = 5061;
 export const TELEGRAM_BOT_PORT = 5062;
 export const RPC_URL = process.env.RPC_ENDPOINT || '';
@@ -80,10 +85,10 @@ export const getBot = (): TelegramBot => {
   if (!botInstance) {
     botInstance = new TelegramBot(TELEGRAM_BOT_TOKEN || '', {
       polling: {
-        interval: 300,
+        interval: TELEGRAM_POLL_INTERVAL_MS,
         autoStart: true,
         params: {
-          timeout: 10,
+          timeout: TELEGRAM_POLL_TIMEOUT_SEC,
         },
       },
     });

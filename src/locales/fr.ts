@@ -611,8 +611,11 @@ export const fr: Translations = {
         withdraw100: "Retirer la totalité - 100%",
         enterPin: "Saisissez votre code PIN pour continuer.",
         sendNow: "Envoyer maintenant",
-        finalReview: "Vérification finale — vérifiez l'adresse de destination",
+        finalReview: "💸 Vérification finale — vérifiez l'adresse de destination",
         lockedUntil: "PIN verrouillé. Réessayez après :",
+        pinLockoutExceeded:
+            "Vous avez essayé {attempts} fois. Veuillez attendre {minutes} minutes avant de réessayer.",
+        pinLockoutStillLocked: "Le PIN est verrouillé. Réessayez dans environ {minutes} minute(s).",
         cooldown: "Ce wallet est récent. Veuillez patienter avant de retirer.",
         dailyLimitExceeded: "Limite journalière quotidienne (wallets récents) dépassée.",
         sessionExpired: "Cette demande a expiré. Recommencez depuis Portefeuilles.",

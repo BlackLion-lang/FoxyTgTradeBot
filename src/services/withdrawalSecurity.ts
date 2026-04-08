@@ -144,19 +144,29 @@ export async function applyWithdrawDailyAfterSuccess(
     );
 }
 
+export type RegisterWithdrawPinFailureResult = {
+    lockedNow: boolean;
+    /** Failed-attempt count after this increment (equals threshold when lockout applies). */
+    attemptsThatTriggeredLockout: number;
+    /** Lockout duration from admin settings (minutes). */
+    lockoutMinutes: number;
+};
+
 export async function registerWithdrawPinFailure(
     userId: number,
     settings: { withdrawPinLockoutAttempts?: number; withdrawPinLockoutMinutes?: number },
-): Promise<void> {
+): Promise<RegisterWithdrawPinFailureResult | null> {
     const maxAttempts = settings.withdrawPinLockoutAttempts ?? 5;
     const lockMins = settings.withdrawPinLockoutMinutes ?? 15;
     const u = await User.findOne({ userId });
-    if (!u) return;
+    if (!u) return null;
     const n = (Number((u as any).withdrawPinFailures) || 0) + 1;
     const update: Record<string, unknown> = { withdrawPinFailures: n };
+    let lockedNow = false;
     if (maxAttempts > 0 && n >= maxAttempts && lockMins > 0) {
         update.withdrawPinLockedUntil = new Date(Date.now() + lockMins * 60_000);
         update.withdrawPinFailures = 0;
+        lockedNow = true;
         await SecurityLog.create({
             userId,
             type: "withdraw_lockout",
@@ -164,6 +174,7 @@ export async function registerWithdrawPinFailure(
         });
     }
     await User.updateOne({ userId }, { $set: update });
+    return { lockedNow, attemptsThatTriggeredLockout: n, lockoutMinutes: lockMins };
 }
 
 export async function resetWithdrawPinFailures(userId: number): Promise<void> {

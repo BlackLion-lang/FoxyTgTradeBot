@@ -55,12 +55,6 @@ export const handleSubscriptionAction = async ({
         return false;
     }
 
-    try {
-        await bot.answerCallbackQuery(callbackQueryId);
-    } catch (error) {
-        console.warn("Failed to answer subscribe callback:", error);
-    }
-
     if (action === "subscribe") {
         await sendSubscriptionOptions(bot, chatId, telegramId);
         return true;

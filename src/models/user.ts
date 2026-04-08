@@ -444,4 +444,6 @@ const userSchema = new mongoose.Schema(
     },
 );
 
+userSchema.index({ userId: 1 });
+
 export const User = mongoConnection.model("User", userSchema);

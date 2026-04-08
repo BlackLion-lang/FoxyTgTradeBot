@@ -595,6 +595,10 @@ export interface Translations {
         sendNow: string;
         finalReview: string;
         lockedUntil: string;
+        /** Placeholders: {attempts}, {minutes} — minutes from admin lockout setting. */
+        pinLockoutExceeded: string;
+        /** Placeholders: {minutes} — approximate minutes remaining until unlock. */
+        pinLockoutStillLocked: string;
         cooldown: string;
         dailyLimitExceeded: string;
         sessionExpired: string;
