@@ -12,6 +12,9 @@ const limitOrderSchema = new mongoose.Schema(
         target_price1: { type: Number, required: true },
         target_price2: { type: Number, required: true },
         auto_sell_percent: { type: Number },
+        /** Last time DexScreener snapshot differed (price/volume/txns) — used for sell-on-no-activity. */
+        lastActivityAt: { type: Date },
+        lastActivityFingerprint: { type: String, default: "" },
         status: {
             type: String,
             enum: ["Pending", "Success", "Failed"],

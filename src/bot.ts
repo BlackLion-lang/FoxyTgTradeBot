@@ -1,5 +1,5 @@
+import "./utils/runtimeMode";
 import TelegramBot from "node-telegram-bot-api";
-import * as dotenv from "dotenv";
 import { CommandHandler } from "./commands";
 import {
     ComputeBudgetProgram,
@@ -83,7 +83,8 @@ import {
 } from "./messages/solana/wallets/withdraw";
 import { editSwitchWalletsMessage, sendSwitchWalletsMessage } from "./messages/solana/wallets/switch";
 import { editHelpMessage, sendHelpMessageWithImage } from "./messages/help";
-import { getPairByAddress, getPumpFunCoinInfo, getTokenInfo, getTokenPrice, setTokenPrice } from "./services/dexscreener";
+import { getPairByAddress, getPumpFunCoinInfo, getTokenInfo, getTokenPrice, pickBestDexPair, setTokenPrice } from "./services/dexscreener";
+import { clampInactivityMinutes, evaluateInactivityForOrder } from "./services/sellOnNoActivity";
 import {
     editBuyMessageWithAddress,
     getBuy,
@@ -110,7 +111,12 @@ import {
 import { swapToken } from "./services/jupiter";
 import { runSniper } from "./services/sniper";
 import { startCopyTradeDetectionLoop, runCopyTradeDetection } from "./services/copyTradeDetection";
-import { editPositionsMessage, sendPositionsMessageWithImage, getPositions } from './messages/solana/positions';
+import {
+    editPositionsMessage,
+    sendPositionsMessageWithImage,
+    getPositions,
+    getActivePositionsForDeletionSolana,
+} from "./messages/solana/positions";
 import { editSettingsMessage, sendSettingsMessage, sendSettingsMessageWithImage } from "./messages/solana/settings";
 import { TokenAmount } from "@raydium-io/raydium-sdk-v2";
 import { editFeeAutoMessage, editFeeAutoMessageEth, editFeeMessage, sendFeeAutoMessage, sendFeeMessage } from './messages/solana/settings/fee';
@@ -176,14 +182,17 @@ import { swapExactTokenForETHUsingUniswapV2_ } from "./services/ethereum/swap";
 import { getPairInfoWithTokenAddress } from "./services/ethereum/dexscreener";
 import { getEtherPrice } from "./services/ethereum/etherscan";
 import { getTokenBalancWithContract } from "./services/ethereum/contract";
-import { editEthereumPositionsMessage, sendEthereumPositionsMessageWithImage, getEthereumPositions } from "./messages/ethereum/positions";
+import {
+    editEthereumPositionsMessage,
+    sendEthereumPositionsMessageWithImage,
+    getEthereumPositions,
+    getActivePositionsForDeletionEthereum,
+} from "./messages/ethereum/positions";
 import { Token } from "./models/token";
 import { ethers } from "ethers";
 
 
 const userRefreshCounts = new Map(); // key: userId, value: { count: number, lastReset: timestamp }
-
-dotenv.config();
 
 interface UserLocalDataDictionary {
     [key: number]: {
@@ -843,7 +852,9 @@ bot.on("callback_query", async (callbackQuery) => {
 
         const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back",
             "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions",
-            "help", "sniper", "trending_coin", "referral_system", "authenticate", "wallets_withdraw_cancel"];
+            "help", "sniper", "trending_coin", "referral_system", "authenticate", "wallets_withdraw_cancel",
+            "bundle_fund_back", "autoSell_no_activity_period",
+            "autoSell_dev_sell_min_sol", "autoSell_dev_sell_supply_pct", "autoSell_dev_sell_position_pct"];
         if (navigationActions.includes(sel_action || "")) {
             cleanupUserTextHandler(userId);
         }
@@ -1763,7 +1774,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 const balance = await getBalance(publicKey);
                 user.wallets.push({
                     publicKey,
-                    secretKey,
+                    secretKey: encryptSecretKey(secretKey),
                     is_active_wallet: true,
                     balance: balance.toString(),
                     walletCreatedAt: new Date(),
@@ -3426,7 +3437,7 @@ ${await t('messages.fee', userId)}
 • ${await t('withdrawal.p8', userId)} : <code>${wallet.publicKey.slice(0, 4)}...${wallet.publicKey.slice(-4)} — ${wallet.label}</code>
 • ${await t('withdrawal.p9', userId)} : <code>${address}</code>
 
-• ${await t('withdrawal.p10', userId)} <code>${maxSendable} ${currencySymbol}</code>
+• ${await t('withdrawal.p10', userId)} <code>${amount} ${currencySymbol}</code>
 
 ${await t('withdrawal.p11', userId)}</strong>`, {
                                                     parse_mode: 'HTML',
@@ -3831,7 +3842,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             caption:
                                 `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
                                 `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
-                                `${esc(await t("privateKey.p3", userId))}\n<tg-spoiler>${esc(decrypted)}</tg-spoiler>\n\n` +
+                                `${esc(await t("privateKey.p3", userId))}\n${esc(await t("privateKey.promptReveal", userId))}\n\n` +
                                 `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
                                 `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
                             parse_mode: "HTML",
@@ -3882,7 +3893,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         caption:
                             `<strong>${esc(await t("privateKey.p1", userId))}</strong> <strong>${esc(label || "(no name)")}</strong>\n\n` +
                             `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
-                            `${esc(await t("privateKey.p3", userId))}\n<tg-spoiler>${esc(decrypted)}</tg-spoiler>\n\n` +
+                            `${esc(await t("privateKey.p3", userId))}\n${esc(await t("privateKey.promptReveal", userId))}\n\n` +
                             `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
                             `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
                         parse_mode: "HTML",
@@ -4119,6 +4130,25 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "bundle_fund") {
             await bundleWalletMenu.fundBundleWallets(User, callbackQuery);
+            return;
+        }
+
+        if (sel_action === "bundle_fund_cancel") {
+            delete fundBundleWalletModule.fundState[userId];
+            await bot.answerCallbackQuery(callbackQueryId, {
+                text: await t("bundleWallets.fundingCancelledToast", userId),
+            }).catch(() => {});
+            await bot.deleteMessage(chatId, messageId).catch(() => {});
+            await bot.sendMessage(chatId, `❌ ${await t("bundleWallets.fundingCancelled", userId)}`, {
+                parse_mode: "Markdown",
+            });
+            return;
+        }
+
+        if (sel_action === "bundle_fund_back") {
+            delete fundBundleWalletModule.fundState[userId];
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            await bundleWalletMenu.showBundleWalletMenu(User, callbackQuery, cleanupUserTextHandler, createUserTextHandler);
             return;
         }
 
@@ -4432,14 +4462,14 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
-                        const address = reply.text || "";
+                        const address = (reply.text || "").trim();
                         const ethWallets = user?.ethereumWallets || [];
 
                         const indexNumbers = sel_action.match(/\d+/g);
 
                         if (indexNumbers) {
-                            const current_wallet = Number(indexNumbers[0])
-                            const page = Number(indexNumbers[1])
+                            const current_wallet = Number(indexNumbers[0]);
+                            const page = Number(indexNumbers[1]);
                             const currentWallet = ethWallets[current_wallet];
                             const label = currentWallet?.label || "Wallet"
                             const tradedTokenAddresses = (currentWallet?.tradeHistory || []).map((pos: any) => pos.token_address);
@@ -4503,28 +4533,33 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             }
         }
 
-        if (sel_action?.startsWith(`positions_import_`)) {
+        // Solana only — `positions_import_eth_*` is handled above (also starts with positions_import_)
+        if (
+            sel_action?.startsWith(`positions_import_`) &&
+            !sel_action.startsWith(`positions_import_eth_`)
+        ) {
             bot.sendMessage(
                 chatId,
                 `${await t('messages.positionImport1', userId)}`
             ).then((sentMessage) => {
                 bot.once('text',
                     createUserTextHandler(userId, async (reply) => {
-                        const address = reply.text || "";
-                        const wallet = user?.wallets;
-
+                        const address = (reply.text || "").trim();
+                        const fresh = await User.findOne({ userId });
+                        const solWallets = fresh?.wallets;
                         const indexNumbers = sel_action.match(/\d+/g);
 
-                        if (indexNumbers) {
+                        if (indexNumbers && solWallets) {
+                            const current_wallet = Number(indexNumbers[0]);
+                            const page = Number(indexNumbers[1]);
+                            const currentWallet = solWallets[current_wallet];
+                            const label = solWallets[current_wallet]?.label ?? "Wallet";
+                            const tradedTokenAddresses = (currentWallet?.tradeHistory ?? []).map(
+                                (pos) => pos.token_address,
+                            );
 
-                            const current_wallet = Number(indexNumbers[0])
-                            const page = Number(indexNumbers[1])
-                            const currentWallet = wallet[current_wallet];
-                            const label = wallets[current_wallet].label
-                            const tradedTokenAddresses = currentWallet.tradeHistory.map(pos => pos.token_address);
-
-                            if (tradedTokenAddresses.some(_address => _address === address)) {
-                                editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, label)
+                            if (tradedTokenAddresses.some((a) => a != null && a === address)) {
+                                editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, label);
                             } else {
                                 const sent = bot.sendMessage(
                                     chatId,
@@ -4541,6 +4576,189 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         }
                     }));
             });
+            return;
+        }
+
+        const delMenuSol = sel_action?.match(/^positions_delete_menu_sol_(\d+)_(\d+)$/);
+        if (delMenuSol) {
+            const current_wallet = Number(delMenuSol[1]);
+            const page = Number(delMenuSol[2]);
+            const pairs = await getActivePositionsForDeletionSolana(userId, current_wallet);
+            if (!pairs.length) {
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: await t("positions.noPositionsFound", userId),
+                    show_alert: true,
+                }).catch(() => {});
+                return;
+            }
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const u = await User.findOne({ userId });
+            const rows = pairs.map((p, idx) => [
+                {
+                    text: `🗑️ ${p.label}`,
+                    callback_data: `positions_delete_exec_sol_${current_wallet}_${page}_${idx}`,
+                },
+            ]);
+            rows.push([
+                {
+                    text: await t("positions.deletePositionCancel", userId),
+                    callback_data: `positions_delete_cancel_sol_${current_wallet}_${page}`,
+                },
+            ]);
+            const pickCaption =
+                `<strong>${await t("positions.p1", userId)}</strong>\n\n` +
+                `${await t("positions.deletePositionPick", userId)}`;
+            try {
+                await bot.editMessageCaption(pickCaption, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: rows },
+                });
+            } catch {
+                await bot.editMessageText(pickCaption, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: rows },
+                });
+            }
+            return;
+        }
+
+        const delCancelSol = sel_action?.match(/^positions_delete_cancel_sol_(\d+)_(\d+)$/);
+        if (delCancelSol) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const current_wallet = Number(delCancelSol[1]);
+            const page = Number(delCancelSol[2]);
+            const u = await User.findOne({ userId });
+            const lab = u?.wallets?.[current_wallet]?.label ?? "Wallet";
+            await editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, lab);
+            return;
+        }
+
+        const delExecSol = sel_action?.match(/^positions_delete_exec_sol_(\d+)_(\d+)_(\d+)$/);
+        if (delExecSol) {
+            const current_wallet = Number(delExecSol[1]);
+            const page = Number(delExecSol[2]);
+            const tokenIdx = Number(delExecSol[3]);
+            const pairs = await getActivePositionsForDeletionSolana(userId, current_wallet);
+            const target = pairs[tokenIdx];
+            if (!target) {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Invalid", show_alert: true }).catch(() => {});
+                return;
+            }
+            const fresh = await User.findOne({ userId });
+            if (!fresh?.wallets?.[current_wallet]) return;
+            const w = fresh.wallets[current_wallet];
+            const th = (w.tradeHistory || []).filter((t: { token_address?: string | null }) => t.token_address !== target.mint);
+            (w as { tradeHistory: typeof th }).tradeHistory = th;
+            await fresh.save();
+            await limitOrderData.updateMany(
+                { user_id: userId, wallet: w.publicKey, token_mint: target.mint, status: "Pending" },
+                { $set: { status: "Failed" } },
+            );
+            await bot.answerCallbackQuery(callbackQueryId, {
+                text: await t("positions.deletePositionDone", userId),
+            }).catch(() => {});
+            const lab = w.label ?? "Wallet";
+            await editPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, lab);
+            return;
+        }
+
+        const delMenuEth = sel_action?.match(/^positions_delete_menu_eth_(\d+)_(\d+)$/);
+        if (delMenuEth) {
+            const current_wallet = Number(delMenuEth[1]);
+            const page = Number(delMenuEth[2]);
+            const pairs = await getActivePositionsForDeletionEthereum(userId, current_wallet);
+            if (!pairs.length) {
+                await bot.answerCallbackQuery(callbackQueryId, {
+                    text: await t("positions.noPositionsFound", userId),
+                    show_alert: true,
+                }).catch(() => {});
+                return;
+            }
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const rows = pairs.map((p, idx) => [
+                {
+                    text: `🗑️ ${p.label}`,
+                    callback_data: `positions_delete_exec_eth_${current_wallet}_${page}_${idx}`,
+                },
+            ]);
+            rows.push([
+                {
+                    text: await t("positions.deletePositionCancel", userId),
+                    callback_data: `positions_delete_cancel_eth_${current_wallet}_${page}`,
+                },
+            ]);
+            const pickCaption =
+                `<strong>${await t("positions.p1", userId)}</strong>\n\n` +
+                `${await t("positions.deletePositionPick", userId)}`;
+            try {
+                await bot.editMessageCaption(pickCaption, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: rows },
+                });
+            } catch {
+                await bot.editMessageText(pickCaption, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: { inline_keyboard: rows },
+                });
+            }
+            return;
+        }
+
+        const delCancelEth = sel_action?.match(/^positions_delete_cancel_eth_(\d+)_(\d+)$/);
+        if (delCancelEth) {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const current_wallet = Number(delCancelEth[1]);
+            const page = Number(delCancelEth[2]);
+            const u = await User.findOne({ userId });
+            const lab = u?.ethereumWallets?.[current_wallet]?.label ?? "Wallet";
+            await editEthereumPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, lab);
+            return;
+        }
+
+        const delExecEth = sel_action?.match(/^positions_delete_exec_eth_(\d+)_(\d+)_(\d+)$/);
+        if (delExecEth) {
+            const current_wallet = Number(delExecEth[1]);
+            const page = Number(delExecEth[2]);
+            const tokenIdx = Number(delExecEth[3]);
+            const pairs = await getActivePositionsForDeletionEthereum(userId, current_wallet);
+            const target = pairs[tokenIdx];
+            if (!target) {
+                await bot.answerCallbackQuery(callbackQueryId, { text: "Invalid", show_alert: true }).catch(() => {});
+                return;
+            }
+            const fresh = await User.findOne({ userId });
+            if (!fresh?.ethereumWallets?.[current_wallet]) return;
+            const w = fresh.ethereumWallets[current_wallet];
+            const mintLower = target.mint.toLowerCase();
+            const th = (w.tradeHistory || []).filter(
+                (t: { token_address?: string | null }) =>
+                    (t.token_address || "").toLowerCase() !== mintLower,
+            );
+            (w as { tradeHistory: typeof th }).tradeHistory = th;
+            await fresh.save();
+            const esc = target.mint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+            await limitOrderData.updateMany(
+                {
+                    user_id: userId,
+                    wallet: w.publicKey,
+                    token_mint: { $regex: new RegExp(`^${esc}$`, "i") },
+                    status: "Pending",
+                },
+                { $set: { status: "Failed" } },
+            );
+            await bot.answerCallbackQuery(callbackQueryId, {
+                text: await t("positions.deletePositionDone", userId),
+            }).catch(() => {});
+            const lab = w.label ?? "Wallet";
+            await editEthereumPositionsMessage(bot, chatId, userId, messageId, current_wallet, page, lab);
             return;
         }
 
@@ -5454,6 +5672,155 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             return;
         }
 
+        if (sel_action === "autoSell_no_activity_toggle") {
+            const { getUserChain } = await import("./utils/chain");
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                user.settings.auto_sell.sellOnNoActivityEnabled_ethereum = !(
+                    user.settings.auto_sell?.sellOnNoActivityEnabled_ethereum ?? false
+                );
+            } else {
+                user.settings.auto_sell.sellOnNoActivityEnabled_solana = !(
+                    user.settings.auto_sell?.sellOnNoActivityEnabled_solana ?? false
+                );
+            }
+            await user.save();
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            await editAutoSellMessage(bot, chatId, userId, messageId);
+            return;
+        }
+
+        if (sel_action === "autoSell_no_activity_period") {
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const sentMessage = await bot.sendMessage(chatId, await t("autoSell.noActivityPrompt", userId));
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                const raw = (reply.text || "").trim();
+                const num = parseInt(raw, 10);
+                await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                await bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                if (isNaN(num) || num < 15 || num > 10080) {
+                    const err = await bot.sendMessage(chatId, await t("autoSell.noActivityInvalid", userId));
+                    setTimeout(() => bot.deleteMessage(chatId, err.message_id).catch(() => {}), 8000);
+                    return;
+                }
+                const clamped = clampInactivityMinutes(num);
+                const { getUserChain } = await import("./utils/chain");
+                const userChain = await getUserChain(userId);
+                const u = await User.findOne({ userId });
+                if (!u) return;
+                if (!u.settings.auto_sell) (u as any).settings.auto_sell = {};
+                if (userChain === "ethereum") {
+                    u.settings.auto_sell.sellOnNoActivityMinutes_ethereum = clamped;
+                } else {
+                    u.settings.auto_sell.sellOnNoActivityMinutes_solana = clamped;
+                }
+                await u.save();
+                await editAutoSellMessage(bot, chatId, userId, messageId);
+            }));
+            return;
+        }
+
+        if (sel_action === "autoSell_dev_sell_toggle") {
+            const { getUserChain } = await import("./utils/chain");
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                return;
+            }
+            user.settings.auto_sell = user.settings.auto_sell ?? {};
+            user.settings.auto_sell.sellOnDevSellEnabled_solana = !(
+                user.settings.auto_sell?.sellOnDevSellEnabled_solana ?? false
+            );
+            await user.save();
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            await editAutoSellMessage(bot, chatId, userId, messageId);
+            return;
+        }
+
+        if (sel_action === "autoSell_dev_sell_min_sol") {
+            const { getUserChain } = await import("./utils/chain");
+            if ((await getUserChain(userId)) === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                return;
+            }
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const sentMessage = await bot.sendMessage(chatId, await t("autoSell.devSellPromptMinSol", userId));
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                const raw = (reply.text || "").trim().replace(",", ".");
+                const num = parseFloat(raw);
+                await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                await bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                if (!Number.isFinite(num) || num < 0 || num > 1_000_000) {
+                    const err = await bot.sendMessage(chatId, await t("autoSell.devSellInvalidMinSol", userId));
+                    setTimeout(() => bot.deleteMessage(chatId, err.message_id).catch(() => {}), 8000);
+                    return;
+                }
+                const u = await User.findOne({ userId });
+                if (!u) return;
+                if (!u.settings.auto_sell) (u as any).settings.auto_sell = {};
+                u.settings.auto_sell.sellOnDevSellMinSol_solana = num;
+                await u.save();
+                await editAutoSellMessage(bot, chatId, userId, messageId);
+            }));
+            return;
+        }
+
+        if (sel_action === "autoSell_dev_sell_supply_pct") {
+            const { getUserChain } = await import("./utils/chain");
+            if ((await getUserChain(userId)) === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                return;
+            }
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const sentMessage = await bot.sendMessage(chatId, await t("autoSell.devSellPromptSupply", userId));
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                const raw = (reply.text || "").trim().replace(",", ".");
+                const num = parseFloat(raw);
+                await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                await bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                if (!Number.isFinite(num) || num < 0 || num > 100) {
+                    const err = await bot.sendMessage(chatId, await t("autoSell.devSellInvalidSupply", userId));
+                    setTimeout(() => bot.deleteMessage(chatId, err.message_id).catch(() => {}), 8000);
+                    return;
+                }
+                const u = await User.findOne({ userId });
+                if (!u) return;
+                if (!u.settings.auto_sell) (u as any).settings.auto_sell = {};
+                u.settings.auto_sell.sellOnDevSellMinSupplyPercent_solana = Math.floor(num);
+                await u.save();
+                await editAutoSellMessage(bot, chatId, userId, messageId);
+            }));
+            return;
+        }
+
+        if (sel_action === "autoSell_dev_sell_position_pct") {
+            const { getUserChain } = await import("./utils/chain");
+            if ((await getUserChain(userId)) === "ethereum") {
+                await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+                return;
+            }
+            await bot.answerCallbackQuery(callbackQueryId).catch(() => {});
+            const sentMessage = await bot.sendMessage(chatId, await t("autoSell.devSellPromptPosition", userId));
+            bot.once("text", createUserTextHandler(userId, async (reply) => {
+                const raw = (reply.text || "").trim().replace(",", ".");
+                const num = parseInt(raw, 10);
+                await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                await bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                if (isNaN(num) || num < 1 || num > 100) {
+                    const err = await bot.sendMessage(chatId, await t("autoSell.devSellInvalidPosition", userId));
+                    setTimeout(() => bot.deleteMessage(chatId, err.message_id).catch(() => {}), 8000);
+                    return;
+                }
+                const u = await User.findOne({ userId });
+                if (!u) return;
+                if (!u.settings.auto_sell) (u as any).settings.auto_sell = {};
+                u.settings.auto_sell.sellOnDevSellPositionPercent_solana = num;
+                await u.save();
+                await editAutoSellMessage(bot, chatId, userId, messageId);
+            }));
+            return;
+        }
+
         if (sel_action === "settings_language") {
             const langText = `<strong>${await t("settings.language", userId)}</strong>\n\n` + `${await t('language.p1', userId)}`;
             const langMarkup = {
@@ -5950,7 +6317,18 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                             const updatedTargetPrice2 = (existingOrder.token_amount * existingOrder.target_price2 + (tokenBalance - existingOrder.token_amount) * newTargetPrice2) / totalAmount;
                             await limitOrderData.updateOne(
                                 { _id: existingOrder._id },
-                                { $set: { token_amount: totalAmount, Tp: takeProfitPercent, Sl: stopLossPercent, target_price1: updatedTargetPrice1, targer_price2: updatedTargetPrice2, status: "Pending" } }
+                                {
+                                    $set: {
+                                        token_amount: totalAmount,
+                                        Tp: takeProfitPercent,
+                                        Sl: stopLossPercent,
+                                        target_price1: updatedTargetPrice1,
+                                        target_price2: updatedTargetPrice2,
+                                        status: "Pending",
+                                        lastActivityAt: new Date(),
+                                        lastActivityFingerprint: "",
+                                    },
+                                },
                             );
                         } else {
                             await new limitOrderData({
@@ -7476,11 +7854,14 @@ export async function checkAndAutoSell() {
                 const isEthereumWallet = user.ethereumWallets?.some(w => w.publicKey === order.wallet);
                 let currentPrice = 0;
                 let tokenInfo: any = null;
+                /** DexScreener pair for sell-on-no-activity fingerprinting */
+                let dexPair: any = null;
 
                 if (isEthereumWallet) {
                     // Ethereum token - use Ethereum price fetching
                     try {
                         const pairInfo = await getPairInfoWithTokenAddress(order.token_mint);
+                        dexPair = pairInfo || null;
                         if (pairInfo?.priceUsd) {
                             currentPrice = Number(pairInfo.priceUsd);
                             console.log('pairInfo.priceUsd', pairInfo.priceUsd);
@@ -7512,7 +7893,9 @@ export async function checkAndAutoSell() {
                     //@ts-ignore
                     currentPrice = Number(await getTokenPrice(order.token_mint));
                     const pairArray = await getPairByAddress(order.token_mint);
-                    const pair = pairArray[0];
+                    const pair =
+                        pickBestDexPair(pairArray, order.token_mint) ?? pairArray?.[0];
+                    dexPair = pair ?? null;
                     tokenInfo = {
                         priceUsd: pair?.priceUsd,
                         marketCap: pair?.marketCap,
@@ -7528,8 +7911,33 @@ export async function checkAndAutoSell() {
 
                 console.log(`💰 Token ${order.token_mint}: current price $${currentPrice}, target $${order.target_price1} & $${order.target_price2}`);
 
-                if (currentPrice >= order.target_price1 || currentPrice <= order.target_price2) {
-                    console.log(`🚀 Triggering auto-sell for ${order.token_mint} (user ${order.user_id})`);
+                const tpSlHit = currentPrice >= order.target_price1 || currentPrice <= order.target_price2;
+                let inactivitySell = false;
+                if (!tpSlHit) {
+                    const noActEnabled = isEthereumWallet
+                        ? (user.settings?.auto_sell?.sellOnNoActivityEnabled_ethereum ?? false)
+                        : (user.settings?.auto_sell?.sellOnNoActivityEnabled_solana ?? false);
+                    if (noActEnabled) {
+                        const mins = clampInactivityMinutes(
+                            isEthereumWallet
+                                ? user.settings?.auto_sell?.sellOnNoActivityMinutes_ethereum
+                                : user.settings?.auto_sell?.sellOnNoActivityMinutes_solana,
+                        );
+                        const pairForInactive =
+                            dexPair ?? (currentPrice > 0 ? { priceUsd: currentPrice } : null);
+                        const { shouldSell, updates } = evaluateInactivityForOrder(order as any, pairForInactive, mins);
+                        if (updates && Object.keys(updates).length > 0) {
+                            await limitOrderData.updateOne({ _id: order._id }, { $set: updates });
+                        }
+                        inactivitySell = shouldSell;
+                    }
+                }
+
+                if (tpSlHit || inactivitySell) {
+                    console.log(
+                        `🚀 Triggering auto-sell for ${order.token_mint} (user ${order.user_id})` +
+                            (inactivitySell ? " [no activity]" : ""),
+                    );
                     const id = order.user_id;
                     const wallet = order.wallet;
                     const address = order.token_mint;
@@ -7616,7 +8024,63 @@ export async function checkAndAutoSell() {
                             adminFeePercent = settings.feePercentage / 100;
                         }
 
-                        if (isEthereumWallet) {
+                        if (inactivitySell) {
+                            if (isEthereumWallet) {
+                                const active_wallet = user.ethereumWallets.find(w => w.publicKey === wallet);
+                                const eth_price = await getEtherPrice();
+                                const remainingBalance = await getTokenBalancWithContract(address, wallet);
+                                const naMsg =
+                                    `${await t("messages.autoSellNoActivity", order.user_id)}\n` +
+                                    `${await t("messages.autoSell2", order.user_id)} ${order.token_mint}\n` +
+                                    `${await t("messages.autoSell4", order.user_id)} $${currentPrice.toFixed(6)}\n` +
+                                    `${await t("messages.autoSell5", order.user_id)} $${(currentPrice * amount).toFixed(6)}`;
+                                await bot.sendMessage(order.user_id, naMsg, { disable_web_page_preview: true });
+                                if (active_wallet) {
+                                    if (!active_wallet.tradeHistory) {
+                                        (active_wallet as any).tradeHistory = [];
+                                    }
+                                    (active_wallet.tradeHistory as any[]).push({
+                                        transaction_type: "sell",
+                                        token_address: address,
+                                        amount: 100,
+                                        token_price: currentPrice,
+                                        token_amount: (amount * currentPrice) / eth_price,
+                                        token_balance: remainingBalance,
+                                        mc: tokenInfo.marketCap || 0,
+                                        date: Date.now().toString(),
+                                        name: tokenInfo.name,
+                                        tip: ((amount * currentPrice) / eth_price) * adminFeePercent,
+                                        pnl: false,
+                                    });
+                                }
+                            } else {
+                                const active_wallet = user.wallets.find((w) => w.is_active_wallet);
+                                const sol_price = getSolPrice();
+                                const pairArray = await getPairByAddress(address);
+                                const pair = pairArray?.[0];
+                                const market_cap = pair?.marketCap ?? tokenInfo.marketCap ?? 0;
+                                const name = pair?.baseToken?.name ?? tokenInfo.name ?? "";
+                                const naMsg =
+                                    `${await t("messages.autoSellNoActivity", order.user_id)}\n` +
+                                    `${await t("messages.autoSell2", order.user_id)} ${order.token_mint}\n` +
+                                    `${await t("messages.autoSell4", order.user_id)} $${currentPrice.toFixed(4)}\n` +
+                                    `${await t("messages.autoSell5", order.user_id)} $${(currentPrice * amount).toFixed(4)}`;
+                                await bot.sendMessage(order.user_id, naMsg);
+                                active_wallet?.tradeHistory.push({
+                                    transaction_type: "sell",
+                                    token_address: address.toString(),
+                                    amount: 100,
+                                    token_price: currentPrice,
+                                    token_amount: amount,
+                                    token_balance: 0,
+                                    mc: market_cap,
+                                    date: Date.now(),
+                                    name: name,
+                                    tip: (amount * adminFeePercent * currentPrice) / sol_price,
+                                    pnl: false,
+                                });
+                            }
+                        } else if (isEthereumWallet) {
                             const active_wallet = user.ethereumWallets.find(w => w.publicKey === wallet);
                             const eth_price = await getEtherPrice();
                             const remainingBalance = await getTokenBalancWithContract(address, wallet);

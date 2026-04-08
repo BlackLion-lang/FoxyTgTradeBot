@@ -24,6 +24,7 @@ import { decryptSecretKey } from '../../../config/security';
 import { RPC_URL, bot } from '../../../config/constant';
 import { t } from '../../../locales';
 import { getFrenchTimeForWalletKeys } from '../../../services/other';
+import { getCancelButton } from '../../../utils/markup';
 
 interface FundState {
   step: string;
@@ -93,7 +94,17 @@ const fundBundledWallets = async (
       `${await t('bundleWallets.balance', telegramId)} : *${activeSOL} ${await t('bundleWallets.sol', telegramId)}*\n` +
       `${await t('bundleWallets.bundles', telegramId)} : *${userDoc.bundleWallets.length} ${await t('bundleWallets.wallets', telegramId)}*\n\n` +
       `${await t('bundleWallets.enterAmount', telegramId)}`,
-    { parse_mode: 'Markdown' },
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [
+            await getCancelButton(telegramId, 'bundle_fund_cancel'),
+            { text: await t('back', telegramId), callback_data: 'bundle_fund_back' },
+          ],
+        ],
+      },
+    },
   );
 
   fundState[telegramId] = { step: 'awaiting_amount', chatId, user };
@@ -108,11 +119,18 @@ const handleUserReply = async (msg: Message) => {
   const chatId = state.chatId;
   if (!msg.text) return;
   const total = parseFloat(msg.text.trim());
-  if (isNaN(total) || total <= 0)
+  const lamportsPlanned = Math.floor(total * LAMPORTS_PER_SOL);
+  if (
+    isNaN(total) ||
+    !Number.isFinite(total) ||
+    total <= 0 ||
+    lamportsPlanned <= 0
+  ) {
     return bot.sendMessage(
       chatId,
       `❌ ${await t('bundleWallets.invalidAmount', telegramId)}`,
     );
+  }
 
   if (ongoingFunding.has(telegramId)) {
     return bot.sendMessage(chatId, `⏳ ${await t('bundleWallets.fundingAlreadyInProgress', telegramId)}`);
@@ -130,6 +148,14 @@ const handleUserReply = async (msg: Message) => {
 
 // -------------------- FINAL POLISHED & SECURE VERSION --------------------
 const performCleanFunding = async (user: any, totalSOL: number, chatId: number) => {
+  const totalLamportsFloor = Math.floor(totalSOL * LAMPORTS_PER_SOL);
+  if (!Number.isFinite(totalSOL) || totalSOL <= 0 || totalLamportsFloor <= 0) {
+    return bot.sendMessage(
+      chatId,
+      `❌ ${await t('bundleWallets.invalidAmount', chatId)}`,
+    );
+  }
+
   const connection = new Connection(user.rpcProvider?.url || RPC_URL);
   const activeWallet = user.wallets?.find((w: any) => w.is_active_wallet);
   if (!activeWallet?.secretKey) {
@@ -162,7 +188,7 @@ const performCleanFunding = async (user: any, totalSOL: number, chatId: number) 
     { parse_mode: 'Markdown' },
   );
 
-  const totalLamports = Math.floor(totalSOL * LAMPORTS_PER_SOL);
+  const totalLamports = totalLamportsFloor;
   const minPerBundle = CONFIG.MIN_PER_BUNDLE * LAMPORTS_PER_SOL;
   const minDistributable = minPerBundle * count;
   const tempCount = Math.min(Math.max(Math.ceil(count / 3), 2), 5);

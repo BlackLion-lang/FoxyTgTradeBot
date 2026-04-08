@@ -14,7 +14,8 @@ import { limitOrderData } from "../../models/limitOrder"
 import { formatNumberStyle } from "../../services/other"
 import { getPairInfoWithTokenAddress, newTokenRegistered } from "../../services/ethereum/dexscreener"
 import { getCloseButton } from "../../utils/markup"
-import { sendMenu } from ".."
+import type { PurchaseErrorKind } from "../../utils/purchaseError"
+import { classifyPurchaseError, purchaseErrorLocaleKey } from "../../utils/purchaseError"
 
 export const sendEthereumBuyMessage = async (
     bot: TelegramBot,
@@ -112,10 +113,11 @@ export const editBuyMessageWithAddress = async (
     userId: number,
     messageId: number,
     address: string,
+    purchaseOpts?: { purchaseError?: PurchaseErrorKind },
 ) => {
     try {
         const { BuyEdit } = await import("../../commands/ethereum/buy");
-        await BuyEdit(bot, chatId, userId, messageId, address);
+        await BuyEdit(bot, chatId, userId, messageId, address, purchaseOpts);
     } catch (error: any) {
         if (error?.message && (error.message.includes('message is not modified') || error.message.includes('message to edit not found'))) {
             console.log('Buy message is already up to date or not found');
@@ -318,6 +320,8 @@ export const sendEthereumBuyMessageWithAddress = async (
                     existingOrder.target_price2 = newTargetPrice2;
                     existingOrder.Tp = takeProfitPercent;
                     existingOrder.Sl = stopLossPercent;
+                    (existingOrder as any).lastActivityAt = new Date();
+                    (existingOrder as any).lastActivityFingerprint = "";
                     await existingOrder.save();
                 } else {
                     // Create new order
@@ -377,64 +381,62 @@ export const sendEthereumBuyMessageWithAddress = async (
             const { Sell } = await import("../../commands/ethereum/sell");
             await Sell(bot, chatId, userId, tokenAddress);
         } else {
+            await deletePendingSwapMessage();
+            const kind = classifyPurchaseError((result as { error?: string })?.error, "ethereum");
+            const errKey = purchaseErrorLocaleKey(kind, "ethereum");
             const failText =
                 `${await t('quickBuy.p7', userId)}\n\n` +
                 `Token : <code>${tokenAddress}</code>\n\n` +
-                `${await t('quickBuy.p14', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+                `${await t('quickBuy.p14', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
                 `<code>${active_wallet?.publicKey}</code>\n\n` +
                 `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
                 `${ethAmount} ETH ⇄\n` +
                 `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
-                `<strong>${await t('quickBuy.failed', userId)}</strong>`;
-
-            await bot.sendMessage(
-                chatId,
-                failText,
-                {
-                    parse_mode: "HTML",
-                    disable_web_page_preview: true,
-                    reply_markup: {
-                        inline_keyboard: [
-                            [
-                                { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
-                            ],
-                            [
-                                await getCloseButton(userId)
-                            ]
-                        ]
-                    },
+                `🔴 <strong><em>${await t('quickBuy.buyFailedPrefix', userId)} ${await t(errKey, userId)}</em></strong>`;
+            await bot.sendMessage(chatId, failText, {
+                parse_mode: 'HTML',
+                disable_web_page_preview: true,
+                reply_markup: {
+                    inline_keyboard: [
+                        [
+                            { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
+                        ],
+                        [await getCloseButton(userId)],
+                    ],
                 },
-            );
-            await deletePendingSwapMessage();
-            sendMenu(bot, chatId, userId, messageId);
+            });
+            await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, {
+                purchaseError: kind,
+            });
         }
     } catch (error: any) {
         console.error('Ethereum buy error:', error);
+        await deletePendingSwapMessage();
+        const kind = classifyPurchaseError(error?.message, "ethereum");
+        const errKey = purchaseErrorLocaleKey(kind, "ethereum");
         const failText =
             `${await t('quickBuy.p7', userId)}\n\n` +
             `Token : <code>${tokenAddress}</code>\n\n` +
-            `${await t('quickBuy.p14', userId)} : ${active_wallet?.label || 'Wallet'} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
+            `${await t('quickBuy.p14', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(4)} ETH</strong> ($${(balance * eth_price).toFixed(2)})\n` +
             `<code>${active_wallet?.publicKey}</code>\n\n` +
             `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
             `${ethAmount} ETH ⇄\n` +
             `${await t('quickBuy.p9', userId)} : ${user.settings.slippage_eth?.buy_slippage_eth || 0.5} % \n\n` +
-            `<strong>${await t('quickBuy.failed', userId)}</strong>`;
+            `🔴 <strong><em>${await t('quickBuy.buyFailedPrefix', userId)} ${await t(errKey, userId)}</em></strong>`;
         await bot.sendMessage(chatId, failText, {
-            parse_mode: "HTML",
+            parse_mode: 'HTML',
             disable_web_page_preview: true,
             reply_markup: {
                 inline_keyboard: [
                     [
-                        {
-                            text: `${await t('quickBuy.viewToken', userId)}`,
-                            url: `https://etherscan.io/token/${tokenAddress}`,
-                        },
+                        { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://etherscan.io/token/${tokenAddress}` },
                     ],
                     [await getCloseButton(userId)],
                 ],
             },
         });
-        await deletePendingSwapMessage();
-        await sendMenu(bot, chatId, userId, messageId);
+        await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, {
+            purchaseError: kind,
+        });
     }
 };

@@ -172,7 +172,22 @@ export const fr: Translations = {
         p19: "Partagez le Token avec vos amis",
         settings: "⚙️ Paramètres",
         buy: "Achat",
-        default: "Défaut"
+        default: "Défaut",
+        purchaseErrorInsufficientSol:
+            "SOL insuffisant pour cet achat et les frais réseau.",
+        purchaseErrorInsufficientEth:
+            "ETH insuffisant pour cet achat et le gas.",
+        purchaseWarningLowBalanceSol:
+            "Votre solde SOL est peut-être trop faible pour un achat rapide avec les frais.",
+        purchaseWarningLowBalanceEth:
+            "Votre solde ETH est peut-être trop faible pour un achat rapide avec le gas.",
+        purchaseErrorSlippage:
+            "Échec du trade : mouvement de prix ou slippage trop élevé.",
+        purchaseErrorLiquidity:
+            "Aucun parcours ou liquidité adaptée pour ce token pour le moment.",
+        purchaseErrorNetwork:
+            "Erreur réseau ou service. Réessayez dans un instant.",
+        purchaseErrorGeneric: "L'achat n'a pas pu être effectué.",
     },
 
     // Menu de Vente
@@ -190,6 +205,8 @@ export const fr: Translations = {
         p11: "🕒 Dernière mise à jour (UTC) :",
         p12: "💡 Sélectionnez une action ci-dessous.",
         p13: "Statut de vente automatique (Auto Sell) :",
+        autoStatusNoActivity: "Vente si inactivité :",
+        autoStatusDevSell: "Vente auto si le dev vend :",
         p14: "✅ Trade réussi, voici l'image PNL de votre performance.",
         p15: "Partagez le Token avec vos amis",
         settings: "⚙️ Paramètres",
@@ -208,6 +225,10 @@ export const fr: Translations = {
         p7: "🕒 Dernière mise à jour (UTC) :",
         p8: "Aucune position active n'a été détectée à l'heure actuelle. Tous les Tokens ont déjà été vendus ou présentent un solde nul sur le Wallet.",
         importPosition: "Importer une position",
+        deletePosition: "Supprimer une position",
+        deletePositionPick: "Choisissez la position à retirer de la liste :",
+        deletePositionDone: "Position supprimée.",
+        deletePositionCancel: "↩️ Annuler",
         noPositionsFound: "Aucune position trouvée. Commencez à Trader pour voir vos positions ici.",
         whatToDo: "💡 Que souhaitez-vous faire ?"
     },
@@ -289,7 +310,7 @@ export const fr: Translations = {
         p1: "Comment souhaitez-vous nommer votre nouveau Wallet ?",
         p2: "Le nom du Wallet ne peut pas contenir de symboles ou de caractères spéciaux.",
         p3: "Un Wallet avec ce nom existe déjà. Veuillez réessayer.",
-        p4: "✅ Wallet FoxyBoTracker créé !",
+        p4: "Wallet FoxyBoTracker créé !",
         p5: "💳 Nom : ",
         p6: "🔗 Adresse : ",
         p7: "🔑 Clé privée : ",
@@ -297,6 +318,22 @@ export const fr: Translations = {
         p9: "⚠️ Gardez votre clé privée en sécurité. FoxyBoTracker ne se souviendra plus de votre clé privée et vous ne pourrez plus la récupérer après ce message. Veuillez importer votre Wallet dans Phantom.",
         p10: "💡 Pour voir vos autres Wallets, allez dans les paramètres.",
         p11: "⚙️ Paramètres",
+        p12: "📎 Votre clé privée se trouve dans le fichier .txt joint. Téléchargez-le et conservez-le hors ligne.",
+        fileOperation: "Opération : création d'un nouveau wallet",
+        keysFileHint: "Ouvrez le fichier pour copier votre clé privée Base58 (Phantom).",
+        keysFileTitle: "Clé privée — Wallet Foxy",
+        keysFileHeader: "🔑 WALLET FOXY — EXPORT DE CLÉ PRIVÉE",
+        fileDateLabel: "Date :",
+        keysFileWalletBlock: "Wallet n°1",
+        keysFileDescription: "Ce fichier contient la clé privée (Base58) de votre Wallet Foxy.",
+        keysFileLoseWarning: "Si vous perdez cette clé, vous perdrez l'accès aux fonds de ce Wallet.",
+        savePrivateKeyOnce: "Veuillez sauvegarder votre clé privée en toute sécurité. Elle ne sera plus affichée !",
+        keysStoreFile: "Conservez ce fichier dans un endroit sûr.",
+        keysNeverShare: "Ne partagez jamais votre clé privée avec qui que ce soit !",
+        keysFileImportant: "⚠️ IMPORTANT : Gardez cette clé en sécurité !",
+        keysFilePublicKeyLabel: "Clé publique (adresse) :",
+        keysFilePrivateKeyLabel: "Clé privée (Base58) :",
+        keysFileSolscanLabel: "Solscan :",
     },
 
     // Menu Importer un Wallet
@@ -382,7 +419,9 @@ export const fr: Translations = {
         p5: "NE LA PARTAGEZ AVEC PERSONNE",
         p6: "Conservez-la dans un endroit sécurisé, car elle permet un accès total à votre Wallet et à vos fonds.",
         p7: "Une fois l’opération terminée, cliquez sur le bouton \"SUPPRIMER LE MESSAGE\" ci-dessous.",
-        revealKey: "🔐 Afficher la clé",
+        promptReveal:
+            'Veuillez appuyer sur le bouton « Afficher la clé » ci-dessous pour révéler votre clé privée.',
+        revealKey: "🔓 Afficher la clé",
         deleteMessage: "🗑️ Supprimer le message"
     },
 
@@ -470,6 +509,7 @@ export const fr: Translations = {
         p15: "Token",
         p16: "Voir sur Etherscan",
         failed: "🔴 Achat échoué !",
+        buyFailedPrefix: "Échec de l'achat :",
         viewToken: "🔄 Voir le Token",
         positions: "📊 Positions",
         sell: "🎒 Vendre",
@@ -519,6 +559,25 @@ export const fr: Translations = {
         status1: "Activé",
         status2: "Désactivé",
         wallet: "💳 Wallet :",
+        noActivityTitle: "Vente si inactivité",
+        noActivityHint: "Si DexScreener ne montre aucun changement de prix, volume ou transactions pendant la durée choisie, Foxy ferme la position (même ordre limite que TP/SL).",
+        noActivityPeriodLabel: "Durée d'inactivité (minutes)",
+        noActivityPrompt: "Entrez la durée en minutes (15–10080, ex. 60 = 1 h) :",
+        noActivityInvalid: "Durée invalide. Utilisez un nombre entier entre 15 et 10080 minutes.",
+        devSellTitle: "Vente auto si le dev vend",
+        devSellHint: "Solana / pump.fun : lorsque le créateur du token vend, Foxy peut vendre votre position selon les règles ci-dessous.",
+        devSellMinSolLabel: "Vente min du dev (SOL)",
+        devSellMinSupplyLabel: "Min % du supply (tx dev)",
+        devSellPositionLabel: "Votre % de vente",
+        devSellPromptMinSol: "SOL minimum dans la transaction de vente du dev (0 = dès que le dev vend) :",
+        devSellPromptSupply: "Pourcentage minimum du supply total vendu dans cette transaction (0 = ignorer ce filtre) :",
+        devSellPromptPosition: "Pourcentage de votre position à vendre au déclenchement (1–100) :",
+        devSellInvalidMinSol: "Valeur invalide. Entrez un nombre ≥ 0 (max 1 000 000 SOL).",
+        devSellInvalidSupply: "Valeur invalide. Entrez un nombre entre 0 et 100.",
+        devSellInvalidPosition: "Valeur invalide. Entrez un entier entre 1 et 100.",
+        devSellPending: "⏳ Vente auto (dev vend) — exécution…",
+        devSellDone: "✅ Le dev a vendu — votre position a été vendue selon vos paramètres.",
+        devSellFailed: "❌ Échec de la vente automatique (dev vend).",
     },
 
     // Menu TP & SL
@@ -879,6 +938,7 @@ export const fr: Translations = {
         autoSell6: "Le marché a progressé et votre Take Profit a été atteint, sécurisant vos gains.",
         autoSell7: "🛡️ Votre position a été clôturée automatiquement.",
         autoSell8: "🚫 Le marché a chuté et votre Stop Loss a été déclenché, limitant vos pertes et protégeant votre capital restant.",
+        autoSellNoActivity: "💤 Vente auto (inactivité) : aucun mouvement significatif de volume, transactions ou prix sur DexScreener pendant la durée définie.",
         entertip: "Veuillez saisir le pourcentage de pourboire ! (0-100)",
         referral1: "🎉 Votre ami",
         referral2: "a rejoint via votre lien de parrainage pour accéder à FoxyBoTracker !",
@@ -1045,6 +1105,8 @@ export const fr: Translations = {
         activeWalletNotConfigured: "Wallet actif non configuré. Veuillez d'abord définir un Wallet actif.",
         noBundleWalletsFound: "Aucun Wallet groupé trouvé. Créez d'abord des Wallets groupés.",
         invalidAmount: "Montant invalide. Veuillez entrer un nombre positif.",
+        fundingCancelled: "Financement annulé. Vous pouvez rouvrir *Financer les Wallets* quand vous voulez.",
+        fundingCancelledToast: "Annulé",
         fundingAlreadyInProgress: "Financement déjà en cours.",
         startingDistribution: "Démarrage de la Distribution Propre",
         amount: "Montant",

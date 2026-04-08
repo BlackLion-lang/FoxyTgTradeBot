@@ -10,6 +10,7 @@ import { t } from "../locales";
 import { bot } from "../config/constant";
 import { connection } from "../config/connection";
 import { subscribeToWallet, unsubscribe, type TokenCreationResult } from "./pumpDetector";
+import { startDevSellAutoSellListener, stopDevSellAutoSellListener } from "./devSellAutoSell";
 import {
     startPumpStream,
     stopPumpStream,
@@ -120,7 +121,18 @@ async function applyCopyTradeBuySuccess(
             const updatedTargetPrice2 = (existingOrder.token_amount * existingOrder.target_price2 + (tokenBalance - existingOrder.token_amount) * newTargetPrice2) / totalAmount;
             await limitOrderData.updateOne(
                 { _id: existingOrder._id },
-                { $set: { token_amount: totalAmount, Tp: takeProfitPercent, Sl: stopLossPercent, target_price1: updatedTargetPrice1, targer_price2: updatedTargetPrice2, status: "Pending" } }
+                {
+                    $set: {
+                        token_amount: totalAmount,
+                        Tp: takeProfitPercent,
+                        Sl: stopLossPercent,
+                        target_price1: updatedTargetPrice1,
+                        target_price2: updatedTargetPrice2,
+                        status: "Pending",
+                        lastActivityAt: new Date(),
+                        lastActivityFingerprint: "",
+                    },
+                },
             );
         } else {
             await new limitOrderData({
@@ -697,6 +709,7 @@ export function startCopyTradeDetectionLoop(): NodeJS.Timeout | null {
     })();
     refreshSubscriptions();
     refreshIntervalId = setInterval(refreshSubscriptions, SUBSCRIPTION_REFRESH_MS);
+    startDevSellAutoSellListener();
     return refreshIntervalId;
 }
 
@@ -721,6 +734,7 @@ export function stopCopyTradeDetectionLoop(): void {
         pumpStreamSellUnsubscribe();
         pumpStreamSellUnsubscribe = null;
     }
+    stopDevSellAutoSellListener();
     stopPumpStream();
     currentMonitoredByAddress = new Map();
 }

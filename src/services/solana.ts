@@ -2,8 +2,6 @@ import { Keypair, LAMPORTS_PER_SOL, PublicKey, TransactionMessage, VersionedTran
 import bs58 from "bs58";
 import { connection } from "../config/connection";
 import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID } from "@solana/spl-token";
-import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, } from "../config/security";
-
 let sol_price = 0;
 let lastPriceFetchTime = 0;
 let priceCacheDuration = 60000; // Cache for 60 seconds to avoid rate limits
@@ -81,13 +79,10 @@ export const setSolPrice = (newPrice: number) => {
     sol_price = newPrice;
 };
 
+/** Returns plain base58 secret key — callers must `encryptSecretKey` before persisting. */
 export const walletCreate = () => {
     const newWallet = Keypair.generate();
-
-    const secretKeyBase58 = bs58.encode(newWallet.secretKey);
-    const secretKey = encryptSecretKey(secretKeyBase58);
-
-    // const secretKey = bs58.encode(newWallet.secretKey);
+    const secretKey = bs58.encode(newWallet.secretKey);
     return { publicKey: newWallet.publicKey.toBase58(), secretKey };
 };
 

@@ -123,7 +123,7 @@ export const getMenu = async (
         const balance = await getBalance(publicKey);
         newUser.wallets.push({
             publicKey,
-            secretKey,
+            secretKey: encryptSecretKey(secretKey),
             is_active_wallet: true,
                 balance: balance.toString(),
                 walletCreatedAt: new Date(),
@@ -189,7 +189,7 @@ export const getMenu = async (
             balance = await getBalance(newPublicKey);
             await User.findOneAndUpdate(
                 { userId },
-                { $push: { wallets: { publicKey: newPublicKey, secretKey: newSecretKey, is_active_wallet: true, balance: balance.toString(), label: "Start Wallet" } } }
+                { $push: { wallets: { publicKey: newPublicKey, secretKey: encryptSecretKey(newSecretKey), is_active_wallet: true, balance: balance.toString(), label: "Start Wallet" } } }
             );
             return await getMenu(userId, username, first_name);
         }
@@ -213,8 +213,27 @@ export const getMenu = async (
         throw new Error("Unable to determine active wallet");
     }
 
-    const res = await fetch("https://the-cryptofox-learning.com/_bot/_TrackerWalleTCFL/tokenisation/bot-eth/config/version-bot.php?json=1");
-    const versionData = await res.json();
+    let botTelegramVersion = "—";
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 8000);
+        const res = await fetch(
+            "https://the-cryptofox-learning.com/_bot/_TrackerWalleTCFL/tokenisation/bot-eth/config/version-bot.php?json=1",
+            { signal: controller.signal },
+        );
+        clearTimeout(timeoutId);
+        if (res.ok) {
+            const versionData = await res.json();
+            if (versionData?.bot_telegram_version != null && String(versionData.bot_telegram_version).trim() !== "") {
+                botTelegramVersion = String(versionData.bot_telegram_version);
+            }
+        }
+    } catch (e) {
+        console.warn("[getMenu] Remote version endpoint unreachable, using fallback.", e);
+        if (process.env.BOT_TELEGRAM_VERSION) {
+            botTelegramVersion = process.env.BOT_TELEGRAM_VERSION;
+        }
+    }
 
     const menuP2 = userChain === "ethereum" 
         ? await t('wallets.p2_ethereum', userId)
@@ -234,7 +253,7 @@ export const getMenu = async (
         `<strong>${user.username} (Default)</strong> : <strong>${balance.toFixed(userChain === "ethereum" ? 4 : 2)} ${await t(userChain === "ethereum" ? 'currencySymbol_ethereum' : 'currencySymbol_solana', userId)}</strong> ($${(balance * price).toFixed(2)})\n` +
         `<code>${publicKey}</code>\n\n` +
         `${menuP5}\n\n` +
-        `${await t('menu.botVersion', userId)} <strong>${versionData.bot_telegram_version}</strong>\n` ;
+        `${await t('menu.botVersion', userId)} <strong>${botTelegramVersion}</strong>\n` ;
 
     return { caption, markup: await getMenuMarkup(userId) };
 };
@@ -541,7 +560,6 @@ export const sendMenuMessage = async (
         });
     } catch (error) {
         console.error("Error sending menu message:", error);
-        throw error;
     }
 };
 
@@ -564,7 +582,6 @@ export const sendMenu = async (
         });
     } catch (error) {
         console.error("Error sending menu message:", error);
-        throw error;
     }
 };
 

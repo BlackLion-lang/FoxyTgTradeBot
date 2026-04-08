@@ -112,6 +112,14 @@ export interface Translations {
         settings: string;
         buy: string;
         default: string;
+        purchaseErrorInsufficientSol: string;
+        purchaseErrorInsufficientEth: string;
+        purchaseWarningLowBalanceSol: string;
+        purchaseWarningLowBalanceEth: string;
+        purchaseErrorSlippage: string;
+        purchaseErrorLiquidity: string;
+        purchaseErrorNetwork: string;
+        purchaseErrorGeneric: string;
     };
 
     //sell
@@ -131,6 +139,9 @@ export interface Translations {
         p13: string;
         p14: string;
         p15:string;
+        /** Labels for extra auto-sell rows on the sell screen */
+        autoStatusNoActivity: string;
+        autoStatusDevSell: string;
         settings: string;
         sell: string;
         default: string;
@@ -147,6 +158,10 @@ export interface Translations {
         p7: string;
         p8: string;
         importPosition: string;
+        deletePosition: string;
+        deletePositionPick: string;
+        deletePositionDone: string;
+        deletePositionCancel: string;
         noPositionsFound: string;
         whatToDo: string;
     }
@@ -298,6 +313,22 @@ export interface Translations {
         p9: string;
         p10: string;
         p11: string;
+        p12: string;
+        fileOperation: string;
+        keysFileHint: string;
+        keysFileTitle: string;
+        keysFileHeader: string;
+        fileDateLabel: string;
+        keysFileWalletBlock: string;
+        keysFileDescription: string;
+        keysFileLoseWarning: string;
+        savePrivateKeyOnce: string;
+        keysStoreFile: string;
+        keysNeverShare: string;
+        keysFileImportant: string;
+        keysFilePublicKeyLabel: string;
+        keysFilePrivateKeyLabel: string;
+        keysFileSolscanLabel: string;
     },
 
     //Import wallet
@@ -383,6 +414,7 @@ export interface Translations {
         p5: string;
         p6: string;
         p7: string;
+        promptReveal: string;
         revealKey: string;
         deleteMessage: string;
     };
@@ -476,6 +508,8 @@ export interface Translations {
         enterBuyAmountEth: string;
         invalidAmountEth: string;
         failed: string;
+        /** Shown before the localized failure reason, e.g. "Buy Failed :" */
+        buyFailedPrefix: string;
     };
 
     //Quick Sell
@@ -520,6 +554,25 @@ export interface Translations {
         status1: string;
         status2: string;
         wallet: string;
+        noActivityTitle: string;
+        noActivityHint: string;
+        noActivityPeriodLabel: string;
+        noActivityPrompt: string;
+        noActivityInvalid: string;
+        devSellTitle: string;
+        devSellHint: string;
+        devSellMinSolLabel: string;
+        devSellMinSupplyLabel: string;
+        devSellPositionLabel: string;
+        devSellPromptMinSol: string;
+        devSellPromptSupply: string;
+        devSellPromptPosition: string;
+        devSellInvalidMinSol: string;
+        devSellInvalidSupply: string;
+        devSellInvalidPosition: string;
+        devSellPending: string;
+        devSellDone: string;
+        devSellFailed: string;
     };
 
     //withdrawal
@@ -879,6 +932,7 @@ export interface Translations {
         autoSell6: string;
         autoSell7: string;
         autoSell8: string;
+        autoSellNoActivity: string;
         entertip: string;
         referral1: string;
         referral2: string;
@@ -1045,6 +1099,8 @@ export interface Translations {
         activeWalletNotConfigured: string;
         noBundleWalletsFound: string;
         invalidAmount: string;
+        fundingCancelled: string;
+        fundingCancelledToast: string;
         fundingAlreadyInProgress: string;
         startingDistribution: string;
         amount: string;

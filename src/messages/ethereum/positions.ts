@@ -344,6 +344,12 @@ export const getEthereumPositions = async (
                 },
             ],
             [
+                {
+                    text: `🗑️ ${await t('positions.deletePosition', userId)}`,
+                    callback_data: `positions_delete_menu_eth_${current_wallet}_${page}`,
+                },
+            ],
+            [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
                 {
                     text: `${await t('refresh', userId)}`,
@@ -359,6 +365,60 @@ export const getEthereumPositions = async (
 
     return { caption, markup: newMarkup };
 };
+
+function labelFromTradesEth(trades: any[], token: string): string {
+    const last = trades[trades.length - 1];
+    const n = last?.name;
+    if (typeof n === "string" && n.trim()) {
+        const s = n.trim();
+        return s.length > 22 ? `${s.slice(0, 20)}…` : s;
+    }
+    return token.length > 16 ? `${token.slice(0, 8)}…${token.slice(-6)}` : token;
+}
+
+/** Same ordering as visible rows in `getEthereumPositions` (balance group). */
+export async function getActivePositionsForDeletionEthereum(
+    userId: number,
+    current_wallet: number,
+): Promise<{ mint: string; label: string }[]> {
+    const user = await User.findOne({ userId });
+    const wallets = user?.ethereumWallets || [];
+    const currentWallet = wallets[current_wallet];
+    if (!currentWallet?.tradeHistory?.length) return [];
+
+    const grouped: Record<string, any[]> = {};
+    for (const trade of currentWallet.tradeHistory) {
+        const tokenAddress = trade?.token_address;
+        if (!tokenAddress) continue;
+        if (!grouped[tokenAddress]) grouped[tokenAddress] = [];
+        grouped[tokenAddress].push(trade);
+    }
+
+    const out: { mint: string; label: string }[] = [];
+    for (const [token, trades] of Object.entries(grouped)) {
+        const lastTrade = trades[trades.length - 1];
+        const tradeHistoryBalance = lastTrade?.token_balance;
+        let balanceValue = 0;
+        if (typeof tradeHistoryBalance === "number") {
+            balanceValue = tradeHistoryBalance;
+        } else if (typeof tradeHistoryBalance === "string") {
+            balanceValue = parseFloat(tradeHistoryBalance);
+        }
+        if (balanceValue > 0.00001) {
+            out.push({ mint: token, label: labelFromTradesEth(trades, token) });
+            continue;
+        }
+        try {
+            const blockchainBalance = await getTokenBalancWithContract(token, currentWallet.publicKey);
+            if (blockchainBalance && blockchainBalance > 0.00001) {
+                out.push({ mint: token, label: labelFromTradesEth(trades, token) });
+            }
+        } catch {
+            /* skip */
+        }
+    }
+    return out;
+}
 
 export const editEthereumPositionsMessage = async (
     bot: TelegramBot,

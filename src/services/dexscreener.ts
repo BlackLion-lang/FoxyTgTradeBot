@@ -136,6 +136,35 @@ export async function getTokenInfo(tokenAddress: string) {
     }
 
 }
+/** Prefer the pair where `mint` is base token and `priceUsd` is valid; else first pair with a USD price. */
+export function pickBestDexPair(pairs: any[] | null | undefined, mint: string): any | null {
+    if (!pairs?.length) return null;
+    const lower = mint.toLowerCase();
+    const viable = (p: any) => {
+        const n = Number(p?.priceUsd);
+        return Number.isFinite(n) && n > 0;
+    };
+    const asBase = pairs.find(
+        (p) => p?.baseToken?.address?.toLowerCase() === lower && viable(p),
+    );
+    if (asBase) return asBase;
+    const anyPrice = pairs.find((p) => viable(p));
+    return anyPrice ?? null;
+}
+
+async function fetchJupiterUsdPrice(mint: string): Promise<number | null> {
+    try {
+        const res = await fetch(`https://price.jup.ag/v4/price?ids=${encodeURIComponent(mint)}`);
+        const json = (await res.json()) as { data?: Record<string, { price?: number }> };
+        const p = json?.data?.[mint]?.price;
+        if (p == null) return null;
+        const n = Number(p);
+        return Number.isFinite(n) && n > 0 ? n : null;
+    } catch {
+        return null;
+    }
+}
+
 export const getPairByAddress = async (tokenAddress: string) => {
     try {
         const response = await fetch(
@@ -147,7 +176,7 @@ export const getPairByAddress = async (tokenAddress: string) => {
         const data = await response.json();
         // console.log("token pair data", data)
 
-        return data.pairs;
+        return Array.isArray(data.pairs) ? data.pairs : [];
     } catch (error) {
         return [];
     }
@@ -229,6 +258,27 @@ export const getPumpFunCoinCreator = async (mint: string): Promise<string | null
     }
 };
 
+/** Creator + total supply (for dev-sell % thresholds). Same units as pump stream token amounts when both from API. */
+export async function getPumpFunCoinMeta(
+    mint: string,
+): Promise<{ creator: string | null; totalSupply: number } | null> {
+    try {
+        const pumpUrl = `https://frontend-api-v3.pump.fun/coins/${mint}`;
+        const res = await fetch(pumpUrl);
+        const data = await res.json();
+        if (!data) return null;
+        const creator = data.creator ?? data.creator_address ?? data.authority ?? data.bonding_curve_authority ?? null;
+        const raw = data.total_supply ?? data.totalSupply;
+        const totalSupply = typeof raw === "number" && Number.isFinite(raw) ? raw : Number(raw);
+        return {
+            creator: typeof creator === "string" ? creator : null,
+            totalSupply: Number.isFinite(totalSupply) && totalSupply > 0 ? totalSupply : 0,
+        };
+    } catch {
+        return null;
+    }
+}
+
 /** Fetch Pump.fun coin name/symbol for a mint (for copy-trade notifications). Returns null on error. */
 export const getPumpFunCoinInfo = async (mint: string): Promise<{ name?: string; symbol?: string } | null> => {
     try {
@@ -273,9 +323,15 @@ let tokenPrice = 0;
 export const getTokenPrice = async (tokenAddress: string): Promise<string> => {
     try {
         const pairs = await getPairByAddress(tokenAddress);
-        if (pairs.length > 0) {
-            console.log("token current price", pairs[0].priceUsd, "USD");
-            return pairs[0].priceUsd;
+        const best = pickBestDexPair(pairs, tokenAddress);
+        if (best?.priceUsd != null) {
+            console.log("token current price", best.priceUsd, "USD");
+            return String(best.priceUsd);
+        }
+        const jup = await fetchJupiterUsdPrice(tokenAddress);
+        if (jup != null) {
+            console.log("token current price (Jupiter)", jup, "USD");
+            return String(jup);
         }
         return "Unknown";
     } catch (error) {

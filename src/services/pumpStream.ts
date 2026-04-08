@@ -44,6 +44,10 @@ export type PumpStreamSellEvent = {
     mint: string;
     txSigner: string;
     signature?: string;
+    /** SOL side of the sell (when quoted vs SOL). */
+    solAmount?: number;
+    /** Token amount sold (raw / UI units per stream). */
+    tokenAmount?: number;
     tokenProgram?: string;
     timestamp?: number | string;
     [key: string]: unknown;

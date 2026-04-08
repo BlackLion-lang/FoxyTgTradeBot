@@ -7,6 +7,8 @@ import { newTokenRegistered } from "../../services/ethereum/dexscreener"
 import { getBalance, getEtherPrice } from "../../services/ethereum/etherscan"
 import { t } from "../../locales"
 import { formatNumberStyle, formatWithSuperscript, getLastUpdatedTime, msToTime } from "../../services/other"
+import type { PurchaseErrorKind } from "../../utils/purchaseError"
+import { purchaseErrorLocaleKey, shouldWarnLowEthBalance } from "../../utils/purchaseError"
 
 export async function Buy(bot: TelegramBot, chatId: number, userId: number, address: string) {
     try {
@@ -158,8 +160,15 @@ export async function Buy(bot: TelegramBot, chatId: number, userId: number, addr
             `   <strong>${await t('buy.p12', userId)} :</strong> ${status} ${text}\n` +
             `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell?.takeProfitPercent_ethereum ?? 10} %\n` +
             `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell?.stopLossPercent_ethereum ?? -40} %\n\n` +
-            `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
-            `<strong>${await t('buy.p16', userId)}</strong>`
+            `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n`
+
+        const ethBuyAmounts = settings.quick_buy_eth?.buy_amount_eth?.length
+            ? settings.quick_buy_eth.buy_amount_eth
+            : [0.1, 0.2, 0.5, 1, 2];
+        if (shouldWarnLowEthBalance(active_wallet_balance, ethBuyAmounts)) {
+            caption += `🔴 <strong><em>${await t('buy.purchaseWarningLowBalanceEth', userId)}</em></strong>\n\n`;
+        }
+        caption += `<strong>${await t('buy.p16', userId)}</strong>`
 
         bot.sendMessage(chatId, caption, {
             parse_mode: 'HTML',
@@ -177,7 +186,14 @@ export async function Buy(bot: TelegramBot, chatId: number, userId: number, addr
     }
 }
 
-export async function BuyEdit(bot: TelegramBot, chatId: number, userId: number, messageId: number, address: string) {
+export async function BuyEdit(
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    messageId: number,
+    address: string,
+    purchaseOpts?: { purchaseError?: PurchaseErrorKind },
+) {
     try {
         const user = await User.findOne({ userId })
         if (!user) {
@@ -327,8 +343,18 @@ export async function BuyEdit(bot: TelegramBot, chatId: number, userId: number, 
             `   <strong>${await t('buy.p12', userId)} :</strong> ${status} ${text}\n` +
             `   <strong>${await t('buy.p13', userId)}</strong> ${user.settings.auto_sell?.takeProfitPercent_ethereum ?? 10} %\n` +
             `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell?.stopLossPercent_ethereum ?? -40} %\n\n` +
-            `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
-            `<strong>${await t('buy.p16', userId)}</strong>`
+            `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n`;
+
+        const ethBuyAmounts = settings.quick_buy_eth?.buy_amount_eth?.length
+            ? settings.quick_buy_eth.buy_amount_eth
+            : [0.1, 0.2, 0.5, 1, 2];
+        if (purchaseOpts?.purchaseError) {
+            const errKey = purchaseErrorLocaleKey(purchaseOpts.purchaseError, "ethereum");
+            caption += `🔴 <strong><em>${await t('quickBuy.buyFailedPrefix', userId)} ${await t(errKey, userId)}</em></strong>\n\n`;
+        } else if (shouldWarnLowEthBalance(active_wallet_balance, ethBuyAmounts)) {
+            caption += `🔴 <strong><em>${await t('buy.purchaseWarningLowBalanceEth', userId)}</em></strong>\n\n`;
+        }
+        caption += `<strong>${await t('buy.p16', userId)}</strong>`;
 
         // Try to edit as text message first
         try {

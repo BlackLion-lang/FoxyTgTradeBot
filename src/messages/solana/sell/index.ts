@@ -29,6 +29,7 @@ import { Market } from "@raydium-io/raydium-sdk-v2";
 import { t } from "../../../locales";
 import { TippingSettings } from "../../../models/tipSettings";
 import { limitOrderData } from "../../../models/limitOrder";
+import { clampInactivityMinutes } from "../../../services/sellOnNoActivity";
 
 let invest = 0;
 let pnl = 0;
@@ -180,9 +181,29 @@ export const getSell = async (userId: number, address: string) => {
     // console.log("marketcap", MarketC)
 
     const icon = totalprofit < 0 ? "🔴" : "🟢";
-    const enabled = user.settings.auto_sell?.enabled_solana ?? false;
+    const as = user.settings.auto_sell ?? {};
+    const enabled = as.enabled_solana ?? false;
     const status = enabled ? "🟢" : "🔴";
-    const text = enabled ? `${await t('autoSell.status1', userId)}` : `${await t('autoSell.status2', userId)}`
+    const text = enabled ? `${await t("autoSell.status1", userId)}` : `${await t("autoSell.status2", userId)}`;
+
+    const noActEnabled = as.sellOnNoActivityEnabled_solana ?? false;
+    const noActMins = clampInactivityMinutes(as.sellOnNoActivityMinutes_solana);
+    const noActEmoji = noActEnabled ? "🟢" : "🔴";
+    const noActValue = noActEnabled
+        ? `${await t("autoSell.status1", userId)} (${noActMins} min)`
+        : `${await t("autoSell.status2", userId)}`;
+
+    const devSellEnabled = as.sellOnDevSellEnabled_solana ?? false;
+    const devEmoji = devSellEnabled ? "🟢" : "🔴";
+    const devMinSol = Number(as.sellOnDevSellMinSol_solana ?? 0);
+    const devSupply = Number(as.sellOnDevSellMinSupplyPercent_solana ?? 0);
+    const devPos = Math.min(
+        100,
+        Math.max(1, Math.floor(Number(as.sellOnDevSellPositionPercent_solana ?? 100))),
+    );
+    const devSellValue = devSellEnabled
+        ? `${await t("autoSell.status1", userId)} (${devMinSol} SOL · ${devSupply}% · ${devPos}%)`
+        : `${await t("autoSell.status2", userId)}`;
 
     const feeSpeed = (() => {
         switch (user.settings.auto_tip) {
@@ -207,7 +228,9 @@ export const getSell = async (userId: number, address: string) => {
         `<strong>${mintStatus}</strong> ${await t('sell.p7', userId)}\n\n` +
         `💳 <strong>${user.username} (${await t('buy.default', userId)})</strong> : ${balance.toFixed(2)} SOL ($${(balance * sol_price).toFixed(2)} USD)\n` +
         `<code>${active_wallet.publicKey}</code>\n\n` +
-        `<strong>${await t('sell.p13', userId)}</strong> ${status} ${text}\n\n` +
+        `<strong>${await t("sell.p13", userId)}</strong> ${status} ${text}\n` +
+        `<strong>${await t("sell.autoStatusNoActivity", userId)}</strong> ${noActEmoji} ${noActValue}\n` +
+        `<strong>${await t("sell.autoStatusDevSell", userId)}</strong> ${devEmoji} ${devSellValue}\n\n` +
         `${await t('sell.p8', userId)} <strong>${tokenBalance} ${symbol} | $${(tokenBalance * priceUsd).toFixed(2)}</strong>\n` +
         `${icon} ${await t('sell.p9', userId)} : ${(totalprofit / sol_price).toFixed(6)} SOL (${(totalprofit * 100 / sendUsd).toFixed(2)}%)\n` +
         `${await t('sell.p10', userId)} $ ${formatNumberStyle(MarketC)}\n\n` +

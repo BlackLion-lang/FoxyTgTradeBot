@@ -13,27 +13,20 @@ const IV_LENGTH = 16;
 const SALT_LENGTH = 32;
 const KEY_LENGTH = 32;
 
+const MIN_ENCRYPTION_KEY_LENGTH = 32;
+
 /**
- * Get the encryption key from environment variable or generate a secure default
- * This ensures all encryption/decryption uses the same key
+ * Returns `process.env.ENCRYPTION_KEY` after validation.
+ * No in-repo or empty fallback — a missing/weak key must fail at runtime so secrets are never derived from guessable defaults.
  */
 export function getEncryptionKey(): string {
   const envKey = process.env.ENCRYPTION_KEY;
-  
-  if (envKey && envKey.length >= 32) {
-    return envKey;
+  if (!envKey || envKey.length < MIN_ENCRYPTION_KEY_LENGTH) {
+    throw new Error(
+      `ENCRYPTION_KEY must be set to at least ${MIN_ENCRYPTION_KEY_LENGTH} characters (use a long random secret, never commit it).`,
+    );
   }
-  
-  // If no env key or too short, use a more complex default
-  // In production, ENCRYPTION_KEY should always be set in environment variables
-  if (!envKey) {
-    console.warn('⚠️ WARNING: ENCRYPTION_KEY not set in environment variables. Using default key (not secure for production!)');
-  } else {
-    console.warn('⚠️ WARNING: ENCRYPTION_KEY is too short (minimum 32 characters). Using default key (not secure for production!)');
-  }
-  
-  // Default fallback - should be replaced with env variable in production
-  return process.env.ENCRYPTION_KEY || 'foxy-tg-trade-bot-secure-encryption-key-2024-production-use-env-var';
+  return envKey;
 }
 
 export function encryptSecretKey(secretKeyBase64: string, password?: string): string {
@@ -59,9 +52,7 @@ export function decryptSecretKey(encryptedBase64: string, password?: string): st
   try {
     const encryptionKey = password || getEncryptionKey();
     const data = Buffer.from(encryptedBase64, 'base64');
-    
-    // Validate minimum length: salt (32) + IV (16) = 48 bytes minimum
-    // Base64 encoding adds ~33% overhead, so minimum string length should be ~64 chars
+
     if (data.length < SALT_LENGTH + IV_LENGTH) {
       throw new Error(`Invalid encrypted data: too short (${data.length} bytes, expected at least ${SALT_LENGTH + IV_LENGTH} bytes)`);
     }
@@ -70,7 +61,6 @@ export function decryptSecretKey(encryptedBase64: string, password?: string): st
     const iv = data.slice(SALT_LENGTH, SALT_LENGTH + IV_LENGTH);
     const encrypted = data.slice(SALT_LENGTH + IV_LENGTH);
 
-    // Validate IV length
     if (iv.length !== IV_LENGTH) {
       throw new Error(`Invalid IV length: ${iv.length} bytes, expected ${IV_LENGTH} bytes`);
     }
@@ -83,28 +73,12 @@ export function decryptSecretKey(encryptedBase64: string, password?: string): st
     ]);
 
     return decrypted.toString('utf8');
-  } catch (error: any) {
-    // If decryption fails, check if it might be plain text (legacy data)
-    // This handles cases where old wallets might have unencrypted keys
-    if (error.code === 'ERR_CRYPTO_INVALID_IV' || error.message?.includes('Invalid')) {
-      // Try to detect if it's a plain base58 encoded key (Solana) or hex key (Ethereum)
-      // Solana keys are typically 88 characters in base58
-      // Ethereum keys are 66 characters (0x + 64 hex chars)
-      const isBase58 = /^[1-9A-HJ-NP-Za-km-z]+$/.test(encryptedBase64);
-      const isHex = /^0x?[0-9a-fA-F]{64}$/.test(encryptedBase64);
-      
-      if (isBase58 && encryptedBase64.length >= 80) {
-        console.warn('⚠️ Detected unencrypted base58 key (legacy format), returning as-is');
-        return encryptedBase64;
-      }
-      
-      if (isHex) {
-        console.warn('⚠️ Detected unencrypted hex key (legacy format), returning as-is');
-        return encryptedBase64;
-      }
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message.includes('ENCRYPTION_KEY must')) {
+      throw error;
     }
-    
-    throw new Error(`Failed to decrypt secret key: ${error.message}`);
+    const msg = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to decrypt secret key: ${msg}`);
   }
 }
 

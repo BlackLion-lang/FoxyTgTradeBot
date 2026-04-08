@@ -1,3 +1,5 @@
+import { isProductionMode } from "./runtimeMode";
+
 const colors = {
     reset: "\x1b[0m",
     bright: "\x1b[1m",
@@ -9,23 +11,28 @@ const colors = {
     cyan: "\x1b[36m",
 };
 
-function format(level: string, color: string, tag: string, ...args: unknown[]): void {
+function formatTime(level: string, color: string, tag: string): string {
     const time = new Date().toISOString();
-    const prefix = `${color}[${time}] [${tag}] ${level}${colors.reset}`;
-    console.log(prefix, ...args);
+    return `${color}[${time}] [${tag}] ${level}${colors.reset}`;
 }
 
 export const logger = {
     info(tag: string, ...args: unknown[]): void {
-        format("INFO ", colors.blue, tag, ...args);
+        if (isProductionMode()) return;
+        const prefix = formatTime("INFO ", colors.blue, tag);
+        console.log(prefix, ...args);
     },
     success(tag: string, ...args: unknown[]): void {
-        format("OK   ", colors.green, tag, ...args);
+        if (isProductionMode()) return;
+        const prefix = formatTime("OK   ", colors.green, tag);
+        console.log(prefix, ...args);
     },
     warn(tag: string, ...args: unknown[]): void {
-        format("WARN ", colors.yellow, tag, ...args);
+        const prefix = formatTime("WARN ", colors.yellow, tag);
+        console.warn(prefix, ...args);
     },
     error(tag: string, ...args: unknown[]): void {
-        format("ERR  ", colors.red, tag, ...args);
+        const prefix = formatTime("ERR  ", colors.red, tag);
+        console.error(prefix, ...args);
     },
 };

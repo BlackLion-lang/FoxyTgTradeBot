@@ -1,6 +1,7 @@
 import TelegramBot from "node-telegram-bot-api";
 import { User } from "../../../models/user";
 import { t } from "../../../locales";
+import { clampInactivityMinutes } from "../../../services/sellOnNoActivity";
 
 export const getAutoSell = async (
     userId: number,
@@ -28,6 +29,22 @@ export const getAutoSell = async (
         : (user.settings.auto_sell?.enabled_solana ?? false);
     const status = enabled === true ? "🟢" : "🔴";
 
+    const noActEnabled = isEthereum
+        ? (user.settings.auto_sell?.sellOnNoActivityEnabled_ethereum ?? false)
+        : (user.settings.auto_sell?.sellOnNoActivityEnabled_solana ?? false);
+    const noActMins = clampInactivityMinutes(
+        isEthereum
+            ? user.settings.auto_sell?.sellOnNoActivityMinutes_ethereum
+            : user.settings.auto_sell?.sellOnNoActivityMinutes_solana,
+    );
+
+    const devSellEnabled = !isEthereum && (user.settings.auto_sell?.sellOnDevSellEnabled_solana ?? false);
+    const devMinSol = !isEthereum ? Number(user.settings.auto_sell?.sellOnDevSellMinSol_solana ?? 0) : 0;
+    const devMinSupply = !isEthereum ? Number(user.settings.auto_sell?.sellOnDevSellMinSupplyPercent_solana ?? 0) : 0;
+    const devPosPct = !isEthereum
+        ? Math.min(100, Math.max(1, Math.floor(Number(user.settings.auto_sell?.sellOnDevSellPositionPercent_solana ?? 100))))
+        : 100;
+
     const chainName = isEthereum ? "Ethereum" : "Solana";
     const chainEmoji = isEthereum ? "🟠" : "🟠";
     const autoSellHelpUrl = isEthereum
@@ -43,6 +60,16 @@ export const getAutoSell = async (
         `<code>${active_wallet.publicKey}</code>\n\n` +
         `<strong>${await t('autoSell.p6', userId)}</strong> ${takeProfitPercent}%\n` +
         `<strong>${await t('autoSell.p7', userId)}</strong> ${stopLossPercent}%\n\n` +
+        `<strong>${await t('autoSell.noActivityTitle', userId)}</strong> ${noActEnabled ? "🟢" : "🔴"}\n` +
+        `${await t('autoSell.noActivityHint', userId)}\n` +
+        `<strong>${await t('autoSell.noActivityPeriodLabel', userId)}</strong>: ${noActMins} min\n\n` +
+        (!isEthereum
+            ? `<strong>${await t("autoSell.devSellTitle", userId)}</strong> ${devSellEnabled ? "🟢" : "🔴"}\n` +
+              `${await t("autoSell.devSellHint", userId)}\n` +
+              `<strong>${await t("autoSell.devSellMinSolLabel", userId)}</strong>: ${devMinSol}\n` +
+              `<strong>${await t("autoSell.devSellMinSupplyLabel", userId)}</strong>: ${devMinSupply}%\n` +
+              `<strong>${await t("autoSell.devSellPositionLabel", userId)}</strong>: ${devPosPct}%\n\n`
+            : "") +
         `<strong>${await t('autoSell.p8', userId)}</strong>`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
@@ -56,6 +83,44 @@ export const getAutoSell = async (
                 callback_data: "settings_auto_Sell_tp_sl",
             },
         ],
+        [
+            {
+                text: `${noActEnabled ? "🟢" : "🔴"} ${await t("autoSell.noActivityTitle", userId)}`,
+                callback_data: "autoSell_no_activity_toggle",
+            },
+        ],
+        [
+            {
+                text: `⏱ ${noActMins} min`,
+                callback_data: "autoSell_no_activity_period",
+            },
+        ],
+        ...(isEthereum
+            ? []
+            : [
+                  [
+                      {
+                          text: `${devSellEnabled ? "🟢" : "🔴"} ${await t("autoSell.devSellTitle", userId)}`,
+                          callback_data: "autoSell_dev_sell_toggle",
+                      },
+                  ],
+                  [
+                      {
+                          text: `◎ ${await t("autoSell.devSellMinSolLabel", userId)}: ${devMinSol}`,
+                          callback_data: "autoSell_dev_sell_min_sol",
+                      },
+                  ],
+                  [
+                      {
+                          text: `% ${await t("autoSell.devSellMinSupplyLabel", userId)}: ${devMinSupply}`,
+                          callback_data: "autoSell_dev_sell_supply_pct",
+                      },
+                      {
+                          text: `↪ ${await t("autoSell.devSellPositionLabel", userId)}: ${devPosPct}`,
+                          callback_data: "autoSell_dev_sell_position_pct",
+                      },
+                  ],
+              ]),
           [
             {
                 text: `${await t('autoSell.wallet', userId)} ${active_wallet.label}`,

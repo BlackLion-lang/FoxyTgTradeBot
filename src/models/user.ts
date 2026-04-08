@@ -247,7 +247,20 @@ const userSchema = new mongoose.Schema(
                         takeProfitPercent_solana: { type: Number, default: 10 },
                         stopLossPercent_solana: { type: Number, default: -40 },
                         takeProfitPercent_ethereum: { type: Number, default: 10 },
-                        stopLossPercent_ethereum: { type: Number, default: -40 }
+                        stopLossPercent_ethereum: { type: Number, default: -40 },
+                        /** Auto-sell when DexScreener pair snapshot is unchanged for N minutes (Solana). */
+                        sellOnNoActivityEnabled_solana: { type: Boolean, default: false },
+                        sellOnNoActivityMinutes_solana: { type: Number, default: 60 },
+                        sellOnNoActivityEnabled_ethereum: { type: Boolean, default: false },
+                        sellOnNoActivityMinutes_ethereum: { type: Number, default: 60 },
+                        /** Pump.fun: auto-sell when the token creator (dev) sells on-chain (Solana). */
+                        sellOnDevSellEnabled_solana: { type: Boolean, default: false },
+                        /** Min SOL in the dev’s sell tx to trigger (0 = any dev sell). */
+                        sellOnDevSellMinSol_solana: { type: Number, default: 0 },
+                        /** Min % of total supply sold in that dev tx (0 = ignore). */
+                        sellOnDevSellMinSupplyPercent_solana: { type: Number, default: 0 },
+                        /** % of your position to sell when triggered (1–100). */
+                        sellOnDevSellPositionPercent_solana: { type: Number, default: 100 },
                     },
                     default: {},
                 },

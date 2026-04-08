@@ -33,14 +33,23 @@ import { swapToken } from "../../../services/jupiter";
 import { toTokenPrice } from "@raydium-io/raydium-sdk-v2";
 import { DefaultDeserializer } from "node:v8";
 import { t } from "../../../locales";
-import { sendMenu, sendMenuMessage } from "../..";
 import { TippingSettings } from "../../../models/tipSettings";
 import { settings } from "../../../commands/settings";
 import { getCloseButton } from "../../../utils/markup";
+import type { PurchaseErrorKind } from "../../../utils/purchaseError";
+import {
+    classifyPurchaseError,
+    purchaseErrorLocaleKey,
+    shouldWarnLowSolBalance,
+} from "../../../utils/purchaseError";
 
 // let invest = 0;
 
-export const getBuy = async (userId: number, address: string) => {
+export const getBuy = async (
+    userId: number,
+    address: string,
+    purchaseOpts?: { purchaseError?: PurchaseErrorKind },
+) => {
     const pairArray = await getPairByAddress(address);
     const pair = pairArray[0];
     // console.log("pair",pair)
@@ -138,7 +147,7 @@ export const getBuy = async (userId: number, address: string) => {
         }
     })();
 
-    const caption =
+    let caption =
         `<strong>${await t('buy.p1', userId)}</strong>\n\n` +
         `💎 ${name} | <strong>$${symbol}</strong> \n<code>${tokenAddress}</code>\n\n` +
         `<strong>${warning}</strong> ${days}${await t('buy.p18', userId)} ${hours}h ${minutes}m ${seconds}s ${await t('buy.p17', userId)}\n\n` +
@@ -161,8 +170,18 @@ export const getBuy = async (userId: number, address: string) => {
         `   <strong>${await t('buy.p14', userId)}</strong> ${user.settings.auto_sell.stopLossPercent_solana ?? -40} %\n\n` +
         // `💰 Token Balance: <strong>${tokenBalance} ${name} | $${(tokenBalance * priceUsd).toFixed(2)}</strong>\n` +
         // `💼 Wallet Balance: <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
-        `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n` +
-        `<strong>${await t('buy.p16', userId)}</strong>`
+        `${await t('buy.p15', userId)} ${getLastUpdatedTime(Date.now())}\n\n`;
+
+    const quickBuyAmounts = user.settings.quick_buy?.buy_amount?.length
+        ? user.settings.quick_buy.buy_amount
+        : [0.5, 1, 2, 5, 10];
+    if (purchaseOpts?.purchaseError) {
+        const errKey = purchaseErrorLocaleKey(purchaseOpts.purchaseError, "solana");
+        caption += `🔴 <strong><em>${await t("quickBuy.buyFailedPrefix", userId)} ${await t(errKey, userId)}</em></strong>\n\n`;
+    } else if (shouldWarnLowSolBalance(balance, quickBuyAmounts)) {
+        caption += `🔴 <strong><em>${await t("buy.purchaseWarningLowBalanceSol", userId)}</em></strong>\n\n`;
+    }
+    caption += `<strong>${await t("buy.p16", userId)}</strong>`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
         [
@@ -270,9 +289,10 @@ export const editBuyMessageWithAddress = async (
     userId: number,
     messageId: number,
     address: string,
+    purchaseOpts?: { purchaseError?: PurchaseErrorKind },
 ) => {
     try {
-        const { caption, markup } = await getBuy(userId, address);
+        const { caption, markup } = await getBuy(userId, address, purchaseOpts);
 
         // Try to edit as text message first
         try {
@@ -469,8 +489,10 @@ export const sendBuyMessageWithAddress = async (
                                 Tp: takeProfitPercent,
                                 Sl: stopLossPercent,
                                 target_price1: updatedTargetPrice1,
-                                targer_price2: updatedTargetPrice2,
-                                status: "Pending"
+                                target_price2: updatedTargetPrice2,
+                                status: "Pending",
+                                lastActivityAt: new Date(),
+                                lastActivityFingerprint: "",
                             },
                         }
                     );
@@ -543,31 +565,36 @@ export const sendBuyMessageWithAddress = async (
             return;
 
         } else {
+            await deletePendingSwapMessage();
+            const kind = classifyPurchaseError(result?.error, "solana");
+            const errKey = purchaseErrorLocaleKey(kind, "solana");
             const failText =
-                `${await t('quickBuy.p7', userId)}\n\n` +
+                `${await t("quickBuy.p7", userId)}\n\n` +
                 `Token : <code>${tokenAddress}</code>\n\n` +
-                `${await t('quickBuy.p14', userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
+                `${await t("quickBuy.p14", userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
                 `<code>${active_wallet?.publicKey}</code>\n\n` +
-                `🔴 <strong><em>${await t('quickBuy.p8', userId)}</em></strong>\n` +
+                `🔴 <strong><em>${await t("quickBuy.p8", userId)}</em></strong>\n` +
                 `${solAmount} SOL ⇄\n` +
-                `${await t('quickBuy.p9', userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
-                `<strong>${await t('quickBuy.failed', userId)}</strong>`;
-
+                `${await t("quickBuy.p9", userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
+                `🔴 <strong><em>${await t("quickBuy.buyFailedPrefix", userId)} ${await t(errKey, userId)}</em></strong>`;
             await bot.sendMessage(chatId, failText, {
                 parse_mode: "HTML",
                 disable_web_page_preview: true,
                 reply_markup: {
                     inline_keyboard: [
                         [
-                            { text: `${await t('quickBuy.viewToken', userId)}`, url: `https://solscan.io/token/${tokenAddress}` },
+                            {
+                                text: `${await t("quickBuy.viewToken", userId)}`,
+                                url: `https://solscan.io/token/${tokenAddress}`,
+                            },
                         ],
-                        [
-                            await getCloseButton(userId)
-                        ]
+                        [await getCloseButton(userId)],
                     ],
                 },
             });
-            sendMenu(bot, chatId, userId, messageId);
+            await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, {
+                purchaseError: kind,
+            });
         }
 
         // } else {
@@ -575,12 +602,36 @@ export const sendBuyMessageWithAddress = async (
         // }
     }).catch(async (err: any) => {
         const errorDetail = err?.message ? String(err.message) : err ? String(err) : "";
-        await bot.sendMessage(
-            chatId,
-            `<strong>${await t('quickBuy.failed', userId)}</strong>${errorDetail ? `\n\n${errorDetail}` : ''}`,
-            { parse_mode: "HTML" },
-        );
-        sendMenu(bot, chatId, userId, messageId);
+        await deletePendingSwapMessage();
+        const kind = classifyPurchaseError(errorDetail, "solana");
+        const errKey = purchaseErrorLocaleKey(kind, "solana");
+        const failText =
+            `${await t("quickBuy.p7", userId)}\n\n` +
+            `Token : <code>${tokenAddress}</code>\n\n` +
+            `${await t("quickBuy.p14", userId)} : ${active_wallet?.label} - <strong>${balance.toFixed(2)} SOL</strong> ($${(balance * sol_price).toFixed(2)})\n` +
+            `<code>${active_wallet?.publicKey}</code>\n\n` +
+            `🔴 <strong><em>${await t("quickBuy.p8", userId)}</em></strong>\n` +
+            `${solAmount} SOL ⇄\n` +
+            `${await t("quickBuy.p9", userId)} : ${user.settings.slippage.buy_slippage} % \n\n` +
+            `🔴 <strong><em>${await t("quickBuy.buyFailedPrefix", userId)} ${await t(errKey, userId)}</em></strong>`;
+        await bot.sendMessage(chatId, failText, {
+            parse_mode: "HTML",
+            disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        {
+                            text: `${await t("quickBuy.viewToken", userId)}`,
+                            url: `https://solscan.io/token/${tokenAddress}`,
+                        },
+                    ],
+                    [await getCloseButton(userId)],
+                ],
+            },
+        });
+        await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress, {
+            purchaseError: kind,
+        });
     });
 
     // Fetch the buy message and send it to the user

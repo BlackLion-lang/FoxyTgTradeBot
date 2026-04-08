@@ -250,6 +250,12 @@ export const getPositions = async (
                 },
             ],
             [
+                {
+                    text: `🗑️ ${await t('positions.deletePosition', userId)}`,
+                    callback_data: `positions_delete_menu_sol_${current_wallet}_${page}`,
+                },
+            ],
+            [
                 { text: `${await t('backMenu', userId)}`, callback_data: "menu_back" },
                 {
                     text: `${await t('refresh', userId)}`,
@@ -265,6 +271,52 @@ export const getPositions = async (
 
     return { caption, markup: newMarkup };
 };
+
+function labelFromTrades(trades: any[], mint: string): string {
+    const last = trades[trades.length - 1];
+    const n = last?.name;
+    if (typeof n === "string" && n.trim()) {
+        const s = n.trim();
+        return s.length > 22 ? `${s.slice(0, 20)}…` : s;
+    }
+    return mint.length > 16 ? `${mint.slice(0, 8)}…${mint.slice(-6)}` : mint;
+}
+
+/** Same ordering as visible rows in `getPositions` (balance group). */
+export async function getActivePositionsForDeletionSolana(
+    userId: number,
+    current_wallet: number,
+): Promise<{ mint: string; label: string }[]> {
+    const user = await User.findOne({ userId });
+    if (!user?.wallets?.[current_wallet]) return [];
+    const currentWallet = user.wallets[current_wallet];
+    const grouped: Record<string, any[]> = {};
+    for (const trade of currentWallet.tradeHistory || []) {
+        const tokenAddress = trade?.token_address;
+        if (!tokenAddress) continue;
+        if (!grouped[tokenAddress]) grouped[tokenAddress] = [];
+        grouped[tokenAddress].push(trade);
+    }
+    const out: { mint: string; label: string }[] = [];
+    for (const [tokenAddress, trades] of Object.entries(grouped)) {
+        const lastTrade = trades[trades.length - 1];
+        const lastBalance = lastTrade?.token_balance ?? 0;
+        if (lastBalance > 0.00001) {
+            try {
+                const onChainBalance = await getTokenBalance(
+                    new PublicKey(currentWallet.publicKey),
+                    new PublicKey(tokenAddress),
+                );
+                if (onChainBalance > 0.00001) {
+                    out.push({ mint: tokenAddress, label: labelFromTrades(trades, tokenAddress) });
+                }
+            } catch {
+                out.push({ mint: tokenAddress, label: labelFromTrades(trades, tokenAddress) });
+            }
+        }
+    }
+    return out;
+}
 
 export const editPositionsMessage = async (
     bot: TelegramBot,

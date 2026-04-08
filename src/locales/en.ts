@@ -169,7 +169,19 @@ export const en: Translations = {
         p19: "Share token with your friends",
         settings: "⚙️ Settings",
         buy: "Buy",
-        default: "Default"
+        default: "Default",
+        purchaseErrorInsufficientSol:
+            "Insufficient SOL for this purchase and network fees.",
+        purchaseErrorInsufficientEth:
+            "Insufficient ETH for this purchase and gas.",
+        purchaseWarningLowBalanceSol:
+            "Your SOL balance may be too low for a quick buy including fees.",
+        purchaseWarningLowBalanceEth:
+            "Your ETH balance may be too low for a quick buy including gas.",
+        purchaseErrorSlippage: "The trade failed due to price movement or slippage limits.",
+        purchaseErrorLiquidity: "No suitable route or liquidity for this token right now.",
+        purchaseErrorNetwork: "Network or service error. Try again in a moment.",
+        purchaseErrorGeneric: "The purchase could not be completed.",
     },
 
     //sell
@@ -187,6 +199,8 @@ export const en: Translations = {
         p11: "🕒 Last Updated (UTC) :",
         p12: "💡 Select an action below.",
         p13: "Auto Sell Status :",
+        autoStatusNoActivity: "Sell on no activity :",
+        autoStatusDevSell: "Auto sell on dev sell :",
         p14: "✅ Successful trade, here is the PNL image of your performance.",
         settings: "⚙️ Settings",
         sell: "Sell",
@@ -205,6 +219,10 @@ export const en: Translations = {
         p7: "🕒 Last Updated (UTC) :",
         p8: "No active positions found. All tokens have been sold or have zero balance.",
         importPosition: "Import Position",
+        deletePosition: "Delete Position",
+        deletePositionPick: "Select a position to remove from the list:",
+        deletePositionDone: "Position removed.",
+        deletePositionCancel: "↩️ Cancel",
         noPositionsFound: "No positions found. Start trading to see your positions here.",
         whatToDo: "💡 What do you want to do?"
     },
@@ -286,7 +304,7 @@ export const en: Translations = {
         p1: "What would you like to name your new wallet?",
         p2: "Wallet name cannot contain symbols or special characters.",
         p3: "Wallet with this name already exists. Please try again.",
-        p4: "✅ Foxy Wallet Created!",
+        p4: "Foxy Wallet Created!",
         p5: "💳 Name : ",
         p6: "🔗 Address : ",
         p7: "🔑 Private Key : ",
@@ -294,6 +312,22 @@ export const en: Translations = {
         p9: "⚠️ Keep your private key safe and secure. Foxy will no longer remember your private key, and you will no longer be able to retrieve it after this message. Please import your wallet into Phantom.",
         p10: "💡 To view your other wallets, head over to settings.",
         p11: "⚙️ Settings",
+        p12: "📎 Your private key is in the attached .txt file. Download it and keep it offline.",
+        fileOperation: "Operation: New wallet creation",
+        keysFileHint: "Open the file to copy your Base58 private key for Phantom.",
+        keysFileTitle: "Foxy Wallet Private Key",
+        keysFileHeader: "🔑 FOXY WALLET — PRIVATE KEY EXPORT",
+        fileDateLabel: "Date:",
+        keysFileWalletBlock: "Wallet #1",
+        keysFileDescription: "This file contains your Foxy wallet private key (Base58).",
+        keysFileLoseWarning: "If you lose this key, you will lose access to funds in this wallet.",
+        savePrivateKeyOnce: "Please save your private key securely. It will not be shown again!",
+        keysStoreFile: "Store this file in a secure location.",
+        keysNeverShare: "Never share your private key with anyone!",
+        keysFileImportant: "⚠️ IMPORTANT: Keep this key safe!",
+        keysFilePublicKeyLabel: "Public key (address):",
+        keysFilePrivateKeyLabel: "Private key (Base58):",
+        keysFileSolscanLabel: "Solscan:",
     },
 
     //Import wallet
@@ -372,14 +406,16 @@ export const en: Translations = {
 
     //privateKey
     privateKey: {
-        p1: "🔐 Wallet : ",
+        p1: "🔐 Wallet :",
         p2: "Address : ",
         p3: "🔑Private Key : ",
         p4: "View on Solscan",
         p5: "DO NOT SHARE IT WITH ANYONE",
         p6: "Keep it safe and secure, as it grants full access to your wallet and funds",
         p7: "Once you're done, press DELETE MESSAGE button below",
-        revealKey: "🔐 Reveal Key",
+        promptReveal:
+            'Please click the "Show Key" button below to reveal your private key.',
+        revealKey: "🔓 Show Key",
         deleteMessage: "🗑️ Delete Message"
     },
 
@@ -467,6 +503,7 @@ export const en: Translations = {
         p15: "Token",
         p16: "View on Etherscan",
         failed: "🔴 Buy Failed!",
+        buyFailedPrefix: "Buy Failed :",
         viewToken: "🔄 View Token",
         positions: "📊 Positions",
         sell: "🎒 Sell",
@@ -516,6 +553,25 @@ export const en: Translations = {
         status1: "Enabled",
         status2: "Disabled",
         wallet: "💳 Wallet :",
+        noActivityTitle: "Sell on no activity",
+        noActivityHint: "If DexScreener shows no change in price, volume, or tx counts for your chosen period, Foxy closes the position (same limit order as TP/SL).",
+        noActivityPeriodLabel: "Inactivity period (minutes)",
+        noActivityPrompt: "Enter inactivity period in minutes (15–10080, e.g. 60 = 1 hour):",
+        noActivityInvalid: "Invalid period. Use a whole number between 15 and 10080 minutes.",
+        devSellTitle: "Auto Sell on Dev Sell",
+        devSellHint: "Solana / pump.fun: when the token creator sells, Foxy can sell your position using the rules below.",
+        devSellMinSolLabel: "Min dev sell (SOL)",
+        devSellMinSupplyLabel: "Min supply % (dev tx)",
+        devSellPositionLabel: "Your sell %",
+        devSellPromptMinSol: "Minimum SOL in the dev's sell transaction (0 = any dev sell):",
+        devSellPromptSupply: "Minimum % of total supply sold in that dev transaction (0 = ignore this filter):",
+        devSellPromptPosition: "Percentage of your position to sell when triggered (1–100):",
+        devSellInvalidMinSol: "Invalid value. Enter a number ≥ 0 (max 1,000,000 SOL).",
+        devSellInvalidSupply: "Invalid value. Enter a number from 0 to 100.",
+        devSellInvalidPosition: "Invalid value. Enter a whole number from 1 to 100.",
+        devSellPending: "⏳ Auto-sell on dev sell — executing sell…",
+        devSellDone: "✅ Dev sold — your position was sold per your Auto Sell on Dev Sell settings.",
+        devSellFailed: "❌ Auto-sell on dev sell failed.",
     },
 
     //Tp & Sl
@@ -876,6 +932,7 @@ export const en: Translations = {
         autoSell6: "The market rose and your take profit level was reached, securing your gains.",
         autoSell7: "🛡️ Your position has been closed automatically.",
         autoSell8: "🚫 The market dropped and your stop loss was triggered, limiting your losses and protecting your remaining capital.",
+        autoSellNoActivity: "💤 Auto-sell (no activity): the pair showed no meaningful change in volume, transactions, or price on DexScreener for your set period.",
         entertip: "Please enter the tip percentage!(0-100)",
         enterreferral: "Please enter the referral reward in SOL!",
         enterreferral_ethereum: "Please enter the referral reward in ETH!",
@@ -1042,6 +1099,8 @@ export const en: Translations = {
         activeWalletNotConfigured: "Active wallet not configured. Please set an active wallet first.",
         noBundleWalletsFound: "No bundle wallets found. Create bundle wallets first.",
         invalidAmount: "Invalid amount. Please enter a positive number.",
+        fundingCancelled: "Funding cancelled. You can open *Fund Wallets* again when you're ready.",
+        fundingCancelledToast: "Cancelled",
         fundingAlreadyInProgress: "Funding already in progress.",
         startingDistribution: "Starting Clean Distribution",
         amount: "Amount",
