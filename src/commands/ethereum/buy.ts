@@ -68,7 +68,8 @@ export async function Buy(bot: TelegramBot, chatId: number, userId: number, addr
             {
                 text: `💦 ${await t('buy.buy', userId)} : ${settings.slippage_eth?.buy_slippage_eth || 0.5} %`,
                 callback_data: "settings_buy_slippage_eth"
-            }
+            },
+            { text: `${await t('buy.quickTpSl', userId)}`, callback_data: "buy_quick_tpsl" },
         ])
         // Gas fee selection buttons
         const gasValues = settings.gas_values_eth || [10, 50, 100];
@@ -251,7 +252,8 @@ export async function BuyEdit(
             {
                 text: `💦 ${await t('buy.buy', userId)} : ${settings.slippage_eth?.buy_slippage_eth || 0.5} %`,
                 callback_data: "settings_buy_slippage_eth"
-            }
+            },
+            { text: `${await t('buy.quickTpSl', userId)}`, callback_data: "buy_quick_tpsl" },
         ])
         // Gas fee selection buttons
         const gasValues = settings.gas_values_eth || [10, 50, 100];

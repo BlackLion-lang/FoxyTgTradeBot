@@ -188,6 +188,12 @@ export const fr: Translations = {
         purchaseErrorNetwork:
             "Erreur réseau ou service. Réessayez dans un instant.",
         purchaseErrorGeneric: "L'achat n'a pas pu être effectué.",
+        quickTpSl: "📈 TP / SL",
+        quickTpSlBack: "« Menu achat",
+        quickTpUpdated: "Take profit mis à jour.",
+        quickSlUpdated: "Stop loss mis à jour.",
+        quickCustomTp: "✏️ TP perso",
+        quickCustomSl: "✏️ SL perso",
     },
 
     // Menu de Vente

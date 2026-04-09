@@ -62,9 +62,9 @@ export const getWelcome = async (
     let caption =
         `<strong>🦊 ${await t('welcome.p1', userId)}</strong>\n\n` +
         `${await t('welcome.p2', userId)}, ${username} ! \n${await t('welcome.p3', userId)}\n` +
-        `${await t('welcome.p4', userId)}\n` +
+        `${await t('welcome.p4', userId)}\n\n` +
         `${await t('welcome.p5', userId)}\n\n` +
-        `${await t('welcome.p6', userId)} \n` +
+        `${await t('welcome.p6', userId)} \n\n` +
         `${await t('welcome.p7', userId)}\n`;
 
     let buttons: any[] = [];

@@ -5,6 +5,15 @@ import { getRecommendedGasPrice } from "../../../services/ethereum/etherscan";
 import { t } from "../../../locales";
 import { getUserChain } from "../../../utils/chain";
 
+/** Lamports → SOL string without scientific notation (e.g. tiny MEV tips). */
+function formatSolFromLamports(lamports: number): string {
+    const sol = lamports / 1e9;
+    if (!Number.isFinite(sol)) return "0";
+    if (sol === 0) return "0";
+    const s = sol.toFixed(12).replace(/\.?0+$/, "");
+    return s || "0";
+}
+
 export const getFee = async (
     userId: number
 ) => {
@@ -112,7 +121,7 @@ export const getFee = async (
 ">${await t('feeSettings.p3', userId)}</a>\n\n` +
         `<strong>${await t('feeSettings.p6', userId)}</strong>\n\n` +
         `<strong>${await t('feeSettings.p16', userId)}</strong> ${feeSpeed}\n\n` +
-        `${await t('feeSettings.p14', userId)} ${result / 10 ** 9} SOL\n\n` +
+        `${await t('feeSettings.p14', userId)} ${formatSolFromLamports(result)} SOL\n\n` +
         `${await t('feeSettings.p7', userId)}`;
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
@@ -238,7 +247,7 @@ ${await t('feeSettings.p12', userId)}
 <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
 ">${await t('feeSettings.p13', userId)}</a>
 
-${await t('feeSettings.p14', userId)} ${result / 10 ** 9} SOL
+${await t('feeSettings.p14', userId)} ${formatSolFromLamports(result)} SOL
 
 <strong>${await t('feeSettings.p15', userId)}</strong>`,
             {
@@ -346,7 +355,7 @@ ${await t('feeSettings.currentRecommendedGas', userId)} ${result.toFixed(1)} Gwe
 ${await t('feeSettings.p12', userId)} <a href="https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=fraisrecommande&sig=YIv1xssS1SH9BM39HK-1l79e4aDpam4o
 ">${await t('feeSettings.p13', userId)}</a>
 
-${await t('feeSettings.currentRecommendedFee', userId)} ${result} SOL
+${await t('feeSettings.currentRecommendedFee', userId)} ${formatSolFromLamports(result)} SOL
 
 <strong>${await t('feeSettings.autoCalculateMEVTip', userId)}</strong>`,
             {
@@ -367,11 +376,7 @@ export const editFeeAutoMessageEth = async (
     const user = (await User.findOne({ userId })) || new User();
     const currentGasSpeed = (user.settings as any).auto_gas_eth || "medium";
 
-    console.log(`[editFeeAutoMessageEth] User ${userId}, currentGasSpeed: ${currentGasSpeed}`);
-
     const result = await getRecommendedGasPrice(currentGasSpeed);
-
-    console.log(`[editFeeAutoMessageEth] Recommended gas price for speed ${currentGasSpeed}: ${result} Gwei`);
 
     let feeSpeed: string;
     switch (currentGasSpeed) {

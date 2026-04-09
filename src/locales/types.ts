@@ -120,6 +120,13 @@ export interface Translations {
         purchaseErrorLiquidity: string;
         purchaseErrorNetwork: string;
         purchaseErrorGeneric: string;
+        /** Purchase screen: open quick TP/SL preset keyboard */
+        quickTpSl: string;
+        quickTpSlBack: string;
+        quickTpUpdated: string;
+        quickSlUpdated: string;
+        quickCustomTp: string;
+        quickCustomSl: string;
     };
 
     //sell

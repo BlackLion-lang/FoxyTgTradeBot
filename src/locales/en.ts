@@ -182,6 +182,12 @@ export const en: Translations = {
         purchaseErrorLiquidity: "No suitable route or liquidity for this token right now.",
         purchaseErrorNetwork: "Network or service error. Try again in a moment.",
         purchaseErrorGeneric: "The purchase could not be completed.",
+        quickTpSl: "📈 TP / SL",
+        quickTpSlBack: "« Buy menu",
+        quickTpUpdated: "Take profit updated.",
+        quickSlUpdated: "Stop loss updated.",
+        quickCustomTp: "✏️ Custom TP",
+        quickCustomSl: "✏️ Custom SL",
     },
 
     //sell

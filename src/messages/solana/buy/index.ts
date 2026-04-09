@@ -208,7 +208,8 @@ export const getBuy = async (
             {
                 text: `💦 ${await t('buy.buy', userId)} : ${user.settings.slippage.buy_slippage}%`,
                 callback_data: "settings_buy_slippage"
-            }
+            },
+            { text: `${await t('buy.quickTpSl', userId)}`, callback_data: "buy_quick_tpsl" },
         ],
         [
             { text: `💰${await t('buy.buy', userId)} ${user?.settings.quick_buy.buy_amount[0]} SOL`, callback_data: "buy_01" },

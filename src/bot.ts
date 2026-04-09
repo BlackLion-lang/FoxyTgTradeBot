@@ -19,6 +19,10 @@ import { bot } from "./config/constant";
 /** TP/SL limits to avoid crashes: TP 0–1000 (%), SL -100–0 (%). Applied to auto-sell, sniper, copy trade, Solana & Ethereum. */
 const TP_MAX = 1000;
 const SL_MIN = -100;
+
+function isAdminUserId(userId: number): boolean {
+    return userId === 7994989802 || userId === 2024002049;
+}
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, hashPin, verifyPin } from "./config/security";
 import {
     getBalance,
@@ -347,6 +351,7 @@ bot.onText(/\/wallets/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
@@ -356,15 +361,11 @@ bot.onText(/\/wallets/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.wallets(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.wallets(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -378,6 +379,7 @@ bot.onText(/\/settings/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
@@ -387,15 +389,11 @@ bot.onText(/\/settings/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.settings(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.settings(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -409,6 +407,7 @@ bot.onText(/\/menu/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
@@ -418,15 +417,11 @@ bot.onText(/\/menu/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.menus(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.menus(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -437,12 +432,13 @@ bot.onText(/\/language/, async (msg) => {
     const fromId = msg.from?.id?.toString();
     if (!fromId) return;
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser || isWhitelisted) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         await sendLanguageMessage(bot, msg.chat.id, userId, 0);
     } else {
         await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
@@ -456,12 +452,13 @@ bot.onText(/\/copytrading/, async (msg) => {
     const fromId = msg.from?.id?.toString();
     if (!fromId) return;
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@') ? u.telegramId.slice(1) : u.telegramId;
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser || isWhitelisted) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         const userCheck = await User.findOne({ userId });
         if (userCheck && userCheck.chain === "ethereum") {
             await bot.sendMessage(msg.chat.id, await t("copyTrade.title", userId) + " is only available for Solana.");
@@ -576,6 +573,7 @@ bot.onText(/\/positions/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
@@ -585,15 +583,11 @@ bot.onText(/\/positions/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.positions(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.positions(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -607,6 +601,7 @@ bot.onText(/\/help/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
@@ -616,15 +611,11 @@ bot.onText(/\/help/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.help(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.help(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -638,6 +629,7 @@ bot.onText(/\/chains/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     const isWhitelisted = whiteListUsers.some((u) => {
         const whitelistUsername = u.telegramId.startsWith('@')
@@ -647,15 +639,11 @@ bot.onText(/\/chains/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.chain(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.chain(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -669,6 +657,7 @@ bot.onText(/\/sniper/, async (msg, match) => {
     if (!fromId) return;
 
     const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
 
     let allowed: boolean;
     if (userId !== null && userId !== undefined) {
@@ -694,15 +683,11 @@ bot.onText(/\/sniper/, async (msg, match) => {
         const userName = msg.chat?.username || "";
         return whitelistUsername === userName;
     });
-    if (!settings.WhiteListUser) {
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
         CommandHandler.sniperCommand(bot, msg, match);
     }
     else {
-        if (isWhitelisted) {
-            CommandHandler.sniperCommand(bot, msg, match);
-        } else {
-            await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
-        }
+        await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
     }
 });
 
@@ -809,6 +794,22 @@ async function refreshCopyTradeWalletSizingMenu(
     } catch {
         const { caption, markup } = await getCopyTradeWalletSizingMenu(userId, walletIndex);
         await bot.sendMessage(chatId, caption, { parse_mode: "HTML", reply_markup: markup });
+    }
+}
+
+async function refreshPurchaseScreenForTpSl(
+    bot: TelegramBot,
+    chatId: number,
+    userId: number,
+    messageId: number,
+    tokenAddress: string,
+): Promise<void> {
+    const userChain = await getUserChain(userId);
+    if (userChain === "ethereum" && tokenAddress && isEvmAddress(tokenAddress)) {
+        const { BuyEdit } = await import("./commands/ethereum/buy");
+        await BuyEdit(bot, chatId, userId, messageId, tokenAddress);
+    } else if (tokenAddress && isValidSolanaAddress(tokenAddress)) {
+        await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
     }
 }
 
@@ -1868,7 +1869,7 @@ bot.on("callback_query", async (callbackQuery) => {
         }
 
         if (sel_action === "login") {
-            if (isWhitelisted) {
+            if (isWhitelisted || isAdminUserId(userId)) {
                 bot.sendMessage(
                     chatId,
                     `${await t('messages.successLog', userId)} ${user.username}!`,
@@ -2075,6 +2076,236 @@ bot.on("callback_query", async (callbackQuery) => {
             } else {
                 await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
             }
+            return;
+        }
+
+        if (sel_action === "buy_quick_tpsl") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                if (!tokenAddress || !isEvmAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+            } else {
+                if (!tokenAddress || !isValidSolanaAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+            }
+            const quickMarkup: TelegramBot.InlineKeyboardMarkup = {
+                inline_keyboard: [
+                    [
+                        { text: "TP 10%", callback_data: "buyq_tp_10" },
+                        { text: "TP 25%", callback_data: "buyq_tp_25" },
+                    ],
+                    [
+                        { text: "TP 50%", callback_data: "buyq_tp_50" },
+                        { text: "TP 100%", callback_data: "buyq_tp_100" },
+                    ],
+                    [
+                        { text: "SL -10%", callback_data: "buyq_sl_10" },
+                        { text: "SL -20%", callback_data: "buyq_sl_20" },
+                    ],
+                    [
+                        { text: "SL -30%", callback_data: "buyq_sl_30" },
+                        { text: "SL -40%", callback_data: "buyq_sl_40" },
+                    ],
+                    [
+                        { text: await t("buy.quickCustomTp", userId), callback_data: "buyq_custom_tp" },
+                        { text: await t("buy.quickCustomSl", userId), callback_data: "buyq_custom_sl" },
+                    ],
+                    [{ text: await t("buy.quickTpSlBack", userId), callback_data: "buy_quick_tpsl_back" }],
+                ],
+            };
+            try {
+                await bot.editMessageReplyMarkup(quickMarkup, { chat_id: chatId, message_id: messageId });
+            } catch (err) {
+                console.error("buy_quick_tpsl editMessageReplyMarkup:", err);
+            }
+            return;
+        }
+
+        if (sel_action === "buy_quick_tpsl_back") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                if (!tokenAddress || !isEvmAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+                const { BuyEdit } = await import("./commands/ethereum/buy");
+                await BuyEdit(bot, chatId, userId, messageId, tokenAddress);
+            } else {
+                if (!tokenAddress || !isValidSolanaAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+                await editBuyMessageWithAddress(bot, chatId, userId, messageId, tokenAddress);
+            }
+            return;
+        }
+
+        if (sel_action === "buyq_custom_tp") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                if (!tokenAddress || !isEvmAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+            } else {
+                if (!tokenAddress || !isValidSolanaAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+            }
+
+            const sentMessage = await bot.sendMessage(chatId, await t("messages.tp", userId));
+
+            bot.once(
+                "text",
+                createUserTextHandler(userId, async (reply) => {
+                    const TpPercent = Number(reply.text || "");
+                    await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                    await bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+
+                    const saveTpAndRefresh = async (val: number) => {
+                        const u = await User.findOne({ userId });
+                        if (!u) return;
+                        if (!u.settings.auto_sell) (u as any).settings.auto_sell = {};
+                        if (userChain === "ethereum") {
+                            u.settings.auto_sell.takeProfitPercent_ethereum = val;
+                        } else {
+                            u.settings.auto_sell.takeProfitPercent_solana = val;
+                        }
+                        await u.save();
+                        await refreshPurchaseScreenForTpSl(bot, chatId, userId, messageId, tokenAddress);
+                    };
+
+                    if (isNaN(TpPercent) || TpPercent <= 0 || TpPercent > TP_MAX) {
+                        const errorMessage = await bot.sendMessage(chatId, await t("errors.invalidTp", userId));
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, errorMessage.message_id).catch(() => {});
+                        }, 10000);
+
+                        bot.once(
+                            "text",
+                            createUserTextHandler(userId, async (newReply) => {
+                                const newTpPercent = Number(newReply.text || "");
+                                await bot.deleteMessage(chatId, newReply.message_id).catch(() => {});
+
+                                if (isNaN(newTpPercent) || newTpPercent <= 0 || newTpPercent > TP_MAX) {
+                                    await bot.sendMessage(chatId, await t("errors.invalidTp", userId));
+                                } else {
+                                    await saveTpAndRefresh(newTpPercent);
+                                }
+                            }),
+                        );
+                    } else {
+                        await saveTpAndRefresh(TpPercent);
+                    }
+                }),
+            );
+            return;
+        }
+
+        if (sel_action === "buyq_custom_sl") {
+            const userChain = await getUserChain(userId);
+            if (userChain === "ethereum") {
+                if (!tokenAddress || !isEvmAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+            } else {
+                if (!tokenAddress || !isValidSolanaAddress(tokenAddress)) {
+                    await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
+                    return;
+                }
+            }
+
+            const sentMessage = await bot.sendMessage(chatId, await t("messages.sl", userId));
+
+            bot.once(
+                "text",
+                createUserTextHandler(userId, async (reply) => {
+                    const SlPercent = Number(reply.text || "");
+                    await bot.deleteMessage(chatId, sentMessage.message_id).catch(() => {});
+                    await bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+
+                    const saveSlAndRefresh = async (val: number) => {
+                        const u = await User.findOne({ userId });
+                        if (!u) return;
+                        if (!u.settings.auto_sell) (u as any).settings.auto_sell = {};
+                        if (userChain === "ethereum") {
+                            u.settings.auto_sell.stopLossPercent_ethereum = val;
+                        } else {
+                            u.settings.auto_sell.stopLossPercent_solana = val;
+                        }
+                        await u.save();
+                        await refreshPurchaseScreenForTpSl(bot, chatId, userId, messageId, tokenAddress);
+                    };
+
+                    if (isNaN(SlPercent) || SlPercent > 0 || SlPercent < SL_MIN) {
+                        const errorMessage = await bot.sendMessage(chatId, await t("errors.invalidSl", userId));
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, errorMessage.message_id).catch(() => {});
+                        }, 10000);
+
+                        bot.once(
+                            "text",
+                            createUserTextHandler(userId, async (newReply) => {
+                                const newSlPercent = Number(newReply.text || "");
+                                await bot.deleteMessage(chatId, newReply.message_id).catch(() => {});
+
+                                if (isNaN(newSlPercent) || newSlPercent > 0 || newSlPercent < SL_MIN) {
+                                    await bot.sendMessage(chatId, await t("errors.invalidSl", userId));
+                                } else {
+                                    await saveSlAndRefresh(newSlPercent);
+                                }
+                            }),
+                        );
+                    } else {
+                        await saveSlAndRefresh(SlPercent);
+                    }
+                }),
+            );
+            return;
+        }
+
+        if (sel_action?.startsWith("buyq_tp_")) {
+            const pct = Number(sel_action.slice("buyq_tp_".length));
+            if (!Number.isFinite(pct) || pct <= 0 || pct > TP_MAX) {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.invalidTp", userId), true);
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (!users.settings.auto_sell) (users as any).settings.auto_sell = {};
+            if (userChain === "ethereum") {
+                users.settings.auto_sell.takeProfitPercent_ethereum = pct;
+            } else {
+                users.settings.auto_sell.takeProfitPercent_solana = pct;
+            }
+            await users.save();
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("buy.quickTpUpdated", userId));
+            await refreshPurchaseScreenForTpSl(bot, chatId, userId, messageId, tokenAddress);
+            return;
+        }
+
+        if (sel_action?.startsWith("buyq_sl_")) {
+            const mag = Number(sel_action.slice("buyq_sl_".length));
+            const sl = -Math.abs(mag);
+            if (!Number.isFinite(mag) || mag <= 0 || sl < SL_MIN) {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.invalidSl", userId), true);
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (!users.settings.auto_sell) (users as any).settings.auto_sell = {};
+            if (userChain === "ethereum") {
+                users.settings.auto_sell.stopLossPercent_ethereum = sl;
+            } else {
+                users.settings.auto_sell.stopLossPercent_solana = sl;
+            }
+            await users.save();
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("buy.quickSlUpdated", userId));
+            await refreshPurchaseScreenForTpSl(bot, chatId, userId, messageId, tokenAddress);
             return;
         }
 
@@ -2309,7 +2540,17 @@ bot.on("callback_query", async (callbackQuery) => {
             }
         }
 
-        if (sel_action && sel_action.startsWith("buy_") && sel_action !== "buy_x" && sel_action !== "buy_amount_x" && !sel_action.startsWith("buy_amount_") && !sel_action.startsWith("buy_gas_eth_")) {
+        if (
+            sel_action &&
+            sel_action.startsWith("buy_") &&
+            sel_action !== "buy_x" &&
+            sel_action !== "buy_amount_x" &&
+            !sel_action.startsWith("buy_amount_") &&
+            !sel_action.startsWith("buy_gas_eth_") &&
+            sel_action !== "buy_quick_tpsl" &&
+            sel_action !== "buy_quick_tpsl_back" &&
+            !sel_action.startsWith("buyq_")
+        ) {
             const chainBuy = await getUserChain(userId);
             if (chainBuy !== "solana") {
                 await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("errors.notToken", userId), true);
