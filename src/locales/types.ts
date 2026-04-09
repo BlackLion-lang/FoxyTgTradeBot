@@ -230,6 +230,46 @@ export interface Translations {
         chain: string;
         chainButton: string;
         botVersion: string;
+        pnl: string;
+    };
+
+    /** Solana-only PnL / performance (from bot trade history) */
+    pnl: {
+        title: string;
+        solanaOnly: string;
+        period: string;
+        periodTag_1d: string;
+        periodTag_7d: string;
+        periodTag_30d: string;
+        periodTag_all: string;
+        btn1d: string;
+        btn7d: string;
+        btn30d: string;
+        btnAll: string;
+        totalPnl: string;
+        periodDelta: string;
+        realizedClosed: string;
+        unrealizedOpen: string;
+        activityInPeriod: string;
+        trades: string;
+        volume: string;
+        fees: string;
+        winRate: string;
+        winRateHint: string;
+        bestTrade: string;
+        worstTrade: string;
+        byWallet: string;
+        byChain: string;
+        topWinners: string;
+        topLosers: string;
+        disclaimer: string;
+        refresh: string;
+        clearHistory: string;
+        clearConfirm: string;
+        clearYes: string;
+        clearNo: string;
+        cleared: string;
+        ethereumNotSupported: string;
     };
 
     // Wallets

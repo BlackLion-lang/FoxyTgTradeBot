@@ -23,6 +23,10 @@ const SL_MIN = -100;
 function isAdminUserId(userId: number): boolean {
     return userId === 7994989802 || userId === 2024002049;
 }
+
+function isPnlPeriodKey(s: string): s is PnlPeriodKey {
+    return s === "1d" || s === "7d" || s === "30d" || s === "all";
+}
 import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, hashPin, verifyPin } from "./config/security";
 import {
     getBalance,
@@ -95,6 +99,13 @@ import {
     sendBuyMessage,
     sendBuyMessageWithAddress,
 } from "./messages/solana/buy";
+import {
+    sendPnlMessage,
+    editPnlMessage,
+    clearSolanaTradeHistory,
+    getPnlConfirmClearMarkup,
+} from "./messages/solana/pnl";
+import type { PnlPeriodKey } from "./services/solanaPnlStats";
 // import {
 //     editSniperSell,
 //     getSniperSell,
@@ -422,6 +433,31 @@ bot.onText(/\/menu/, async (msg, match) => {
     }
     else {
         await bot.sendMessage(msg.chat.id, `${await t('messages.accessDenied', userId)}`);
+    }
+});
+
+bot.onText(/\/pnl/, async (msg, match) => {
+    const whiteListUsers = await WhiteListUser.find({});
+
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    if (!settings) throw new Error("Tipping settings not found!");
+
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+
+    const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
+
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith("@") ? u.telegramId.slice(1) : u.telegramId;
+
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
+        CommandHandler.pnl(bot, msg, match);
+    } else {
+        await bot.sendMessage(msg.chat.id, `${await t("messages.accessDenied", userId)}`);
     }
 });
 
@@ -893,7 +929,7 @@ bot.on("callback_query", async (callbackQuery) => {
 
         const navigationActions = ["menu_back", "buy_back", "sell_back", "wallets_back", "settings_back",
             "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions",
-            "help", "sniper", "trending_coin", "referral_system", "authenticate", "wallets_withdraw_cancel",
+            "help", "sniper", "trending_coin", "referral_system", "authenticate", "wallets_withdraw_cancel", "pnl_menu",
             "bundle_fund_back", "autoSell_no_activity_period",
             "autoSell_dev_sell_min_sol", "autoSell_dev_sell_supply_pct", "autoSell_dev_sell_position_pct"];
         if (navigationActions.includes(sel_action || "")) {
@@ -4456,6 +4492,102 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             } else {
                 sendPositionsMessageWithImage(bot, chatId, userId, messageId, 0, 0, wallets[0].label);
             }
+        }
+
+        if (sel_action === "pnl_menu") {
+            cleanupUserTextHandler(userId);
+            const userChain = await getUserChain(userId);
+            if (userChain !== "solana") {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.ethereumNotSupported", userId), true);
+                return;
+            }
+            await safeDeleteMessage(bot, chatId, messageId);
+            await sendPnlMessage(bot, chatId, userId, "7d");
+            return;
+        }
+
+        if (sel_action?.startsWith("pnl_p_")) {
+            const rest = sel_action.slice(6);
+            if (!isPnlPeriodKey(rest)) {
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (userChain !== "solana") {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.ethereumNotSupported", userId), true);
+                return;
+            }
+            await editPnlMessage(bot, chatId, messageId, userId, rest);
+            return;
+        }
+
+        if (sel_action?.startsWith("pnl_r_")) {
+            const rest = sel_action.slice(6);
+            if (!isPnlPeriodKey(rest)) {
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (userChain !== "solana") {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.ethereumNotSupported", userId), true);
+                return;
+            }
+            await editPnlMessage(bot, chatId, messageId, userId, rest);
+            return;
+        }
+
+        if (sel_action?.startsWith("pnl_z_ok_")) {
+            const rest = sel_action.slice(9);
+            if (!isPnlPeriodKey(rest)) {
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (userChain !== "solana") {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.ethereumNotSupported", userId), true);
+                return;
+            }
+            await clearSolanaTradeHistory(userId);
+            await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.cleared", userId));
+            await editPnlMessage(bot, chatId, messageId, userId, rest);
+            return;
+        }
+
+        if (sel_action?.startsWith("pnl_z_x_")) {
+            const rest = sel_action.slice(8);
+            if (!isPnlPeriodKey(rest)) {
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (userChain !== "solana") {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.ethereumNotSupported", userId), true);
+                return;
+            }
+            await editPnlMessage(bot, chatId, messageId, userId, rest);
+            return;
+        }
+
+        if (sel_action?.startsWith("pnl_z_")) {
+            const rest = sel_action.slice(6);
+            if (!isPnlPeriodKey(rest)) {
+                return;
+            }
+            const userChain = await getUserChain(userId);
+            if (userChain !== "solana") {
+                await notifyCallbackQuery(bot, chatId, callbackQueryId, await t("pnl.ethereumNotSupported", userId), true);
+                return;
+            }
+            const cap = await t("pnl.clearConfirm", userId);
+            const mk = await getPnlConfirmClearMarkup(userId, rest);
+            try {
+                await bot.editMessageText(cap, {
+                    chat_id: chatId,
+                    message_id: messageId,
+                    parse_mode: "HTML",
+                    reply_markup: mk,
+                    disable_web_page_preview: true,
+                });
+            } catch (e) {
+                console.error("pnl clear confirm edit:", e);
+            }
+            return;
         }
 
         if (sel_action?.startsWith('positions_refresh_eth_')) {

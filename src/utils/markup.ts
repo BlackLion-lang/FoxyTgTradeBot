@@ -139,6 +139,10 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
             { text: `${await t('menu.position', userId)}`, callback_data: "positions" }
         ]);
 
+        if (!isEthereum) {
+            buttons.push([{ text: `${await t('menu.pnl', userId)}`, callback_data: "pnl_menu" }]);
+        }
+
         buttons.push([
             { text: `${await t('menu.settings', userId)}`, callback_data: "settings" },
             { text: `${await t('menu.help', userId)}`, callback_data: "help" },
@@ -176,11 +180,18 @@ export async function getMenuMarkup(userId: number): Promise<TelegramBot.InlineK
                 { text: `${await t('menu.position', userId)}`, callback_data: "positions" }
 
             ],
+        ];
+
+        if (!isEthereum) {
+            buttons.push([{ text: `${await t('menu.pnl', userId)}`, callback_data: "pnl_menu" }]);
+        }
+
+        buttons.push(
             [
                 { text: `${await t('menu.settings', userId)}`, callback_data: "settings" },
                 { text: `${await t('menu.help', userId)}`, callback_data: "help" },
-            ]
-        ];
+            ],
+        );
 
         if (!isEthereum) {
             buttons.push([

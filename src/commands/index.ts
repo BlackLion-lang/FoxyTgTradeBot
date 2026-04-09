@@ -7,6 +7,7 @@ import { help } from "./help";
 import { privateKeyWallet } from "./private";
 import { sniperCommand } from "./sniper";
 import { chain } from "./chain";
+import { pnl } from "./pnl";
 
 export const CommandHandler = {
     start,
@@ -17,5 +18,6 @@ export const CommandHandler = {
     settings,
     help,
     sniperCommand,
-    chain
+    chain,
+    pnl,
 };
