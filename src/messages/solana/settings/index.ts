@@ -56,8 +56,8 @@ export const getSettings = async (
         ],
         [
             {
-                text: (user as any).pinHash ? `🟢 ${await t('settings.pin', userId)}` : `🔴 ${await t('settings.pin', userId)}`,
-                callback_data: "settings_pin",
+                text: (user as any).totpSecretEnc ? `🟢 ${await t('settings.pin', userId)}` : `🔴 ${await t('settings.pin', userId)}`,
+                callback_data: "settings_2fa",
             },
         ],
         [

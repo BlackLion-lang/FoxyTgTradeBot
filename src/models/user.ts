@@ -124,10 +124,14 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: ""
         },
-        // PIN for private key export (hashed; never store plain PIN)
+        /** @deprecated Legacy PIN — use TOTP only; kept for existing DB documents. */
         pinHash: { type: String, default: "" },
         pinSalt: { type: String, default: "" },
-        // Temporary state for PIN flows (set / change / export)
+        /** Encrypted TOTP secret (same envelope as wallet keys). */
+        totpSecretEnc: { type: String, default: "" },
+        /** Pending 2FA enrollment until user verifies first code. */
+        totpSetupSecretEnc: { type: String, default: "" },
+        // Temporary state for security flows (withdraw / export)
         pendingPinAction: { type: String, default: "" },
         pendingExportWalletIndex: { type: Number, default: -1 },
         pendingExportChain: { type: String, default: "" },

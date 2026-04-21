@@ -27,7 +27,21 @@ function isAdminUserId(userId: number): boolean {
 function isPnlPeriodKey(s: string): s is PnlPeriodKey {
     return s === "1d" || s === "7d" || s === "30d" || s === "all";
 }
-import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array, hashPin, verifyPin } from "./config/security";
+import { encryptSecretKey, decryptSecretKey, uint8ArrayToBase64, base64ToUint8Array } from "./config/security";
+import {
+    buildTotpUri,
+    clearTotpSetupPending,
+    decryptTotpSecretForUser,
+    disableUserTotp,
+    generateTotpSecretPlain,
+    saveTotpSetupPending,
+    totpQrPngBuffer,
+    tryConfirmTotpSetup,
+    userHasTotpEnabled,
+    verifyActiveTotpForUser,
+    verifyTotp6,
+    TOTP_SETUP_HELP_WIKI_URL,
+} from "./services/twoFactorAuth";
 import {
     getBalance,
     getSolanaPrice,
@@ -209,8 +223,8 @@ import { ethers } from "ethers";
 
 const userRefreshCounts = new Map(); // key: userId, value: { count: number, lastReset: timestamp }
 
-/** PIN entry prompts per flow before abort (withdraw, export, change/remove PIN). */
-const PIN_VERIFICATION_ATTEMPTS = 3;
+/** TOTP entry prompts per flow before abort (withdraw, export, change/disable 2FA). */
+const TOTP_VERIFICATION_ATTEMPTS = 3;
 
 interface UserLocalDataDictionary {
     [key: number]: {
@@ -931,7 +945,7 @@ bot.on("callback_query", async (callbackQuery) => {
             "settings_fee_back", "menu_close", "welcome", "buy", "sell", "wallets", "settings", "positions",
             "help", "sniper", "trending_coin", "referral_system", "authenticate", "wallets_withdraw_cancel", "pnl_menu",
             "bundle_fund_back", "autoSell_no_activity_period",
-            "autoSell_dev_sell_min_sol", "autoSell_dev_sell_supply_pct", "autoSell_dev_sell_position_pct"];
+            "autoSell_dev_sell_min_sol", "autoSell_dev_sell_supply_pct", "autoSell_dev_sell_position_pct", "settings_2fa_cancel"];
         if (navigationActions.includes(sel_action || "")) {
             cleanupUserTextHandler(userId);
         }
@@ -3127,7 +3141,7 @@ bot.on("callback_query", async (callbackQuery) => {
             const tipSettings = await TippingSettings.findOne() || new TippingSettings();
             const uW = await User.findOne({ userId });
             if (!uW) return;
-            if (!(uW as any).pinHash) {
+            if (!userHasTotpEnabled(uW as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
                     reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
@@ -3180,16 +3194,16 @@ bot.on("callback_query", async (callbackQuery) => {
                 );
             };
 
-            const runWithdrawPinChallenge = async () => {
+            const runWithdrawTotpChallenge = async () => {
                 const promptLabel = await t("withdrawal.enterPin", userId);
 
                 const askOnce = async (attemptsLeft: number): Promise<void> => {
-                    const pinPromptMsg = await bot.sendMessage(chatId, promptLabel, { reply_markup: { force_reply: true } });
+                    const totpPromptMsg = await bot.sendMessage(chatId, promptLabel, { reply_markup: { force_reply: true } });
                     await new Promise<void>((resolve) => {
                         bot.once("text", createUserTextHandler(userId, async (reply) => {
-                            const pin = (reply.text || "").trim();
+                            const code = (reply.text || "").trim();
                             setTimeout(() => {
-                                bot.deleteMessage(chatId, pinPromptMsg.message_id).catch(() => {});
+                                bot.deleteMessage(chatId, totpPromptMsg.message_id).catch(() => {});
                                 bot.deleteMessage(chatId, reply.message_id).catch(() => {});
                             }, 5000);
                             const u1 = await User.findOne({ userId });
@@ -3197,9 +3211,16 @@ bot.on("callback_query", async (callbackQuery) => {
                                 resolve();
                                 return;
                             }
-                            const ok =
-                                /^\d{4,8}$/.test(pin) &&
-                                verifyPin(pin, (u1 as any).pinHash || "", (u1 as any).pinSalt || "");
+                            let ok = false;
+                            const enc = (u1 as any).totpSecretEnc as string | undefined;
+                            if (enc && String(enc).trim()) {
+                                try {
+                                    const plain = decryptTotpSecretForUser(String(enc));
+                                    ok = verifyTotp6(plain, code);
+                                } catch {
+                                    ok = false;
+                                }
+                            }
                             if (ok) {
                                 await resetWithdrawPinFailures(userId);
                                 await finalizeWithdrawAfterPin(u1);
@@ -3208,7 +3229,7 @@ bot.on("callback_query", async (callbackQuery) => {
                             }
                             const pinFail = await registerWithdrawPinFailure(userId, tipSettings);
                             if (pinFail) {
-                                await SecurityLog.create({ userId, type: "withdraw_pin_fail", detail: userChain });
+                                await SecurityLog.create({ userId, type: "withdraw_totp_fail", detail: userChain });
                             }
                             if (pinFail?.lockedNow) {
                                 const lockMsg = (await t("withdrawal.pinLockoutExceeded", userId))
@@ -3232,7 +3253,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     });
                 };
 
-                await askOnce(PIN_VERIFICATION_ATTEMPTS);
+                await askOnce(TOTP_VERIFICATION_ATTEMPTS);
             };
 
             if (userChain === "ethereum") {
@@ -3329,7 +3350,7 @@ bot.on("callback_query", async (callbackQuery) => {
                 (uW as any).pendingPinAction = "withdraw";
                 uW.markModified("pendingWithdraw");
                 await uW.save();
-                await runWithdrawPinChallenge();
+                await runWithdrawTotpChallenge();
                 return;
             }
 
@@ -3417,7 +3438,7 @@ bot.on("callback_query", async (callbackQuery) => {
             (uW as any).pendingPinAction = "withdraw";
             uW.markModified("pendingWithdraw");
             await uW.save();
-            await runWithdrawPinChallenge();
+            await runWithdrawTotpChallenge();
 
         } else if (sel_action?.startsWith('wallets_withdraw_100_')) {
             const index = Number(sel_action.replace('wallets_withdraw_100_', ''));
@@ -3821,8 +3842,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
         if (sel_action === "wallets_private_key") {
             await safeDeleteMessage(bot, chatId, messageId);
             const userDoc = await User.findOne({ userId });
-            const hasPin = !!(userDoc as any)?.pinHash;
-            if (!hasPin) {
+            if (!userHasTotpEnabled(userDoc as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
                     reply_markup: { inline_keyboard: [[{ text: `${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
@@ -3835,120 +3855,6 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             } else {
                 sendPrivateKeyWalletMessageWithImage(bot, chatId, userId, messageId);
             }
-        }
-
-        if (sel_action === "wallets_pin_set") {
-            await safeDeleteMessage(bot, chatId, messageId);
-            const pinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-            bot.once("text", createUserTextHandler(userId, async (reply) => {
-                const pin = (reply.text || "").trim();
-                setTimeout(() => {
-                    bot.deleteMessage(chatId, pinPromptMsg.message_id).catch(() => {});
-                    bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                }, 5000);
-                try {
-                    if (!/^\d{4,8}$/.test(pin)) {
-                        const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                        return;
-                    }
-                    const { hash, salt } = hashPin(pin);
-                    const u = await User.findOne({ userId });
-                    if (!u) return;
-                    (u as any).pinHash = hash;
-                    (u as any).pinSalt = salt;
-                    await u.save();
-                    await bot.sendMessage(chatId, await t("pin.pinSetSuccess", userId));
-                    const userChain = await getUserChain(userId);
-                    if (userChain === "ethereum") {
-                        sendPrivateKeyEthereumWalletMessageWithImage(bot, chatId, userId);
-                    } else {
-                        sendPrivateKeyWalletMessageWithImage(bot, chatId, userId);
-                    }
-                } catch (err: any) {
-                    const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                    setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                }
-            }));
-            return;
-        }
-
-        if (sel_action === "wallets_pin_change") {
-            await safeDeleteMessage(bot, chatId, messageId);
-            const userDoc = await User.findOne({ userId });
-            const hasPin = !!(userDoc as any)?.pinHash;
-            if (!hasPin) {
-                await bot.sendMessage(chatId, `🔐 ${await t("pin.setPinFirst", userId)}\n\n${await t("pin.setPinFirstDesc", userId)}`, {
-                    parse_mode: "HTML",
-                    reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
-                });
-                return;
-            }
-            const promptNewPinAfterWalletVerify = async () => {
-                const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                bot.once("text", createUserTextHandler(userId, async (reply2) => {
-                    const newPin = (reply2.text || "").trim();
-                    setTimeout(() => {
-                        bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
-                        bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
-                    }, 5000);
-                    try {
-                        if (!/^\d{4,8}$/.test(newPin)) {
-                            const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                            return;
-                        }
-                        const { hash, salt } = hashPin(newPin);
-                        const u2 = await User.findOne({ userId });
-                        if (!u2) return;
-                        (u2 as any).pinHash = hash;
-                        (u2 as any).pinSalt = salt;
-                        await u2.save();
-                        const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
-                        const userChain = await getUserChain(userId);
-                        if (userChain === "ethereum") {
-                            sendPrivateKeyEthereumWalletMessageWithImage(bot, chatId, userId);
-                        } else {
-                            sendPrivateKeyWalletMessageWithImage(bot, chatId, userId);
-                        }
-                    } catch (err: any) {
-                        const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                    }
-                }));
-            };
-
-            const askCurrentPinForWalletChange = async (attemptsLeft: number): Promise<void> => {
-                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
-                await new Promise<void>((resolve) => {
-                    bot.once("text", createUserTextHandler(userId, async (reply) => {
-                        const pin = (reply.text || "").trim();
-                        setTimeout(() => {
-                            bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
-                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                        }, 5000);
-                        const u = await User.findOne({ userId });
-                        if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                            const wrongMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, wrongMsg.message_id).catch(() => {}), 5000);
-                            if (attemptsLeft <= 1) {
-                                sendSettingsMessageWithImage(bot, chatId, userId);
-                                resolve();
-                                return;
-                            }
-                            await askCurrentPinForWalletChange(attemptsLeft - 1);
-                            resolve();
-                            return;
-                        }
-                        await promptNewPinAfterWalletVerify();
-                        resolve();
-                    }));
-                });
-            };
-
-            void askCurrentPinForWalletChange(PIN_VERIFICATION_ATTEMPTS);
-            return;
         }
 
         if (sel_action?.startsWith("wallets_private_key_")) {
@@ -3977,8 +3883,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 return;
             }
 
-            const hasPin = !!(user as any)?.pinHash;
-            if (!hasPin) {
+            if (!userHasTotpEnabled(user as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
                     reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
@@ -4045,17 +3950,28 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 });
             };
 
-            const askExportPin = async (attemptsLeft: number): Promise<void> => {
-                const exportPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterPinToExport", userId), { reply_markup: { force_reply: true } });
+            const askExportTotp = async (attemptsLeft: number): Promise<void> => {
+                const exportTotpPromptMsg = await bot.sendMessage(chatId, await t("pin.enterPinToExport", userId), { reply_markup: { force_reply: true } });
                 await new Promise<void>((resolve) => {
                     bot.once("text", createUserTextHandler(userId, async (reply) => {
-                        const pin = (reply.text || "").trim();
+                        const code = (reply.text || "").trim();
                         setTimeout(() => {
-                            bot.deleteMessage(chatId, exportPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, exportTotpPromptMsg.message_id).catch(() => {});
                             bot.deleteMessage(chatId, reply.message_id).catch(() => {});
                         }, 5000);
                         const u = await User.findOne({ userId });
-                        if (!u || (u as any).pendingPinAction !== "export" || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                        let ok = false;
+                        if (u && (u as any).pendingPinAction === "export") {
+                            const enc = (u as any).totpSecretEnc as string | undefined;
+                            if (enc && String(enc).trim()) {
+                                try {
+                                    ok = verifyTotp6(decryptTotpSecretForUser(String(enc)), code);
+                                } catch {
+                                    ok = false;
+                                }
+                            }
+                        }
+                        if (!u || (u as any).pendingPinAction !== "export" || !ok) {
                             const wrongExportMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
                             setTimeout(() => bot.deleteMessage(chatId, wrongExportMsg.message_id).catch(() => {}), 5000);
                             if (attemptsLeft <= 1) {
@@ -4070,7 +3986,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 resolve();
                                 return;
                             }
-                            await askExportPin(attemptsLeft - 1);
+                            await askExportTotp(attemptsLeft - 1);
                             resolve();
                             return;
                         }
@@ -4080,7 +3996,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 });
             };
 
-            void askExportPin(PIN_VERIFICATION_ATTEMPTS);
+            void askExportTotp(TOTP_VERIFICATION_ATTEMPTS);
             return;
         }
 
@@ -5603,44 +5519,97 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             editSettingsMessage(bot, chatId, userId, messageId);
         }
 
-        if (sel_action === "settings_pin") {
+        if (sel_action === "settings_2fa_cancel") {
+            await clearTotpSetupPending(userId);
+            await safeDeleteMessage(bot, chatId, messageId);
+            sendSettingsMessageWithImage(bot, chatId, userId);
+            return;
+        }
+
+        if (sel_action === "settings_2fa" || sel_action === "settings_pin") {
             await safeDeleteMessage(bot, chatId, messageId);
             const userDoc = await User.findOne({ userId });
-            const hasPin = !!(userDoc as any)?.pinHash;
-            if (!hasPin) {
-                const pinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                bot.once("text", createUserTextHandler(userId, async (reply) => {
-                    const pin = (reply.text || "").trim();
-                    setTimeout(() => {
-                        bot.deleteMessage(chatId, pinPromptMsg.message_id).catch(() => {});
-                        bot.deleteMessage(chatId, reply.message_id).catch(() => {});
-                    }, 5000);
-                    try {
-                        if (!/^\d{4,8}$/.test(pin)) {
-                            const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
+            const sendEnrollmentQr = async (): Promise<number | undefined> => {
+                const secret = generateTotpSecretPlain();
+                await saveTotpSetupPending(userId, secret);
+                const uri = buildTotpUri(secret, String(userId));
+                const png = await totpQrPngBuffer(uri);
+                const manualEsc = String(secret)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+                const helpHref = TOTP_SETUP_HELP_WIKI_URL.replace(/&/g, "&amp;");
+                const helpLinkEsc = String(await t("pin.setupHelpLink", userId))
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+                const cap =
+                    `<b>${(await t("pin.setupTitle", userId)).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</b>\n\n` +
+                    `${await t("pin.setupScanHint", userId)}\n\n` +
+                    `${await t("pin.setupHelpPrompt", userId)}\n<a href="${helpHref}">${helpLinkEsc}</a>\n\n` +
+                    `<b>${await t("pin.setupManualLabel", userId)}</b>\n<code>${manualEsc}</code>\n\n` +
+                    `${await t("pin.setupEnterCode", userId)}`;
+                const sent = await bot.sendPhoto(chatId, png, {
+                    caption: cap,
+                    parse_mode: "HTML",
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: await t("pin.cancelSetup", userId), callback_data: "settings_2fa_cancel" }],
+                        ],
+                    },
+                });
+                return sent?.message_id;
+            };
+
+            const askSetupCode = async (attemptsLeft: number, qrPhotoMessageId?: number): Promise<void> => {
+                const promptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), {
+                    reply_markup: { force_reply: true },
+                });
+                await new Promise<void>((resolve) => {
+                    bot.once("text", createUserTextHandler(userId, async (reply) => {
+                        const code = (reply.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, promptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                        }, 5000);
+                        const result = await tryConfirmTotpSetup(userId, code);
+                        if (result === "ok") {
+                            if (qrPhotoMessageId) {
+                                await bot.deleteMessage(chatId, qrPhotoMessageId).catch(() => {});
+                            }
+                            await bot.sendMessage(chatId, await t("pin.pinSetSuccess", userId));
+                            sendSettingsMessageWithImage(bot, chatId, userId);
+                            resolve();
                             return;
                         }
-                        const { hash, salt } = hashPin(pin);
-                        const u = await User.findOne({ userId });
-                        if (!u) return;
-                        (u as any).pinHash = hash;
-                        (u as any).pinSalt = salt;
-                        await u.save();
-                        await bot.sendMessage(chatId, await t("pin.pinSetSuccess", userId));
-                        sendSettingsMessageWithImage(bot, chatId, userId);
-                    } catch (err: any) {
-                        const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                    }
-                }));
+                        if (result === "no_pending") {
+                            resolve();
+                            return;
+                        }
+                        const bad = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                        setTimeout(() => bot.deleteMessage(chatId, bad.message_id).catch(() => {}), 5000);
+                        if (attemptsLeft <= 1) {
+                            await clearTotpSetupPending(userId);
+                            sendSettingsMessageWithImage(bot, chatId, userId);
+                            resolve();
+                            return;
+                        }
+                        await askSetupCode(attemptsLeft - 1, qrPhotoMessageId);
+                        resolve();
+                    }));
+                });
+            };
+
+            if (!userHasTotpEnabled(userDoc as { totpSecretEnc?: string })) {
+                const qrMsgId = await sendEnrollmentQr();
+                void askSetupCode(TOTP_VERIFICATION_ATTEMPTS, qrMsgId);
             } else {
                 await bot.sendMessage(chatId, await t("pin.pinOptions", userId), {
                     reply_markup: {
                         inline_keyboard: [
                             [
-                                { text: await t("pin.changePin", userId), callback_data: "settings_pin_change" },
-                                { text: await t("pin.removePin", userId), callback_data: "settings_pin_remove" },
+                                { text: await t("pin.changePin", userId), callback_data: "settings_2fa_change" },
+                                { text: await t("pin.removePin", userId), callback_data: "settings_2fa_remove" },
                             ],
                             [{ text: `${await t("backSettings", userId)}`, callback_data: "settings" }],
                         ],
@@ -5650,99 +5619,101 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             return;
         }
 
-        if (sel_action === "settings_pin_change") {
+        if (sel_action === "settings_2fa_change" || sel_action === "settings_pin_change") {
             await safeDeleteMessage(bot, chatId, messageId);
             const userDoc = await User.findOne({ userId });
-            const hasPin = !!(userDoc as any)?.pinHash;
-            if (!hasPin) {
+            if (!userHasTotpEnabled(userDoc as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 ${await t("pin.setPinFirst", userId)}\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
                     reply_markup: { inline_keyboard: [[{ text: `${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
                 });
                 return;
             }
-            const promptNewPinAfterSettingsVerify = async () => {
-                const newPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), { reply_markup: { force_reply: true } });
-                bot.once("text", createUserTextHandler(userId, async (reply2) => {
-                    const newPin = (reply2.text || "").trim();
-                    setTimeout(() => {
-                        bot.deleteMessage(chatId, newPinPromptMsg.message_id).catch(() => {});
-                        bot.deleteMessage(chatId, reply2.message_id).catch(() => {});
-                    }, 5000);
-                    try {
-                        if (!/^\d{4,8}$/.test(newPin)) {
-                            const digitsMsg = await bot.sendMessage(chatId, await t("pin.pinMustBeDigits", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, digitsMsg.message_id).catch(() => {}), 5000);
-                            return;
-                        }
-                        const { hash, salt } = hashPin(newPin);
-                        const u2 = await User.findOne({ userId });
-                        if (!u2) return;
-                        (u2 as any).pinHash = hash;
-                        (u2 as any).pinSalt = salt;
-                        await u2.save();
-                        const changedMsg = await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, changedMsg.message_id).catch(() => {}), 5000);
-                        sendSettingsMessageWithImage(bot, chatId, userId);
-                    } catch (err: any) {
-                        const digitsErrMsg = await bot.sendMessage(chatId, err?.message || await t("pin.pinMustBeDigits", userId));
-                        setTimeout(() => bot.deleteMessage(chatId, digitsErrMsg.message_id).catch(() => {}), 5000);
-                    }
-                }));
+
+            const sendEnrollmentQr = async (): Promise<number | undefined> => {
+                const secret = generateTotpSecretPlain();
+                await saveTotpSetupPending(userId, secret);
+                const uri = buildTotpUri(secret, String(userId));
+                const png = await totpQrPngBuffer(uri);
+                const manualEsc = String(secret)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+                const helpHref = TOTP_SETUP_HELP_WIKI_URL.replace(/&/g, "&amp;");
+                const helpLinkEsc = String(await t("pin.setupHelpLink", userId))
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;");
+                const cap =
+                    `<b>${(await t("pin.setupTitle", userId)).replace(/&/g, "&amp;").replace(/</g, "&lt;")}</b>\n\n` +
+                    `${await t("pin.setupScanHint", userId)}\n\n` +
+                    `${await t("pin.setupHelpPrompt", userId)}\n<a href="${helpHref}">${helpLinkEsc}</a>\n\n` +
+                    `<b>${await t("pin.setupManualLabel", userId)}</b>\n<code>${manualEsc}</code>\n\n` +
+                    `${await t("pin.setupEnterCode", userId)}`;
+                const sent = await bot.sendPhoto(chatId, png, {
+                    caption: cap,
+                    parse_mode: "HTML",
+                    reply_markup: {
+                        inline_keyboard: [
+                            [{ text: await t("pin.cancelSetup", userId), callback_data: "settings_2fa_cancel" }],
+                        ],
+                    },
+                });
+                return sent?.message_id;
             };
 
-            const askCurrentPinForSettingsChange = async (attemptsLeft: number): Promise<void> => {
-                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+            const askSetupCodeAfterChange = async (attemptsLeft: number, qrPhotoMessageId?: number): Promise<void> => {
+                const promptMsg = await bot.sendMessage(chatId, await t("pin.enterNewPin", userId), {
+                    reply_markup: { force_reply: true },
+                });
                 await new Promise<void>((resolve) => {
                     bot.once("text", createUserTextHandler(userId, async (reply) => {
-                        const pin = (reply.text || "").trim();
+                        const code = (reply.text || "").trim();
                         setTimeout(() => {
-                            bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, promptMsg.message_id).catch(() => {});
                             bot.deleteMessage(chatId, reply.message_id).catch(() => {});
                         }, 5000);
-                        const u = await User.findOne({ userId });
-                        if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
-                            const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
-                            setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
-                            if (attemptsLeft <= 1) {
-                                sendSettingsMessageWithImage(bot, chatId, userId);
-                                resolve();
-                                return;
+                        const result = await tryConfirmTotpSetup(userId, code);
+                        if (result === "ok") {
+                            if (qrPhotoMessageId) {
+                                await bot.deleteMessage(chatId, qrPhotoMessageId).catch(() => {});
                             }
-                            await askCurrentPinForSettingsChange(attemptsLeft - 1);
+                            await bot.sendMessage(chatId, await t("pin.pinChangedSuccess", userId));
+                            sendSettingsMessageWithImage(bot, chatId, userId);
                             resolve();
                             return;
                         }
-                        await promptNewPinAfterSettingsVerify();
+                        if (result === "no_pending") {
+                            resolve();
+                            return;
+                        }
+                        const bad = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                        setTimeout(() => bot.deleteMessage(chatId, bad.message_id).catch(() => {}), 5000);
+                        if (attemptsLeft <= 1) {
+                            await clearTotpSetupPending(userId);
+                            sendSettingsMessageWithImage(bot, chatId, userId);
+                            resolve();
+                            return;
+                        }
+                        await askSetupCodeAfterChange(attemptsLeft - 1, qrPhotoMessageId);
                         resolve();
                     }));
                 });
             };
 
-            void askCurrentPinForSettingsChange(PIN_VERIFICATION_ATTEMPTS);
-            return;
-        }
-
-        if (sel_action === "settings_pin_remove") {
-            await safeDeleteMessage(bot, chatId, messageId);
-            const userDoc = await User.findOne({ userId });
-            const hasPin = !!(userDoc as any)?.pinHash;
-            if (!hasPin) {
-                await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
-                sendSettingsMessageWithImage(bot, chatId, userId);
-                return;
-            }
-            const askCurrentPinForRemove = async (attemptsLeft: number): Promise<void> => {
-                const currentPinPromptMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), { reply_markup: { force_reply: true } });
+            const askCurrentTotpForSettingsChange = async (attemptsLeft: number): Promise<void> => {
+                const currentMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), {
+                    reply_markup: { force_reply: true },
+                });
                 await new Promise<void>((resolve) => {
                     bot.once("text", createUserTextHandler(userId, async (reply) => {
-                        const pin = (reply.text || "").trim();
+                        const code = (reply.text || "").trim();
                         setTimeout(() => {
-                            bot.deleteMessage(chatId, currentPinPromptMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, currentMsg.message_id).catch(() => {});
                             bot.deleteMessage(chatId, reply.message_id).catch(() => {});
                         }, 5000);
-                        const u = await User.findOne({ userId });
-                        if (!u || !verifyPin(pin, (u as any).pinHash || "", (u as any).pinSalt || "")) {
+                        const ok = await verifyActiveTotpForUser(userId, code);
+                        if (!ok) {
                             const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
                             setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
                             if (attemptsLeft <= 1) {
@@ -5750,13 +5721,54 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 resolve();
                                 return;
                             }
-                            await askCurrentPinForRemove(attemptsLeft - 1);
+                            await askCurrentTotpForSettingsChange(attemptsLeft - 1);
                             resolve();
                             return;
                         }
-                        (u as any).pinHash = "";
-                        (u as any).pinSalt = "";
-                        await u.save();
+                        const qrMsgId = await sendEnrollmentQr();
+                        await askSetupCodeAfterChange(TOTP_VERIFICATION_ATTEMPTS, qrMsgId);
+                        resolve();
+                    }));
+                });
+            };
+
+            void askCurrentTotpForSettingsChange(TOTP_VERIFICATION_ATTEMPTS);
+            return;
+        }
+
+        if (sel_action === "settings_2fa_remove" || sel_action === "settings_pin_remove") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            const userDoc = await User.findOne({ userId });
+            if (!userHasTotpEnabled(userDoc as { totpSecretEnc?: string })) {
+                await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
+                sendSettingsMessageWithImage(bot, chatId, userId);
+                return;
+            }
+            const askCurrentTotpForRemove = async (attemptsLeft: number): Promise<void> => {
+                const currentMsg = await bot.sendMessage(chatId, await t("pin.enterCurrentPin", userId), {
+                    reply_markup: { force_reply: true },
+                });
+                await new Promise<void>((resolve) => {
+                    bot.once("text", createUserTextHandler(userId, async (reply) => {
+                        const code = (reply.text || "").trim();
+                        setTimeout(() => {
+                            bot.deleteMessage(chatId, currentMsg.message_id).catch(() => {});
+                            bot.deleteMessage(chatId, reply.message_id).catch(() => {});
+                        }, 5000);
+                        const ok = await verifyActiveTotpForUser(userId, code);
+                        if (!ok) {
+                            const wrongPinMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
+                            setTimeout(() => bot.deleteMessage(chatId, wrongPinMsg.message_id).catch(() => {}), 5000);
+                            if (attemptsLeft <= 1) {
+                                sendSettingsMessageWithImage(bot, chatId, userId);
+                                resolve();
+                                return;
+                            }
+                            await askCurrentTotpForRemove(attemptsLeft - 1);
+                            resolve();
+                            return;
+                        }
+                        await disableUserTotp(userId);
                         await bot.sendMessage(chatId, await t("pin.pinRemovedSuccess", userId));
                         sendSettingsMessageWithImage(bot, chatId, userId);
                         resolve();
@@ -5764,7 +5776,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 });
             };
 
-            void askCurrentPinForRemove(PIN_VERIFICATION_ATTEMPTS);
+            void askCurrentTotpForRemove(TOTP_VERIFICATION_ATTEMPTS);
             return;
         }
 

@@ -434,7 +434,7 @@ export interface Translations {
         p2: string;
     };
 
-    // PIN for private key export
+    /** TOTP 2FA for withdrawals and private key export */
     pin: {
         setPin: string;
         changePin: string;
@@ -450,6 +450,14 @@ export interface Translations {
         removePin: string;
         pinRemovedSuccess: string;
         pinOptions: string;
+        setupTitle: string;
+        setupScanHint: string;
+        setupManualLabel: string;
+        setupEnterCode: string;
+        cancelSetup: string;
+        invalidTotpFormat: string;
+        setupHelpPrompt: string;
+        setupHelpLink: string;
     };
 
     //privateKey
