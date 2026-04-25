@@ -124,9 +124,6 @@ const userSchema = new mongoose.Schema(
             type: String,
             default: ""
         },
-        /** @deprecated Legacy PIN — use TOTP only; kept for existing DB documents. */
-        pinHash: { type: String, default: "" },
-        pinSalt: { type: String, default: "" },
         /** Encrypted TOTP secret (same envelope as wallet keys). */
         totpSecretEnc: { type: String, default: "" },
         /** Pending 2FA enrollment until user verifies first code. */

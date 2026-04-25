@@ -26,6 +26,8 @@ export const fr: Translations = {
         chains: "Choisissez votre Blockchain préférée pour le Trading avec FoxyBoTracker.",
         language: "Changer la langue de FoxyBoTracker. (Anglais / Français)",
         copytrading: "Ouvrir le Monitor. (Surveillance de Wallets)",
+        pnl: "Afficher votre PnL réalisé.",
+        legal: "Lire les conditions d'utilisation.",
         authenticate: "Vérifier qu'il s'agit de notre BOT officiel. (Obtenir le lien d'authenticité)"
     },
 

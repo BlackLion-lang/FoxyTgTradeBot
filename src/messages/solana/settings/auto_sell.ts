@@ -62,13 +62,13 @@ export const getAutoSell = async (
         `<strong>${await t('autoSell.p7', userId)}</strong> ${stopLossPercent}%\n\n` +
         `<strong>${await t('autoSell.noActivityTitle', userId)}</strong> ${noActEnabled ? "🟢" : "🔴"}\n` +
         `${await t('autoSell.noActivityHint', userId)}\n` +
-        `<strong>${await t('autoSell.noActivityPeriodLabel', userId)}</strong>: ${noActMins} min\n\n` +
+        `<strong>${await t('autoSell.noActivityPeriodLabel', userId)}</strong> : ${noActMins} min\n\n` +
         (!isEthereum
             ? `<strong>${await t("autoSell.devSellTitle", userId)}</strong> ${devSellEnabled ? "🟢" : "🔴"}\n` +
               `${await t("autoSell.devSellHint", userId)}\n` +
-              `<strong>${await t("autoSell.devSellMinSolLabel", userId)}</strong>: ${devMinSol}\n` +
-              `<strong>${await t("autoSell.devSellMinSupplyLabel", userId)}</strong>: ${devMinSupply}%\n` +
-              `<strong>${await t("autoSell.devSellPositionLabel", userId)}</strong>: ${devPosPct}%\n\n`
+              `<strong>${await t("autoSell.devSellMinSolLabel", userId)}</strong> : ${devMinSol}\n` +
+              `<strong>${await t("autoSell.devSellMinSupplyLabel", userId)}</strong> : ${devMinSupply}%\n` +
+              `<strong>${await t("autoSell.devSellPositionLabel", userId)}</strong> : ${devPosPct}%\n\n`
             : "") +
         `<strong>${await t('autoSell.p8', userId)}</strong>`;
 
@@ -106,17 +106,17 @@ export const getAutoSell = async (
                   ],
                   [
                       {
-                          text: `◎ ${await t("autoSell.devSellMinSolLabel", userId)}: ${devMinSol}`,
+                          text: `${await t("autoSell.devSellMinSolLabel", userId)} : ${devMinSol}`,
                           callback_data: "autoSell_dev_sell_min_sol",
                       },
                   ],
                   [
                       {
-                          text: `% ${await t("autoSell.devSellMinSupplyLabel", userId)}: ${devMinSupply}`,
+                          text: `% ${await t("autoSell.devSellMinSupplyLabel", userId)} : ${devMinSupply}`,
                           callback_data: "autoSell_dev_sell_supply_pct",
                       },
                       {
-                          text: `↪ ${await t("autoSell.devSellPositionLabel", userId)}: ${devPosPct}`,
+                          text: `↪ ${await t("autoSell.devSellPositionLabel", userId)} : ${devPosPct}`,
                           callback_data: "autoSell_dev_sell_position_pct",
                       },
                   ],

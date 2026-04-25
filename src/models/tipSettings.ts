@@ -33,7 +33,7 @@ const tippingSettingsSchema = new mongoose.Schema({
   withdrawFreshDailyLimitEth: { type: Number, default: 0.5 },
   /** Minutes after wallet creation before first withdrawal (0 = off). Only for fresh wallets. */
   withdrawFreshCooldownMinutes: { type: Number, default: 0 },
-  withdrawPinLockoutAttempts: { type: Number, default: 5 },
+  withdrawPinLockoutAttempts: { type: Number, default: 3 },
   withdrawPinLockoutMinutes: { type: Number, default: 15 },
 })
 

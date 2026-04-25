@@ -26,6 +26,8 @@ export interface Translations {
         chains: string;
         language: string;
         copytrading: string;
+        pnl: string;
+        legal: string;
         authenticate: string;
     };
 

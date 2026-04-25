@@ -8,8 +8,8 @@ import { encryptSecretKey, decryptSecretKey } from "../config/security";
 import { User } from "../models/user";
 
 export function totpIssuer(): string {
-    const s = (process.env.TOTP_ISSUER || "FoxyTradeBot").trim();
-    return s || "FoxyTradeBot";
+    const s = (process.env.TOTP_ISSUER || "FoxyBoTracker").trim();
+    return s || "FoxyBoTracker";
 }
 
 export function generateTotpSecretPlain(): string {
@@ -70,7 +70,7 @@ export async function tryConfirmTotpSetup(userId: number, code: string): Promise
         { userId },
         {
             $set: { totpSecretEnc: enc },
-            $unset: { totpSetupSecretEnc: 1, pinHash: 1, pinSalt: 1 },
+            $unset: { totpSetupSecretEnc: 1 },
         },
     );
     return "ok";
@@ -81,7 +81,7 @@ export async function clearTotpSetupPending(userId: number): Promise<void> {
 }
 
 export async function disableUserTotp(userId: number): Promise<void> {
-    await User.updateOne({ userId }, { $unset: { totpSecretEnc: 1, totpSetupSecretEnc: 1, pinHash: 1, pinSalt: 1 } });
+    await User.updateOne({ userId }, { $unset: { totpSecretEnc: 1, totpSetupSecretEnc: 1 } });
 }
 
 export async function verifyActiveTotpForUser(userId: number, code: string): Promise<boolean> {

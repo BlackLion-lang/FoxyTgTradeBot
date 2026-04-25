@@ -669,6 +669,33 @@ bot.onText(/\/help/, async (msg, match) => {
     }
 });
 
+bot.onText(/\/legal/, async (msg, match) => {
+    const whiteListUsers = await WhiteListUser.find({});
+
+    const settings = await TippingSettings.findOne() || new TippingSettings();
+    if (!settings) throw new Error("Tipping settings not found!");
+
+    const fromId = msg.from?.id?.toString();
+    if (!fromId) return;
+
+    const userId = Number(fromId);
+    const isAdmin = isAdminUserId(userId);
+
+    const isWhitelisted = whiteListUsers.some((u) => {
+        const whitelistUsername = u.telegramId.startsWith("@")
+            ? u.telegramId.slice(1)
+            : u.telegramId;
+
+        const userName = msg.chat?.username || "";
+        return whitelistUsername === userName;
+    });
+    if (!settings.WhiteListUser || isWhitelisted || isAdmin) {
+        CommandHandler.legal(bot, msg, match);
+    } else {
+        await bot.sendMessage(msg.chat.id, `${await t("messages.accessDenied", userId)}`);
+    }
+});
+
 bot.onText(/\/chains/, async (msg, match) => {
     const whiteListUsers = await WhiteListUser.find({});
 
@@ -3942,7 +3969,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
                         `${esc(await t("privateKey.p3", userId))}\n${esc(await t("privateKey.promptReveal", userId))}\n\n` +
                         `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
-                        `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
+                        `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n\n${esc(await t("privateKey.p7", userId))}`,
                     parse_mode: "HTML",
                     reply_markup: {
                         inline_keyboard: [[{ text: `${await t("privateKey.revealKey", userId)}`, callback_data: `copy_to_clipboard_${idx}` }]],
@@ -4060,7 +4087,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     `<strong>${esc(await t("privateKey.p2", userId))}</strong> <code>${esc(publicKey)}</code>\n\n` +
                     `${esc(await t("privateKey.p3", userId))}\n<code>${esc(decrypted)}</code>\n\n` +
                     `<a href="${scanUrl}">${esc(p4)}</a>\n\n` +
-                    `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n${esc(await t("privateKey.p7", userId))}`,
+                    `<strong>${esc(await t("privateKey.p5", userId))}</strong>\n${esc(await t("privateKey.p6", userId))}\n\n${esc(await t("privateKey.p7", userId))}`,
                 parse_mode: "HTML",
                 reply_markup: {
                     inline_keyboard: [[{ text: `${await t("privateKey.deleteMessage", userId)}`, callback_data: "wallets_export_confirm_delete" }]],
@@ -8060,6 +8087,8 @@ async function setBotCommands() {
         { command: "/chains", description: `${await t('commands.chains', defaultUserId)}` },
         { command: "/language", description: `${await t('commands.language', defaultUserId)}` },
         { command: "/copytrading", description: `${await t('commands.copytrading', defaultUserId)}` },
+        { command: "/pnl", description: `${await t('commands.pnl', defaultUserId)}` },
+        { command: "/legal", description: `${await t('commands.legal', defaultUserId)}` },
         { command: "/authenticate", description: `${await t('commands.authenticate', defaultUserId)}` },
         // { command: "/orders", description: "View limit orders." },
     ]).then(() => {

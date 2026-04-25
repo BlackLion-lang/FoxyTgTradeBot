@@ -26,6 +26,8 @@ export const en: Translations = {
         chains: "Choose your preferred blockchain for trading.",
         language: "Change bot language (English / French).",
         copytrading: "Open copy trading (monitor wallets).",
+        pnl: "View your realized PnL.",
+        legal: "Read Terms of Use.",
         authenticate: "Verify this is the official bot (get auth link)."
     },
 

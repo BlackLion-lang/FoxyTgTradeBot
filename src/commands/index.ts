@@ -8,6 +8,7 @@ import { privateKeyWallet } from "./private";
 import { sniperCommand } from "./sniper";
 import { chain } from "./chain";
 import { pnl } from "./pnl";
+import { legal } from "./legal";
 
 export const CommandHandler = {
     start,
@@ -20,4 +21,5 @@ export const CommandHandler = {
     sniperCommand,
     chain,
     pnl,
+    legal,
 };

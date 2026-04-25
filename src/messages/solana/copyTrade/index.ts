@@ -390,7 +390,7 @@ export async function getCopyTradeWalletSizingMenu(
 
     const i = walletIndex;
     const inline_keyboard: TelegramBot.InlineKeyboardButton[][] = [
-        [{ text: `🔁 ${tapCycle}: ${modeLabel}`, callback_data: `cwz_${i}_mode` }],
+        [{ text: `🔁 ${tapCycle} : ${modeLabel}`, callback_data: `cwz_${i}_mode` }],
         [
             { text: setPct, callback_data: `cwz_${i}_pct` },
             { text: setRatio, callback_data: `cwz_${i}_ratio` },

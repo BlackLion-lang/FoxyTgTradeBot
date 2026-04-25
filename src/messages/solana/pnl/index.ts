@@ -49,7 +49,7 @@ export async function buildPnlCaption(userId: number, period: PnlPeriodKey): Pro
     if (dur != null) {
         const d = periodPnlDeltaUsd(walletsPlain, dur, fee, now);
         const label = await t(`pnl.periodTag_${period}`, userId);
-        periodDeltaLine = `\n${await t("pnl.periodDelta", userId)} (${label}): <strong>${fmtUsd(d)}</strong>`;
+        periodDeltaLine = `\n${await t("pnl.periodDelta", userId)} (${label}) : <strong>${fmtUsd(d)}</strong>`;
     }
 
     const startAct = dur == null ? 0 : now - dur;
@@ -73,29 +73,29 @@ export async function buildPnlCaption(userId: number, period: PnlPeriodKey): Pro
     let body =
         `<strong>${await t("pnl.title", userId)}</strong>\n` +
         `<em>${await t("pnl.solanaOnly", userId)}</em>\n\n` +
-        `${await t("pnl.period", userId)}: <strong>${periodLabel}</strong>\n` +
-        `${await t("pnl.totalPnl", userId)}: <strong>${fmtUsd(snap.totalPnlUsd)}</strong>` +
+        `${await t("pnl.period", userId)} : <strong>${periodLabel}</strong>\n` +
+        `${await t("pnl.totalPnl", userId)} : <strong>${fmtUsd(snap.totalPnlUsd)}</strong>` +
         periodDeltaLine +
-        `\n${await t("pnl.realizedClosed", userId)}: ${fmtUsd(snap.closedPnlUsd)}\n` +
-        `${await t("pnl.unrealizedOpen", userId)}: ${fmtUsd(snap.openPnlUsd)}\n\n` +
-        `${await t("pnl.activityInPeriod", userId)}:\n` +
-        `  ${await t("pnl.trades", userId)}: ${act.tradeCount}\n` +
-        `  ${await t("pnl.volume", userId)}: ${fmtUsd(act.volumeUsd)}\n` +
-        `  ${await t("pnl.fees", userId)}: ${fmtUsd(act.feesUsd)}\n` +
-        `  ${await t("pnl.winRate", userId)}: ${winRate.toFixed(1)}% <i>(${await t("pnl.winRateHint", userId)})</i>\n\n` +
-        `${await t("pnl.bestTrade", userId)}: ${fmtUsd(act.bestSellUsd)} <i>${escapeHtml(act.bestSellLabel)}</i>\n` +
-        `${await t("pnl.worstTrade", userId)}: ${fmtUsd(act.worstSellUsd)} <i>${escapeHtml(act.worstSellLabel)}</i>\n\n` +
-        `${await t("pnl.byWallet", userId)}:\n${walletLines.length ? walletLines.join("\n") : "  —"}\n\n` +
-        `${await t("pnl.byChain", userId)}: Solana — ${fmtUsd(snap.totalPnlUsd)}\n\n` +
-        `${await t("pnl.topWinners", userId)}:\n`;
+        `\n${await t("pnl.realizedClosed", userId)} : ${fmtUsd(snap.closedPnlUsd)}\n` +
+        `${await t("pnl.unrealizedOpen", userId)} : ${fmtUsd(snap.openPnlUsd)}\n\n` +
+        `${await t("pnl.activityInPeriod", userId)} :\n` +
+        `  ${await t("pnl.trades", userId)} : ${act.tradeCount}\n` +
+        `  ${await t("pnl.volume", userId)} : ${fmtUsd(act.volumeUsd)}\n` +
+        `  ${await t("pnl.fees", userId)} : ${fmtUsd(act.feesUsd)}\n` +
+        `  ${await t("pnl.winRate", userId)} : ${winRate.toFixed(1)}% <i>(${await t("pnl.winRateHint", userId)})</i>\n\n` +
+        `${await t("pnl.bestTrade", userId)} : ${fmtUsd(act.bestSellUsd)} <i>${escapeHtml(act.bestSellLabel)}</i>\n` +
+        `${await t("pnl.worstTrade", userId)} : ${fmtUsd(act.worstSellUsd)} <i>${escapeHtml(act.worstSellLabel)}</i>\n\n` +
+        `${await t("pnl.byWallet", userId)} :\n${walletLines.length ? walletLines.join("\n") : "  —"}\n\n` +
+        `${await t("pnl.byChain", userId)} : Solana — ${fmtUsd(snap.totalPnlUsd)}\n\n` +
+        `${await t("pnl.topWinners", userId)} :\n`;
 
     for (const row of topWin) {
-        body += `  • ${escapeHtml(row.name)}: +${fmtUsd(row.pnlUsd)}\n`;
+        body += `  • ${escapeHtml(row.name)} : +${fmtUsd(row.pnlUsd)}\n`;
     }
     if (!topWin.length) body += `  —\n`;
-    body += `\n${await t("pnl.topLosers", userId)}:\n`;
+    body += `\n${await t("pnl.topLosers", userId)} :\n`;
     for (const row of topLose) {
-        body += `  • ${escapeHtml(row.name)}: ${fmtUsd(row.pnlUsd)}\n`;
+        body += `  • ${escapeHtml(row.name)} : ${fmtUsd(row.pnlUsd)}\n`;
     }
     if (!topLose.length) body += `  —\n`;
     body += `\n<i>${await t("pnl.disclaimer", userId)}</i>`;
@@ -114,7 +114,7 @@ function escapeHtml(s: string): string {
 }
 
 async function periodButtonText(userId: number, p: PnlPeriodKey, current: PnlPeriodKey): Promise<string> {
-    const mark = p === current ? "✓ " : "";
+    const mark = p === current ? "🟠" : " ";
     const key =
         p === "1d" ? "btn1d" : p === "7d" ? "btn7d" : p === "30d" ? "btn30d" : "btnAll";
     return `${mark}${await t(`pnl.${key}`, userId)}`;

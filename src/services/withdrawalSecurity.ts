@@ -156,7 +156,7 @@ export async function registerWithdrawPinFailure(
     userId: number,
     settings: { withdrawPinLockoutAttempts?: number; withdrawPinLockoutMinutes?: number },
 ): Promise<RegisterWithdrawPinFailureResult | null> {
-    const maxAttempts = settings.withdrawPinLockoutAttempts ?? 5;
+    const maxAttempts = settings.withdrawPinLockoutAttempts ?? 3;
     const lockMins = settings.withdrawPinLockoutMinutes ?? 15;
     const u = await User.findOne({ userId });
     if (!u) return null;
