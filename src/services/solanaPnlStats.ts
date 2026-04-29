@@ -77,7 +77,6 @@ export function portfolioSnapshot(
         const label = w.label || pub.slice(0, 8) || "Wallet";
         const hist = w.tradeHistory || [];
         for (const tr of hist) {
-            if (tr.pnl === false) continue;
             const mint = tr.token_address || "";
             if (!mint) continue;
             const ts = tradeTimeMs(tr);
@@ -171,7 +170,6 @@ export function periodActivity(
 
     for (const w of wallets) {
         for (const tr of w.tradeHistory || []) {
-            if (tr.pnl === false) continue;
             const ts = tradeTimeMs(tr);
             if (ts < startMs || ts > endMs) continue;
             tradeCount += 1;

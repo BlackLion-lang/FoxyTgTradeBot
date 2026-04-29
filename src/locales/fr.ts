@@ -22,12 +22,12 @@ export const fr: Translations = {
         wallet: "Afficher vos Wallets FoxyBoTracker.",
         sniper: "Lancer le module de snipping de FoxyBoTracker.",
         position: "Afficher vos positions sur FoxyBoTracker.",
-        help: "Centre d'aide",
+        help: "Centre d'aide de FoxyBoTracker.",
         chains: "Choisissez votre Blockchain préférée pour le Trading avec FoxyBoTracker.",
         language: "Changer la langue de FoxyBoTracker. (Anglais / Français)",
         copytrading: "Ouvrir le Monitor. (Surveillance de Wallets)",
-        pnl: "Afficher votre PnL réalisé.",
-        legal: "Lire les conditions d'utilisation.",
+        pnl: "Afficher votre PNL réalisé sur FoxyBoTracker.",
+        legal: "Lire les conditions d'utilisation de FoxyBoTracker.",
         authenticate: "Vérifier qu'il s'agit de notre BOT officiel. (Obtenir le lien d'authenticité)"
     },
 
@@ -675,8 +675,8 @@ export const fr: Translations = {
         pinLockoutStillLocked: "La 2FA est temporairement verrouillée. Réessayez dans environ {minutes} minute(s).",
         cooldown: "Ce wallet est récent. Veuillez patienter avant de retirer.",
         dailyLimitExceeded: "Limite journalière quotidienne (wallets récents) dépassée.",
-        sessionExpired: "Cette demande a expiré. Recommencez depuis Portefeuilles.",
-        invalidChecksum: "Adresse Ethereum invalide (checksum).",
+        sessionExpired: "Cette demande a expiré. Recommencez depuis le menu Wallets.",
+        invalidChecksum: "Adresse Ethereum invalide (Checksum).",
     },
 
     image: {
