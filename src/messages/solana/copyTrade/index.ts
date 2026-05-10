@@ -367,6 +367,7 @@ export async function getCopyTradeWalletSizingMenu(
         `${modeLine} <strong>${modeLabel}</strong>\n` +
         `• ${sumWalletPct} : ${pct}%\n` +
         `• ${sumRatio} : ${ratio}\n` +
+        `<i>${(await t("copyTrade.ratioMenuNote", userId)).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</i>\n` +
         `• ${sumMax} : ${maxCap > 0 ? `${maxCap} SOL` : off}\n\n` +
         `<strong>${await t("copyTrade.filtersSection", userId)}</strong>\n` +
         `• ${sumMinM} : ${minM > 0 ? `$${minM}` : off}\n` +

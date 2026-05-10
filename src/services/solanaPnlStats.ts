@@ -120,6 +120,10 @@ export function portfolioSnapshot(
         let pnlTotal = totalProfit;
         if (bal > 0) {
             pnlTotal += bal * lastPx * (adminFeeFrac + 1);
+        }
+        // Cent rounding per position so totals match token rows and avoid float -0.00 drift.
+        pnlTotal = Math.round(pnlTotal * 100) / 100;
+        if (bal > 0) {
             openPnlUsd += pnlTotal;
         } else {
             closedPnlUsd += pnlTotal;
@@ -150,6 +154,8 @@ export function periodActivity(
     startMs: number,
     endMs: number,
     adminFeeFrac: number,
+    /** SOL/USD price; `tradeHistory.tip` is stored in SOL. Pass 0 if unknown (fees USD will be 0). */
+    solUsdPerSol = 0,
 ): {
     tradeCount: number;
     volumeUsd: number;
@@ -173,8 +179,8 @@ export function periodActivity(
             const ts = tradeTimeMs(tr);
             if (ts < startMs || ts > endMs) continue;
             tradeCount += 1;
-            const tip = Number(tr.tip) || 0;
-            feesUsd += tip;
+            const tipSol = Number(tr.tip) || 0;
+            feesUsd += solUsdPerSol > 0 ? tipSol * solUsdPerSol : 0;
 
             if (tr.transaction_type === "buy") {
                 volumeUsd += Number(tr.amount) || 0;

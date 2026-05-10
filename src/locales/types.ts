@@ -452,6 +452,8 @@ export interface Translations {
         removePin: string;
         pinRemovedSuccess: string;
         pinOptions: string;
+        /** Placeholder: {attempts} — from admin withdraw 2FA lockout (failed codes before temporary lock). */
+        pinOptionsLockoutNote: string;
         setupTitle: string;
         setupScanHint: string;
         setupManualLabel: string;
@@ -604,6 +606,7 @@ export interface Translations {
         p2: string;
         p3: string;
         p4: string;
+        currentChain: string;
         p5: string;
         p6: string;
         p7: string;
@@ -613,13 +616,20 @@ export interface Translations {
         wallet: string;
         noActivityTitle: string;
         noActivityHint: string;
+        /** Shorter hint when caption nears Telegram 1024 limit. */
+        noActivityHintShort: string;
+        /** Minimal hint to avoid HTML strip fallback (photo caption 1024 cap). */
+        noActivityHintMinimal: string;
         noActivityPeriodLabel: string;
         noActivityPrompt: string;
         noActivityInvalid: string;
         devSellTitle: string;
-        devSellHint: string;
+        devSellHintBeforePumpLink: string;
+        devSellHintAfterPumpLink: string;
         devSellMinSolLabel: string;
         devSellMinSupplyLabel: string;
+        /** Shown under min-supply % in auto-sell menu (HTML caption). */
+        devSellSupplyMenuNote: string;
         devSellPositionLabel: string;
         devSellPromptMinSol: string;
         devSellPromptSupply: string;
@@ -898,6 +908,8 @@ export interface Translations {
         sizingCurrentMode: string;
         summaryWalletPercent: string;
         summaryRatio: string;
+        /** One-line hint in sizing menu: what Target ratio does (proportional mode). */
+        ratioMenuNote: string;
         summaryMaxSol: string;
         summaryMinMcap: string;
         summaryMaxMcap: string;
@@ -1111,6 +1123,8 @@ export interface Translations {
         congratulations: string;
         walletsCreated: string;
         savePrivateKeys: string;
+        /** HTML caption; placeholders {max}, {count}. */
+        bundleWalletExceedsMax: string;
         invalidWalletCount: string;
         pleaseEnterValidNumber: string;
         walletKeysTitle: string;

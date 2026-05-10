@@ -82,10 +82,10 @@ export const getAdminPanelMarkup = async (userId: number): Promise<TelegramBot.I
                 { text: `${await t('admin.withdrawCooldownMins', userId)} : ${(settings as any).withdrawFreshCooldownMinutes ?? 0}`, callback_data: "admin_withdraw_cooldown" },
             ],
             [
-                { text: `${await t('admin.withdrawLockoutAttempts', userId)} : ${(settings as any).withdrawPinLockoutAttempts ?? 3}`, callback_data: "admin_withdraw_lockout_attempts" },
+                { text: `${await t('admin.withdrawLockoutAttempts', userId)} : ${(settings as any).withdrawTotpLockoutAttempts ?? 3}`, callback_data: "admin_withdraw_lockout_attempts" },
             ],
             [
-                { text: `${await t('admin.withdrawLockoutMinutes', userId)} : ${(settings as any).withdrawPinLockoutMinutes ?? 15}`, callback_data: "admin_withdraw_lockout_minutes" },
+                { text: `${await t('admin.withdrawLockoutMinutes', userId)} : ${(settings as any).withdrawTotpLockoutMinutes ?? 15}`, callback_data: "admin_withdraw_lockout_minutes" },
             ],
             [
                 { text: `${status} ${text}`, callback_data: "whitelist_active" },

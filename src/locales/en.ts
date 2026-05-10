@@ -451,6 +451,8 @@ export const en: Translations = {
         removePin: "🔓 Disable 2FA",
         pinRemovedSuccess: "✅ 2FA disabled. Withdrawals and private key export will no longer require a code.",
         pinOptions: "2FA is enabled. What do you want to do?",
+        pinOptionsLockoutNote:
+            "For withdrawals and private key export, up to {attempts} wrong code(s) in a row are allowed before 2FA entry is temporarily locked.",
         setupTitle: "🔐 Set up 2FA",
         setupScanHint: "Scan the QR code above with your authenticator app (Google Authenticator, Authy, etc.).",
         setupManualLabel: "If you cannot scan, enter this key manually:",
@@ -599,10 +601,11 @@ export const en: Translations = {
 
     //Auto Sell
     autoSell: {
-        p1: "⛽️ Auto Sell Settings",
+        p1: "🚨 Auto Sell Settings",
         p2: "📚 Need more help?",
         p3: "Click Here!",
         p4: "🌐 When auto sell is enabled, Foxy will automatically sell any token you paste based on your rules.",
+        currentChain: "Current Chain :",
         p5: "Default",
         p6: "📈 Take Profit Level :",
         p7: "📉 Stop Loss Level :",
@@ -611,18 +614,29 @@ export const en: Translations = {
         status2: "Disabled",
         wallet: "💳 Wallet :",
         noActivityTitle: "Sell on no activity",
-        noActivityHint: "If DexScreener shows no change in price, volume, or tx counts for your chosen period, Foxy closes the position (same limit order as TP/SL).",
+        noActivityHint:
+            "If DexScreener shows no change in price, volume, or tx counts for your chosen period, Foxy closes the position (same limit order as TP/SL).",
+        noActivityHintShort:
+            "If DexScreener is flat for your period, Foxy closes the position (same TP/SL order).",
+        noActivityHintMinimal: "No DexScreener move for your window → closes like TP/SL.",
         noActivityPeriodLabel: "Inactivity period (minutes)",
         noActivityPrompt: "Enter inactivity period in minutes (15–10080, e.g. 60 = 1 hour):",
         noActivityInvalid: "Invalid period. Use a whole number between 15 and 10080 minutes.",
         devSellTitle: "Auto Sell on Dev Sell",
-        devSellHint: "Solana / pump.fun: when the token creator sells, Foxy can sell your position using the rules below.",
+        /** Before <a>pump.fun</a> in caption (Solana dev-sell blurb). */
+        devSellHintBeforePumpLink: "Solana / ",
+        /** After linked “pump.fun”, includes leading colon + space where needed. */
+        devSellHintAfterPumpLink:
+            ": when the token creator sells, Foxy can sell your position using the rules below.",
         devSellMinSolLabel: "Min dev sell (SOL)",
         devSellMinSupplyLabel: "Min supply % (dev tx)",
+        devSellSupplyMenuNote:
+            ">0: creator sell must reach ≥ this % of supply in one tx. 0: off.",
         devSellPositionLabel: "Your sell %",
         devSellPromptMinSol: "Minimum SOL in the dev's sell transaction (0 = any dev sell):",
         devSellPromptSupply: "Minimum % of total supply sold in that dev transaction (0 = ignore this filter):",
-        devSellPromptPosition: "Percentage of your position to sell when triggered (1–100):",
+        devSellPromptPosition:
+            "When auto-sell on dev sell runs, how much of your balance of this token should be sold? Enter a whole number from 1 to 100 (100 = sell all of that token you hold on this wallet).",
         devSellInvalidMinSol: "Invalid value. Enter a number ≥ 0 (max 1,000,000 SOL).",
         devSellInvalidSupply: "Invalid value. Enter a number from 0 to 100.",
         devSellInvalidPosition: "Invalid value. Enter a whole number from 1 to 100.",
@@ -849,7 +863,7 @@ export const en: Translations = {
         cancel: "Cancel",
         addedSuccess: "✅ Address added to your monitor list. The bot will detect their Pump.fun token launches.",
         removedSuccess: "✅ Address removed from monitoring.",
-        settingsFor: "Settings for",
+        settingsFor: "Settings for :",
         copyOnNewToken: "Copy buy on new token launch",
         buyAmount: "Copy buy amount (SOL)",
         minAmount: "Min SOL (filter)",
@@ -897,6 +911,8 @@ export const en: Translations = {
         sizingCurrentMode: "Sizing mode:",
         summaryWalletPercent: "Wallet %",
         summaryRatio: "Target ratio",
+        ratioMenuNote:
+            "Only when sizing mode is “Match target SOL × ratio”: your copy buy uses the monitored wallet’s SOL spent on that buy, multiplied by this number (1 = same size, 0.5 = half).",
         summaryMaxSol: "Max per trade",
         summaryMinMcap: "Min mcap USD",
         summaryMaxMcap: "Max mcap USD",
@@ -1110,8 +1126,10 @@ export const en: Translations = {
         congratulations: "Congratulations!",
         walletsCreated: "wallets were created successfully for",
         savePrivateKeys: "Please save your private keys securely. They won't be shown again!",
-        invalidWalletCount: "Invalid wallet count. Please select between 1 and 20 wallets.",
-        pleaseEnterValidNumber: "Please enter a valid number.",
+        bundleWalletExceedsMax:
+            "❌ <b>Too many wallets</b>\n\nSafe Bundler can create at most <b>{max}</b> wallets in one batch. You entered <b>{count}</b>.\n\nEnter a whole number from <b>1</b> to <b>{max}</b>.",
+        invalidWalletCount: "Invalid number. Use a whole number from 1 to 20.",
+        pleaseEnterValidNumber: "Please enter a valid whole number (1–20).",
         walletKeysTitle: "Bundle Wallet Private Keys",
         storeSecurely: "Store this file in a secure location!",
         neverShare: "Never share your private keys with anyone!",

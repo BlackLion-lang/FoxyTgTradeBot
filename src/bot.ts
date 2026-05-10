@@ -76,13 +76,13 @@ import {
     parseWithdrawMessageSource,
     normalizeEthereumAddress,
     newWithdrawNonce,
-    isWithdrawPinLocked,
+    isWithdrawTotpLocked,
     getWalletCreatedAt,
     checkWithdrawCooldown,
     checkFreshDailyLimit,
     applyWithdrawDailyAfterSuccess,
-    registerWithdrawPinFailure,
-    resetWithdrawPinFailures,
+    registerWithdrawTotpFailure,
+    resetWithdrawTotpFailures,
     clearPendingWithdraw,
 } from "./services/withdrawalSecurity";
 import { executeSolanaNativeWithdraw, executeEthereumNativeWithdraw } from "./services/withdrawalExecute";
@@ -1573,7 +1573,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     if (isNaN(num) || num < 1 || num > 20) {
                         await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
                     } else {
-                        (settings as any).withdrawPinLockoutAttempts = num;
+                        (settings as any).withdrawTotpLockoutAttempts = num;
                         await settings.save();
                         editAdminPanelMessage(bot, chatId, userId, messageId);
                     }
@@ -1591,7 +1591,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     if (isNaN(num) || num < 1 || num > 1440) {
                         await bot.sendMessage(chatId, `${await t("errors.invalidsettings", userId)}`);
                     } else {
-                        (settings as any).withdrawPinLockoutMinutes = num;
+                        (settings as any).withdrawTotpLockoutMinutes = num;
                         await settings.save();
                         editAdminPanelMessage(bot, chatId, userId, messageId);
                     }
@@ -3042,7 +3042,7 @@ bot.on("callback_query", async (callbackQuery) => {
             const uW = await User.findOne({ userId });
             if (!uW) return;
             const pw = (uW as any).pendingWithdraw;
-            if (!pw || pw.nonce !== nonce || !pw.pinVerified) {
+            if (!pw || pw.nonce !== nonce || !pw.totpVerified) {
                 await bot.sendMessage(chatId, await t("withdrawal.sessionExpired", userId));
                 return;
             }
@@ -3091,7 +3091,7 @@ bot.on("callback_query", async (callbackQuery) => {
                         status: "success",
                     });
                     await clearPendingWithdraw(userId);
-                    await resetWithdrawPinFailures(userId);
+                    await resetWithdrawTotpFailures(userId);
                     await editEthereumWalletsMessage(bot, chatId, userId, messageId);
                 } catch (error: any) {
                     console.error("Ethereum withdraw error:", error);
@@ -3143,7 +3143,7 @@ bot.on("callback_query", async (callbackQuery) => {
                     status: "success",
                 });
                 await clearPendingWithdraw(userId);
-                await resetWithdrawPinFailures(userId);
+                await resetWithdrawTotpFailures(userId);
                 await sendWalletsMessageWithImage(bot, chatId, userId, messageId);
             } catch (error: any) {
                 const msg = error?.message || String(error);
@@ -3175,9 +3175,9 @@ bot.on("callback_query", async (callbackQuery) => {
                 });
                 return;
             }
-            if (isWithdrawPinLocked(uW as { withdrawPinLockedUntil?: unknown })) {
-                const until = (uW as any).withdrawPinLockedUntil
-                    ? new Date((uW as any).withdrawPinLockedUntil).getTime()
+            if (isWithdrawTotpLocked(uW as { withdrawTotpLockedUntil?: unknown })) {
+                const until = (uW as any).withdrawTotpLockedUntil
+                    ? new Date((uW as any).withdrawTotpLockedUntil).getTime()
                     : Date.now();
                 const minsLeft = Math.max(1, Math.ceil((until - Date.now()) / 60_000));
                 const lockText = (await t("withdrawal.pinLockoutStillLocked", userId)).replace("{minutes}", String(minsLeft));
@@ -3196,7 +3196,7 @@ bot.on("callback_query", async (callbackQuery) => {
             const finalizeWithdrawAfterPin = async (uDoc: any) => {
                 const pw = uDoc.pendingWithdraw;
                 if (!pw) return;
-                (uDoc as any).pendingWithdraw.pinVerified = true;
+                (uDoc as any).pendingWithdraw.totpVerified = true;
                 uDoc.markModified("pendingWithdraw");
                 await uDoc.save();
                 const currency = pw.chain === "ethereum" ? await t("currencySymbol_ethereum", userId) : await t("currencySymbol_solana", userId);
@@ -3234,7 +3234,7 @@ bot.on("callback_query", async (callbackQuery) => {
                                 bot.deleteMessage(chatId, reply.message_id).catch(() => {});
                             }, 5000);
                             const u1 = await User.findOne({ userId });
-                            if (!u1 || (u1 as any).pendingPinAction !== "withdraw" || !(u1 as any).pendingWithdraw) {
+                            if (!u1 || (u1 as any).pendingSecurityAction !== "withdraw" || !(u1 as any).pendingWithdraw) {
                                 resolve();
                                 return;
                             }
@@ -3249,12 +3249,12 @@ bot.on("callback_query", async (callbackQuery) => {
                                 }
                             }
                             if (ok) {
-                                await resetWithdrawPinFailures(userId);
+                                await resetWithdrawTotpFailures(userId);
                                 await finalizeWithdrawAfterPin(u1);
                                 resolve();
                                 return;
                             }
-                            const pinFail = await registerWithdrawPinFailure(userId, tipSettings);
+                            const pinFail = await registerWithdrawTotpFailure(userId, tipSettings);
                             if (pinFail) {
                                 await SecurityLog.create({ userId, type: "withdraw_totp_fail", detail: userChain });
                             }
@@ -3372,9 +3372,9 @@ bot.on("callback_query", async (callbackQuery) => {
                     isFullBalance,
                     nonce,
                     expiresAt,
-                    pinVerified: false,
+                    totpVerified: false,
                 };
-                (uW as any).pendingPinAction = "withdraw";
+                (uW as any).pendingSecurityAction = "withdraw";
                 uW.markModified("pendingWithdraw");
                 await uW.save();
                 await runWithdrawTotpChallenge();
@@ -3460,9 +3460,9 @@ bot.on("callback_query", async (callbackQuery) => {
                 isFullBalance,
                 nonce: nonceSol,
                 expiresAt: expiresAtSol,
-                pinVerified: false,
+                totpVerified: false,
             };
-            (uW as any).pendingPinAction = "withdraw";
+            (uW as any).pendingSecurityAction = "withdraw";
             uW.markModified("pendingWithdraw");
             await uW.save();
             await runWithdrawTotpChallenge();
@@ -3918,7 +3918,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 return;
             }
 
-            (user as any).pendingPinAction = "export";
+            (user as any).pendingSecurityAction = "export";
             (user as any).pendingExportWalletIndex = index;
             (user as any).pendingExportChain = userChain;
             await user.save();
@@ -3926,7 +3926,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             const sendExportPrivateKeyPhotoAfterVerify = async (uVerified: any) => {
                 const idx = (uVerified as any).pendingExportWalletIndex as number;
                 const chain = (uVerified as any).pendingExportChain as string;
-                (uVerified as any).pendingPinAction = "";
+                (uVerified as any).pendingSecurityAction = "";
                 (uVerified as any).pendingExportWalletIndex = -1;
                 (uVerified as any).pendingExportChain = "";
                 await uVerified.save();
@@ -3988,7 +3988,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                         }, 5000);
                         const u = await User.findOne({ userId });
                         let ok = false;
-                        if (u && (u as any).pendingPinAction === "export") {
+                        if (u && (u as any).pendingSecurityAction === "export") {
                             const enc = (u as any).totpSecretEnc as string | undefined;
                             if (enc && String(enc).trim()) {
                                 try {
@@ -3998,13 +3998,13 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                                 }
                             }
                         }
-                        if (!u || (u as any).pendingPinAction !== "export" || !ok) {
+                        if (!u || (u as any).pendingSecurityAction !== "export" || !ok) {
                             const wrongExportMsg = await bot.sendMessage(chatId, await t("pin.wrongPin", userId));
                             setTimeout(() => bot.deleteMessage(chatId, wrongExportMsg.message_id).catch(() => {}), 5000);
                             if (attemptsLeft <= 1) {
                                 const uFail = await User.findOne({ userId });
                                 if (uFail) {
-                                    (uFail as any).pendingPinAction = "";
+                                    (uFail as any).pendingSecurityAction = "";
                                     (uFail as any).pendingExportWalletIndex = -1;
                                     (uFail as any).pendingExportChain = "";
                                     await uFail.save();
@@ -5555,6 +5555,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "settings_2fa" || sel_action === "settings_pin") {
             await safeDeleteMessage(bot, chatId, messageId);
+            const totpLockoutAttempts = (settings as any).withdrawTotpLockoutAttempts ?? 3;
             const userDoc = await User.findOne({ userId });
             const sendEnrollmentQr = async (): Promise<number | undefined> => {
                 const secret = generateTotpSecretPlain();
@@ -5575,7 +5576,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     `${await t("pin.setupScanHint", userId)}\n\n` +
                     `${await t("pin.setupHelpPrompt", userId)}\n<a href="${helpHref}">${helpLinkEsc}</a>\n\n` +
                     `<b>${await t("pin.setupManualLabel", userId)}</b>\n<code>${manualEsc}</code>\n\n` +
-                    `${await t("pin.setupEnterCode", userId)}`;
+                    `${await t("pin.setupEnterCode", userId)}\n\n` +
+                    `${(await t("pin.pinOptionsLockoutNote", userId)).replace("{attempts}", String(totpLockoutAttempts))}`;
                 const sent = await bot.sendPhoto(chatId, png, {
                     caption: cap,
                     parse_mode: "HTML",
@@ -5631,7 +5633,10 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                 const qrMsgId = await sendEnrollmentQr();
                 void askSetupCode(TOTP_VERIFICATION_ATTEMPTS, qrMsgId);
             } else {
-                await bot.sendMessage(chatId, await t("pin.pinOptions", userId), {
+                const pinOptionsText =
+                    `${await t("pin.pinOptions", userId)}\n\n` +
+                    `${(await t("pin.pinOptionsLockoutNote", userId)).replace("{attempts}", String(totpLockoutAttempts))}`;
+                await bot.sendMessage(chatId, pinOptionsText, {
                     reply_markup: {
                         inline_keyboard: [
                             [
@@ -5648,6 +5653,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
 
         if (sel_action === "settings_2fa_change" || sel_action === "settings_pin_change") {
             await safeDeleteMessage(bot, chatId, messageId);
+            const totpLockoutAttempts = (settings as any).withdrawTotpLockoutAttempts ?? 3;
             const userDoc = await User.findOne({ userId });
             if (!userHasTotpEnabled(userDoc as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 ${await t("pin.setPinFirst", userId)}\n\n${await t("pin.setPinFirstDesc", userId)}`, {
@@ -5676,7 +5682,8 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
                     `${await t("pin.setupScanHint", userId)}\n\n` +
                     `${await t("pin.setupHelpPrompt", userId)}\n<a href="${helpHref}">${helpLinkEsc}</a>\n\n` +
                     `<b>${await t("pin.setupManualLabel", userId)}</b>\n<code>${manualEsc}</code>\n\n` +
-                    `${await t("pin.setupEnterCode", userId)}`;
+                    `${await t("pin.setupEnterCode", userId)}\n\n` +
+                    `${(await t("pin.pinOptionsLockoutNote", userId)).replace("{attempts}", String(totpLockoutAttempts))}`;
                 const sent = await bot.sendPhoto(chatId, png, {
                     caption: cap,
                     parse_mode: "HTML",

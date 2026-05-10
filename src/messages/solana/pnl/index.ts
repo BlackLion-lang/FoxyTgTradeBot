@@ -10,17 +10,20 @@ import {
     closedPositionWinRatePercent,
     type PnlPeriodKey,
 } from "../../../services/solanaPnlStats";
+import { getSolPrice } from "../../../services/solana";
 
 function adminFeeFrac(userId: number, feePct: number): number {
     if (userId === 7994989802 || userId === 2024002049) return 0;
     return feePct / 100;
 }
 
+/** Half-cent threshold: avoids "-$0.00" when float noise makes totals ~0. */
 function fmtUsd(n: number): string {
     if (!Number.isFinite(n)) return "$0.00";
-    const abs = Math.abs(n);
-    const sign = n < 0 ? "-" : "";
-    const v = Math.abs(n);
+    const v0 = Math.abs(n) < 0.005 ? 0 : n;
+    const abs = Math.abs(v0);
+    const sign = v0 < 0 ? "-" : "";
+    const v = Math.abs(v0);
     if (abs >= 1e6) return `${sign}$${(v / 1e6).toFixed(2)}M`;
     if (abs >= 1e3) return `${sign}$${(v / 1e3).toFixed(2)}K`;
     return `${sign}$${v.toFixed(2)}`;
@@ -46,14 +49,20 @@ export async function buildPnlCaption(userId: number, period: PnlPeriodKey): Pro
     const snap = portfolioSnapshot(walletsPlain, Infinity, fee);
     const dur = periodDurationMs(period);
     let periodDeltaLine = "";
+    let periodDeltaUsd = 0;
     if (dur != null) {
-        const d = periodPnlDeltaUsd(walletsPlain, dur, fee, now);
+        periodDeltaUsd = periodPnlDeltaUsd(walletsPlain, dur, fee, now);
         const label = await t(`pnl.periodTag_${period}`, userId);
-        periodDeltaLine = `\n${await t("pnl.periodDelta", userId)} (${label}) : <strong>${fmtUsd(d)}</strong>`;
+        periodDeltaLine = `\n${await t("pnl.periodDelta", userId)} (${label}) : <strong>${fmtUsd(periodDeltaUsd)}</strong>`;
     }
 
+    const perfUsdRaw = dur == null ? snap.totalPnlUsd : periodDeltaUsd;
+    const perfUsd = Math.abs(perfUsdRaw) < 0.005 ? 0 : perfUsdRaw;
+    const perfDot = perfUsd > 0 ? "🟢 " : perfUsd < 0 ? "🔴 " : "⚪ ";
+
     const startAct = dur == null ? 0 : now - dur;
-    const act = periodActivity(walletsPlain, startAct, now, fee);
+    const solUsd = Math.max(0, getSolPrice() || 0);
+    const act = periodActivity(walletsPlain, startAct, now, fee, solUsd);
     const winRate = closedPositionWinRatePercent(snap.closedWinners, snap.closedLosers);
 
     const walletLines: string[] = [];
@@ -71,7 +80,7 @@ export async function buildPnlCaption(userId: number, period: PnlPeriodKey): Pro
     const periodLabel = await t(`pnl.periodTag_${period}`, userId);
 
     let body =
-        `<strong>${await t("pnl.title", userId)}</strong>\n` +
+        `${perfDot}<strong>${await t("pnl.title", userId)}</strong>\n` +
         `<em>${await t("pnl.solanaOnly", userId)}</em>\n\n` +
         `${await t("pnl.period", userId)} : <strong>${periodLabel}</strong>\n` +
         `${await t("pnl.totalPnl", userId)} : <strong>${fmtUsd(snap.totalPnlUsd)}</strong>` +
@@ -81,7 +90,7 @@ export async function buildPnlCaption(userId: number, period: PnlPeriodKey): Pro
         `${await t("pnl.activityInPeriod", userId)} :\n` +
         `  ${await t("pnl.trades", userId)} : ${act.tradeCount}\n` +
         `  ${await t("pnl.volume", userId)} : ${fmtUsd(act.volumeUsd)}\n` +
-        `  ${await t("pnl.fees", userId)} : ${fmtUsd(act.feesUsd)}\n` +
+        // `  ${await t("pnl.fees", userId)} : ${fmtUsd(act.feesUsd)}\n` +
         `  ${await t("pnl.winRate", userId)} : ${winRate.toFixed(1)}% <i>(${await t("pnl.winRateHint", userId)})</i>\n\n` +
         `${await t("pnl.bestTrade", userId)} : ${fmtUsd(act.bestSellUsd)} <i>${escapeHtml(act.bestSellLabel)}</i>\n` +
         `${await t("pnl.worstTrade", userId)} : ${fmtUsd(act.worstSellUsd)} <i>${escapeHtml(act.worstSellLabel)}</i>\n\n` +
@@ -114,10 +123,12 @@ function escapeHtml(s: string): string {
 }
 
 async function periodButtonText(userId: number, p: PnlPeriodKey, current: PnlPeriodKey): Promise<string> {
-    const mark = p === current ? "🟠" : " ";
     const key =
         p === "1d" ? "btn1d" : p === "7d" ? "btn7d" : p === "30d" ? "btn30d" : "btnAll";
-    return `${mark}${await t(`pnl.${key}`, userId)}`;
+    const label = await t(`pnl.${key}`, userId);
+    // NBSP after indicator: Telegram often collapses a normal space right after emoji.
+    if (p === current) return `🟠\u00A0${label}`;
+    return ` ${label}`;
 }
 
 export async function getPnlMarkup(userId: number, period: PnlPeriodKey): Promise<TelegramBot.InlineKeyboardMarkup> {

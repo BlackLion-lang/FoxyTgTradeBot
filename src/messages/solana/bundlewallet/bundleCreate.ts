@@ -10,14 +10,17 @@ const bundleCreateHandler = async (UserModel: Model<any>, userId: number, chatId
   const SAFE_BUNDLER_MAX = 20;
   
   if (count > SAFE_BUNDLER_MAX) {
-    return bot.sendMessage(
-      chatId,
-      `❌ <b>${await t('bundleWallets.invalidCount', userId)}</b>\n\n` +
-      `${await t('bundleWallets.safeBundler', userId)} ${await t('bundleWallets.invalidCountDesc', userId)} <b>${SAFE_BUNDLER_MAX} ${await t('bundleWallets.selectedWallets', userId)}</b>.\n` +
-      `${await t('bundleWallets.youSelectedCount', userId)} <b>${count} ${await t('bundleWallets.selectedWallets', userId)}</b>.\n\n` +
-      (await t('bundleWallets.pleaseSelectMaxOrFewer', userId)).replace('{max}', SAFE_BUNDLER_MAX.toString()),
-      { parse_mode: "HTML" }
-    );
+    const capMsg = (await t("bundleWallets.bundleWalletExceedsMax", userId))
+      .replace(/\{max\}/g, String(SAFE_BUNDLER_MAX))
+      .replace(/\{count\}/g, String(count));
+    return bot.sendMessage(chatId, capMsg, {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: await t("bundleWallets.backToBundleWallets", userId), callback_data: "bundled_wallets" }],
+        ],
+      },
+    });
   }
 
   const bundleTypeName = await t('bundleWallets.safeBundler', userId);

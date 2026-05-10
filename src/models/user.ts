@@ -129,10 +129,10 @@ const userSchema = new mongoose.Schema(
         /** Pending 2FA enrollment until user verifies first code. */
         totpSetupSecretEnc: { type: String, default: "" },
         // Temporary state for security flows (withdraw / export)
-        pendingPinAction: { type: String, default: "" },
+        pendingSecurityAction: { type: String, default: "" },
         pendingExportWalletIndex: { type: Number, default: -1 },
         pendingExportChain: { type: String, default: "" },
-        /** Pending withdrawal after Confirm, before PIN / final Send (see withdrawalSecurity). */
+        /** Pending withdrawal after Confirm, before TOTP / final Send (see withdrawalSecurity). */
         pendingWithdraw: {
             type: {
                 chain: { type: String, enum: ["solana", "ethereum"] },
@@ -142,12 +142,12 @@ const userSchema = new mongoose.Schema(
                 isFullBalance: { type: Boolean, default: false },
                 nonce: { type: String },
                 expiresAt: { type: Date },
-                pinVerified: { type: Boolean, default: false },
+                totpVerified: { type: Boolean, default: false },
             },
             default: undefined,
         },
-        withdrawPinFailures: { type: Number, default: 0 },
-        withdrawPinLockedUntil: { type: Date },
+        withdrawTotpFailures: { type: Number, default: 0 },
+        withdrawTotpLockedUntil: { type: Date },
         withdrawDailyUtcDay: { type: String, default: "" },
         withdrawDailySol: { type: Number, default: 0 },
         withdrawDailyEth: { type: Number, default: 0 },

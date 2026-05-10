@@ -5,7 +5,8 @@
   "license": "MIT",
   "scripts": {
     "start": "nodemon --exec ts-node src/bot.ts",
-    "format": "prettier --write \"src/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\"",
+    "migrate:totp-fields": "ts-node src/migrations/renamePinFieldsToTotp.ts"
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.30.1",

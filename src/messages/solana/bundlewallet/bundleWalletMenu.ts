@@ -240,8 +240,16 @@ export const showCreateWalletPrompt = async (
             if (reply.chat.id !== chatId) return;
 
             const count = parseInt(reply.text || '0');
+            const bundleBackKb = {
+                inline_keyboard: [
+                    [{ text: await t("bundleWallets.backToBundleWallets", userId), callback_data: "bundled_wallets" }],
+                ],
+            };
+
             if (isNaN(count) || count <= 0) {
-                await bot.sendMessage(chatId, `❌ ${await t('bundleWallets.pleaseEnterValidNumber', userId)}`);
+                await bot.sendMessage(chatId, `❌ ${await t("bundleWallets.pleaseEnterValidNumber", userId)}`, {
+                    reply_markup: bundleBackKb,
+                });
                 await safeDeleteMessage(chatId, sentMessage.message_id);
                 await safeDeleteMessage(chatId, reply.message_id);
                 return;
@@ -249,14 +257,13 @@ export const showCreateWalletPrompt = async (
 
             const SAFE_BUNDLER_MAX = 20;
             if (count > SAFE_BUNDLER_MAX) {
-                await bot.sendMessage(
-                    chatId,
-                    `❌ *${await t('bundleWallets.invalidCount', userId)}*\n\n` +
-                    `${await t('bundleWallets.safeBundler', userId)} ${await t('bundleWallets.invalidCountDesc', userId)} *${SAFE_BUNDLER_MAX} ${await t('bundleWallets.selectedWallets', userId)}*.\n` +
-                    `${await t('bundleWallets.youSelectedCount', userId)} *${count} ${await t('bundleWallets.selectedWallets', userId)}*.\n\n` +
-                    `**${(await t('bundleWallets.pleaseSelectMaxOrFewer', userId)).replace('{max}', SAFE_BUNDLER_MAX.toString())}**`,
-                    { parse_mode: 'Markdown' }
-                );
+                const capMsg = (await t("bundleWallets.bundleWalletExceedsMax", userId))
+                    .replace(/\{max\}/g, String(SAFE_BUNDLER_MAX))
+                    .replace(/\{count\}/g, String(count));
+                await bot.sendMessage(chatId, capMsg, {
+                    parse_mode: "HTML",
+                    reply_markup: bundleBackKb,
+                });
                 await safeDeleteMessage(chatId, sentMessage.message_id);
                 await safeDeleteMessage(chatId, reply.message_id);
                 return;
@@ -296,8 +303,27 @@ export const createBundleWallets = async (
     const bundleType = 'safe';
     const count = parseInt(parts[3], 10);
 
-    if (isNaN(count) || count <= 0 || count > 20) {
-        await bot.sendMessage(chatId, `❌ ${await t('bundleWallets.invalidWalletCount', userId)}`);
+    const SAFE_BUNDLE_MAX = 20;
+    const bundleBackKb = {
+        inline_keyboard: [
+            [{ text: await t("bundleWallets.backToBundleWallets", userId), callback_data: "bundled_wallets" }],
+        ],
+    };
+
+    if (isNaN(count) || count <= 0) {
+        await bot.sendMessage(chatId, `❌ ${await t("bundleWallets.invalidWalletCount", userId)}`, {
+            reply_markup: bundleBackKb,
+        });
+        return;
+    }
+    if (count > SAFE_BUNDLE_MAX) {
+        const capMsg = (await t("bundleWallets.bundleWalletExceedsMax", userId))
+            .replace(/\{max\}/g, String(SAFE_BUNDLE_MAX))
+            .replace(/\{count\}/g, String(count));
+        await bot.sendMessage(chatId, capMsg, {
+            parse_mode: "HTML",
+            reply_markup: bundleBackKb,
+        });
         return;
     }
 

@@ -13,7 +13,7 @@ export interface PendingWithdrawShape {
     isFullBalance: boolean;
     nonce: string;
     expiresAt: Date;
-    pinVerified: boolean;
+    totpVerified: boolean;
 }
 
 export function parseWithdrawMessageSource(text: string, caption: string): string {
@@ -47,8 +47,8 @@ export function isFreshWallet(walletCreatedAt: Date, freshWalletDays: number): b
     return ageMs < freshWalletDays * 86400000;
 }
 
-export function isWithdrawPinLocked(user: { withdrawPinLockedUntil?: unknown }): boolean {
-    const u = user.withdrawPinLockedUntil;
+export function isWithdrawTotpLocked(user: { withdrawTotpLockedUntil?: unknown }): boolean {
+    const u = user.withdrawTotpLockedUntil;
     if (!u) return false;
     return new Date(u as Date).getTime() > Date.now();
 }
@@ -144,7 +144,7 @@ export async function applyWithdrawDailyAfterSuccess(
     );
 }
 
-export type RegisterWithdrawPinFailureResult = {
+export type RegisterWithdrawTotpFailureResult = {
     lockedNow: boolean;
     /** Failed-attempt count after this increment (equals threshold when lockout applies). */
     attemptsThatTriggeredLockout: number;
@@ -152,35 +152,35 @@ export type RegisterWithdrawPinFailureResult = {
     lockoutMinutes: number;
 };
 
-export async function registerWithdrawPinFailure(
+export async function registerWithdrawTotpFailure(
     userId: number,
-    settings: { withdrawPinLockoutAttempts?: number; withdrawPinLockoutMinutes?: number },
-): Promise<RegisterWithdrawPinFailureResult | null> {
-    const maxAttempts = settings.withdrawPinLockoutAttempts ?? 3;
-    const lockMins = settings.withdrawPinLockoutMinutes ?? 15;
+    settings: { withdrawTotpLockoutAttempts?: number; withdrawTotpLockoutMinutes?: number },
+): Promise<RegisterWithdrawTotpFailureResult | null> {
+    const maxAttempts = settings.withdrawTotpLockoutAttempts ?? 3;
+    const lockMins = settings.withdrawTotpLockoutMinutes ?? 15;
     const u = await User.findOne({ userId });
     if (!u) return null;
-    const n = (Number((u as any).withdrawPinFailures) || 0) + 1;
-    const update: Record<string, unknown> = { withdrawPinFailures: n };
+    const n = (Number((u as any).withdrawTotpFailures) || 0) + 1;
+    const update: Record<string, unknown> = { withdrawTotpFailures: n };
     let lockedNow = false;
     if (maxAttempts > 0 && n >= maxAttempts && lockMins > 0) {
-        update.withdrawPinLockedUntil = new Date(Date.now() + lockMins * 60_000);
-        update.withdrawPinFailures = 0;
+        update.withdrawTotpLockedUntil = new Date(Date.now() + lockMins * 60_000);
+        update.withdrawTotpFailures = 0;
         lockedNow = true;
         await SecurityLog.create({
             userId,
             type: "withdraw_lockout",
-            detail: `${maxAttempts} failed PIN attempts`,
+            detail: `${maxAttempts} failed TOTP attempts`,
         });
     }
     await User.updateOne({ userId }, { $set: update });
     return { lockedNow, attemptsThatTriggeredLockout: n, lockoutMinutes: lockMins };
 }
 
-export async function resetWithdrawPinFailures(userId: number): Promise<void> {
-    await User.updateOne({ userId }, { $set: { withdrawPinFailures: 0 } });
+export async function resetWithdrawTotpFailures(userId: number): Promise<void> {
+    await User.updateOne({ userId }, { $set: { withdrawTotpFailures: 0 } });
 }
 
 export async function clearPendingWithdraw(userId: number): Promise<void> {
-    await User.updateOne({ userId }, { $unset: { pendingWithdraw: 1 }, $set: { pendingPinAction: "" } });
+    await User.updateOne({ userId }, { $unset: { pendingWithdraw: 1 }, $set: { pendingSecurityAction: "" } });
 }

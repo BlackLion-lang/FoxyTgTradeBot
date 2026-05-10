@@ -3,6 +3,32 @@ import { User } from "../../../models/user";
 import { t } from "../../../locales";
 import { clampInactivityMinutes } from "../../../services/sellOnNoActivity";
 
+/** Telegram photo captions are capped at 1024 chars (Bot API). */
+const TELEGRAM_PHOTO_CAPTION_MAX = 1024;
+
+function escapeHtmlText(s: string): string {
+    return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+/** `&` in query strings must be escaped or Telegram HTML parsing breaks (link + bold lost). */
+function telegramHtmlHref(url: string): string {
+    return String(url).replace(/&/g, "&amp;");
+}
+
+function clampAutoSellPhotoCaption(html: string): string {
+    if (html.length <= TELEGRAM_PHOTO_CAPTION_MAX) return html;
+    const withoutItalic = html.replace(/<i>[\s\S]*?<\/i>\n?/g, "");
+    if (withoutItalic.length <= TELEGRAM_PHOTO_CAPTION_MAX) return withoutItalic;
+    console.warn(
+        `[autoSell] caption still too long (${withoutItalic.length} chars); plain fallback (help stays at top + keyboard button)`,
+    );
+    const plain = withoutItalic.replace(/<\/?[^>]+(>|$)/g, "");
+    return plain.slice(0, TELEGRAM_PHOTO_CAPTION_MAX - 1).trimEnd() + "…";
+}
+
 export const getAutoSell = async (
     userId: number,
 ) => {
@@ -27,7 +53,6 @@ export const getAutoSell = async (
     const enabled = isEthereum 
         ? (user.settings.auto_sell?.enabled_ethereum ?? false)
         : (user.settings.auto_sell?.enabled_solana ?? false);
-    const status = enabled === true ? "🟢" : "🔴";
 
     const noActEnabled = isEthereum
         ? (user.settings.auto_sell?.sellOnNoActivityEnabled_ethereum ?? false)
@@ -51,26 +76,65 @@ export const getAutoSell = async (
         ? "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=eth&section=venteauto&sig=WO31GUxNRLMuWWA7TesQ_ynvgtV13XZK"
         : "https://the-cryptofox-learning.com/api/wiki_sections.php?action=gate&wiki=sol&section=venteauto&sig=scUK6DZdM5KF7JMttGwra126UBqUZYgN";
 
-    const caption =
-        `<strong>${await t('autoSell.p1', userId)}</strong>\n\n` +
-        `${await t('autoSell.p2', userId)}\n <a href="${autoSellHelpUrl}">${await t('autoSell.p3', userId)}</a>\n\n` +
-        `${await t('autoSell.p4', userId)}\n\n` +
-        `${await t('menu.chain', userId)} <strong>${chainEmoji} ${chainName}</strong>\n\n` +
-        `<strong>${user.username} (${await t('autoSell.p5', userId)})</strong> : <strong>${active_wallet.label}\n</strong>` +
-        `<code>${active_wallet.publicKey}</code>\n\n` +
-        `<strong>${await t('autoSell.p6', userId)}</strong> ${takeProfitPercent}%\n` +
-        `<strong>${await t('autoSell.p7', userId)}</strong> ${stopLossPercent}%\n\n` +
-        `<strong>${await t('autoSell.noActivityTitle', userId)}</strong> ${noActEnabled ? "🟢" : "🔴"}\n` +
-        `${await t('autoSell.noActivityHint', userId)}\n` +
-        `<strong>${await t('autoSell.noActivityPeriodLabel', userId)}</strong> : ${noActMins} min\n\n` +
-        (!isEthereum
-            ? `<strong>${await t("autoSell.devSellTitle", userId)}</strong> ${devSellEnabled ? "🟢" : "🔴"}\n` +
-              `${await t("autoSell.devSellHint", userId)}\n` +
-              `<strong>${await t("autoSell.devSellMinSolLabel", userId)}</strong> : ${devMinSol}\n` +
-              `<strong>${await t("autoSell.devSellMinSupplyLabel", userId)}</strong> : ${devMinSupply}%\n` +
-              `<strong>${await t("autoSell.devSellPositionLabel", userId)}</strong> : ${devPosPct}%\n\n`
-            : "") +
-        `<strong>${await t('autoSell.p8', userId)}</strong>`;
+    const helpHref = telegramHtmlHref(autoSellHelpUrl);
+    const helpLinkLabel = await t("autoSell.p3", userId);
+    /** Telegram counts HTML toward 1024; `<b>` saves ~10 chars per emphasis vs `<strong>`. */
+    const b = (inner: string) => `<b>${inner}</b>`;
+
+    const walletLine = b(
+        `${escapeHtmlText(String(user.username))} (${await t("autoSell.p5", userId)}) : ${escapeHtmlText(String(active_wallet.label))}`,
+    );
+
+    const pumpFunHref = telegramHtmlHref("https://pump.fun");
+
+    const assembleCaption = async (noActivityHintText: string) => {
+        const helpAnchor =
+            `${escapeHtmlText(await t("autoSell.p2", userId))}\n` +
+            `<a href="${helpHref}">${escapeHtmlText(helpLinkLabel)}</a>\n\n`;
+
+        const devHintBlock =
+            !isEthereum
+                ? `${escapeHtmlText(await t("autoSell.devSellHintBeforePumpLink", userId))}` +
+                  `<a href="${pumpFunHref}">pump.fun</a>` +
+                  `${escapeHtmlText(await t("autoSell.devSellHintAfterPumpLink", userId))}\n\n`
+                : "";
+
+        return (
+            `${b(escapeHtmlText(await t("autoSell.p1", userId)))}\n\n` +
+            helpAnchor +
+            `${escapeHtmlText(await t("autoSell.p4", userId))}\n\n` +
+            `${b(escapeHtmlText(await t("autoSell.currentChain", userId)))} ${chainEmoji} ${b(chainName)}\n\n` +
+            `${walletLine}\n` +
+            `<code>${escapeHtmlText(String(active_wallet.publicKey))}</code>\n\n` +
+            `${b(escapeHtmlText(await t("autoSell.p6", userId)))} ${takeProfitPercent}%\n` +
+            `${b(escapeHtmlText(await t("autoSell.p7", userId)))} ${stopLossPercent}%\n\n` +
+            `${b(escapeHtmlText(await t("autoSell.noActivityTitle", userId)))} ${noActEnabled ? "🟢" : "🔴"}\n` +
+            `${escapeHtmlText(noActivityHintText)}\n` +
+            `${b(`${escapeHtmlText(await t("autoSell.noActivityPeriodLabel", userId))} : ${noActMins} min`)}\n\n` +
+            (!isEthereum
+                ? `${b(escapeHtmlText(await t("autoSell.devSellTitle", userId)))} ${devSellEnabled ? "🟢" : "🔴"}\n` +
+                  devHintBlock +
+                  `${b(`${escapeHtmlText(await t("autoSell.devSellMinSolLabel", userId))} : ${devMinSol}`)}\n` +
+                  `${b(`${escapeHtmlText(await t("autoSell.devSellMinSupplyLabel", userId))} : ${devMinSupply}%`)}\n` +
+                  `${b(`${escapeHtmlText(await t("autoSell.devSellPositionLabel", userId))} : ${devPosPct}%`)}\n\n`
+                : "") +
+            `${b(escapeHtmlText(await t("autoSell.p8", userId)))}`
+        );
+    };
+
+    const hintFull = await t("autoSell.noActivityHint", userId);
+    const hintShort = await t("autoSell.noActivityHintShort", userId);
+    const hintMinimal = await t("autoSell.noActivityHintMinimal", userId);
+
+    let caption = await assembleCaption(hintFull);
+    if (caption.length > TELEGRAM_PHOTO_CAPTION_MAX) {
+        caption = await assembleCaption(hintShort);
+    }
+    if (caption.length > TELEGRAM_PHOTO_CAPTION_MAX) {
+        caption = await assembleCaption(hintMinimal);
+    }
+
+    const captionClamped = clampAutoSellPhotoCaption(caption);
 
     const options: TelegramBot.InlineKeyboardButton[][] = [
         [
@@ -115,6 +179,8 @@ export const getAutoSell = async (
                           text: `% ${await t("autoSell.devSellMinSupplyLabel", userId)} : ${devMinSupply}`,
                           callback_data: "autoSell_dev_sell_supply_pct",
                       },
+                  ],
+                  [
                       {
                           text: `↪ ${await t("autoSell.devSellPositionLabel", userId)} : ${devPosPct}`,
                           callback_data: "autoSell_dev_sell_position_pct",
@@ -136,7 +202,7 @@ export const getAutoSell = async (
         inline_keyboard: options,
     };
 
-    return { caption, markup: walletsMarkup };
+    return { caption: captionClamped, markup: walletsMarkup };
 };
 
 export const editMessageReplyMarkup = async (

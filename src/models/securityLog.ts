@@ -8,7 +8,6 @@ const securityLogSchema = new mongoose.Schema(
             type: String,
             required: true,
             enum: [
-                "withdraw_pin_fail",
                 "withdraw_totp_fail",
                 "withdraw_lockout",
                 "withdraw_blocked_cooldown",
