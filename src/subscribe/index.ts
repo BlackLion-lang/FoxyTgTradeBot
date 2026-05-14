@@ -139,19 +139,25 @@ const getSubscriptionWallet = (() => {
 const processSubscription = async (bot: TelegramBot, chatId: number, telegramId: number, planKey: PlanKey) => {
     const subscriptionWallet = await getSubscriptionWallet();
     if (!subscriptionWallet) {
-        await bot.sendMessage(chatId, `⚠️ ${await t('subscribe.walletNotConfigured', telegramId)}`);
+        await bot.sendMessage(chatId, `⚠️ ${await t('subscribe.walletNotConfigured', telegramId)}`, {
+            reply_markup: { inline_keyboard: [[{ text: await t('close', telegramId), callback_data: "close_message" }]] },
+        });
         return;
     }
 
     const user = await User.findOne({ userId: telegramId });
     if (!user) {
-        await bot.sendMessage(chatId, `❌ ${await t('subscribe.userNotFound', telegramId)}`);
+        await bot.sendMessage(chatId, `❌ ${await t('subscribe.userNotFound', telegramId)}`, {
+            reply_markup: { inline_keyboard: [[{ text: await t('close', telegramId), callback_data: "close_message" }]] },
+        });
         return;
     }
 
     const wallet = user.wallets.find((w: any) => w.is_active_wallet);
     if (!wallet || !wallet.secretKey) {
-        await bot.sendMessage(chatId, `❌ ${await t('subscribe.addWalletFirst', telegramId)}`);
+        await bot.sendMessage(chatId, `❌ ${await t('subscribe.addWalletFirst', telegramId)}`, {
+            reply_markup: { inline_keyboard: [[{ text: await t('close', telegramId), callback_data: "close_message" }]] },
+        });
         return;
     }
 
@@ -159,15 +165,25 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
     const option = subscriptionOptions[planKey];
     const lamports = Math.floor(option.priceSol * LAMPORTS_PER_SOL);
 
+    const progressMsg = await bot.sendMessage(
+        chatId,
+        await t('subscribe.activationInProgress', telegramId),
+    );
+
     try {
         const decrypted = decryptSecretKey(wallet.secretKey);
         const keypair = Keypair.fromSecretKey(bs58.decode(decrypted));
 
         const balance = await connection.getBalance(keypair.publicKey);
         if (balance <= lamports) {
-            await bot.sendMessage(
-                chatId,
-                `❌ ${await t('subscribe.insufficientSol', telegramId)}\n${await t('subscribe.needed', telegramId)}: ${option.priceSol} ${await t('bundleWallets.sol', telegramId)}\n${await t('subscribe.available', telegramId)}: ${(balance / LAMPORTS_PER_SOL).toFixed(3)} ${await t('bundleWallets.sol', telegramId)}`,
+            await bot.editMessageText(
+                `❌ *${await t('subscribe.insufficientSol', telegramId)}*\n\n${await t('subscribe.needed', telegramId)} : *${option.priceSol} ${await t('bundleWallets.sol', telegramId)}*\n${await t('subscribe.available', telegramId)} : *${(balance / LAMPORTS_PER_SOL).toFixed(3)} ${await t('bundleWallets.sol', telegramId)}*`,
+                {
+                    chat_id: chatId,
+                    message_id: progressMsg.message_id,
+                    parse_mode: "Markdown",
+                    reply_markup: { inline_keyboard: [[{ text: await t('close', telegramId), callback_data: "close_message" }]] },
+                },
             );
             return;
         }
@@ -210,15 +226,36 @@ const processSubscription = async (bot: TelegramBot, chatId: number, telegramId:
             active: true,
         });
 
-        const successMessage = `✅ ${await t('subscribe.subscriptionSuccessful', telegramId)}\n\n📦 ${await t('subscribe.plan', telegramId)}: *${await formatPlanLabel(planKey, telegramId)} (${option.priceSol} ${await t('bundleWallets.sol', telegramId)})*\n🧾 ${await t('subscribe.txid', telegramId)}: \`${signature}\`\n⏳ ${await t('subscribe.activeUntil', telegramId)}: *${formatDate(expiresAt)}*`;
+        const successMessage =
+            `✅ *${await t('subscribe.subscriptionSuccessful', telegramId)}*\n\n` +
+            `${await t('subscribe.selectedPlan', telegramId)} : *${await formatPlanLabel(planKey, telegramId)} – (${option.priceSol} ${await t('bundleWallets.sol', telegramId)})*\n` +
+            `${await t('subscribe.transaction', telegramId)} : *${await t('subscribe.viewOnSolscan', telegramId)}*\n` +
+            `${await t('subscribe.subscriptionActiveUntil', telegramId)} : *${formatDate(expiresAt)}*`;
 
-        await bot.sendMessage(chatId, successMessage, {
+        await bot.editMessageText(successMessage, {
+            chat_id: chatId,
+            message_id: progressMsg.message_id,
             parse_mode: "Markdown",
             disable_web_page_preview: true,
+            reply_markup: {
+                inline_keyboard: [
+                    [
+                        { text: await t('close', telegramId), callback_data: "close_message" },
+                        { text: await t('subscribe.openSniper', telegramId), callback_data: "sniper" },
+                    ],
+                ],
+            },
         });
     } catch (error) {
         console.error("Subscription failed:", error);
-        await bot.sendMessage(chatId, `❌ ${await t('subscribe.subscriptionFailed', telegramId)}`);
+        await bot.editMessageText(
+            `❌ ${await t('subscribe.subscriptionFailed', telegramId)}`,
+            {
+                chat_id: chatId,
+                message_id: progressMsg.message_id,
+                reply_markup: { inline_keyboard: [[{ text: await t('close', telegramId), callback_data: "close_message" }]] },
+            },
+        );
     }
 };
 

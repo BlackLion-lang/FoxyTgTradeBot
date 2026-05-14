@@ -731,6 +731,12 @@ export interface Translations {
         txid: string;
         activeUntil: string;
         subscriptionFailed: string;
+        activationInProgress: string;
+        selectedPlan: string;
+        transaction: string;
+        viewOnSolscan: string;
+        subscriptionActiveUntil: string;
+        openSniper: string;
         subscribeButton: string;
         backToMenu: string;
         week: string;

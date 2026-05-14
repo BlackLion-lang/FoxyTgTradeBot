@@ -996,6 +996,11 @@ bot.on("callback_query", async (callbackQuery) => {
             return;
         }
 
+        if (sel_action === "close_message") {
+            await safeDeleteMessage(bot, chatId, messageId);
+            return;
+        }
+
         if (sel_action === "menu_close") {
             cleanupUserTextHandler(userId);
             await safeDeleteMessage(bot, chatId, messageId);
@@ -3171,7 +3176,7 @@ bot.on("callback_query", async (callbackQuery) => {
             if (!userHasTotpEnabled(uW as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
-                    reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
+                    reply_markup: { inline_keyboard: [[{ text: `${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
                 });
                 return;
             }
@@ -3913,7 +3918,7 @@ ${await t('withdrawal.p11', userId)}</strong>`, {
             if (!userHasTotpEnabled(user as { totpSecretEnc?: string })) {
                 await bot.sendMessage(chatId, `🔐 <strong>${await t("pin.setPinFirst", userId)}</strong>\n\n${await t("pin.setPinFirstDesc", userId)}`, {
                     parse_mode: "HTML",
-                    reply_markup: { inline_keyboard: [[{ text: `⚙️ ${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
+                    reply_markup: { inline_keyboard: [[{ text: `${await t("menu.settings", userId)}`, callback_data: "settings" }]] },
                 });
                 return;
             }

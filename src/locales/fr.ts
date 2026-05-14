@@ -82,7 +82,7 @@ export const fr: Translations = {
         p1: "Accès restreint – Autorisation requise !",
         p2: "Bonjour",
         p3: "FoxyBoTracker est un service privé fourni par The CryptoFox Learning.",
-        p4: "Votre identifiant Telegram n'est actuellement pas répertorié dans notre liste d'accès autorisé (Whitelist).",
+        p4: "Votre identifiant Telegram n'est actuellement pas répertorié dans notre Whitelist de personnes autorisé.",
         p5: "L'accès est strictement limité aux utilisateurs qui ont été approuvés par notre équipe.",
         p6: "Pour y accéder, vous devez d'abord visiter notre site officiel et suivre le processus d'accès.",
         p7: "Une fois votre demande soumise, un administrateur vous contactera pour approuver ou refuser votre entrée dans la Whitelist.",
@@ -371,7 +371,7 @@ export const fr: Translations = {
         fileOperation: "Opération : Création d'un nouveau Wallet",
         keysFileHint: "Ouvrez le fichier pour copier votre clé privée Base58 (Phantom).",
         keysFileTitle: "Clé privée — Wallet Foxy",
-        keysFileHeader: "🔑 WALLET FOXY — EXPORT DE CLÉ PRIVÉE",
+        keysFileHeader: "🔑 WALLET FOXYBOTRACKER — EXPORT DE CLÉ PRIVÉE",
         fileDateLabel: "Date :",
         keysFileWalletBlock: "Wallet n°1",
         keysFileDescription: "Ce fichier contient la clé privée (Base58) de votre Wallet Foxy.",
@@ -520,10 +520,10 @@ export const fr: Translations = {
         low: "Faible",
         recommendedGasFeeSettings: "⛽️ Paramètres de Frais de Gaz Recommandés",
         currentRecommendedGas: "🌎 Gaz Recommandé Actuel :",
-        autoCalculateGasPrice: "💡 Laissez Foxy calculer automatiquement le prix de gaz recommandé.",
+        autoCalculateGasPrice: "💡 Laissez FoxyBoTracker calculer automatiquement le prix de gaz recommandé.",
         recommendedFeeSettings: "⛽️ Paramètres de Frais Recommandés",
         currentRecommendedFee: "🌎 Frais Recommandé Actuel :",
-        autoCalculateMEVTip: "💡 Laissez Foxy calculer automatiquement le pourboire MEV recommandé.",
+        autoCalculateMEVTip: "💡 Laissez FoxyBoTracker calculer automatiquement le pourboire MEV recommandé.",
         slowButton: "⚡ Lent",
         fastButton: "🚀 Rapide",
         normalButton: "⚡️ Normal",
@@ -549,7 +549,7 @@ export const fr: Translations = {
         french: "Français"
     },
 
-    // Menu Achat rapide
+    // Menu d'Achat rapide
     quickBuy: {
         p1: "⛽️ Paramètres d'achat rapide",
         p2: "❓ Si vous avez besoin d'aide",
@@ -576,7 +576,7 @@ export const fr: Translations = {
         invalidAmountEth: "Montant invalide. Veuillez entrer un nombre valide."
     },
 
-    // Mznu Vente rapide
+    // Menu de Vente rapide
     quickSell: {
         p1: "⛽️ Paramètres de vente rapide",
         p2: "❓ Si vous avez besoin d'aide",
@@ -605,48 +605,48 @@ export const fr: Translations = {
         failed: "🔴 Vente échouée !"
     },
 
-    // Menu Vente automatique
+    // Menu de Vente automatique
     autoSell: {
-        p1: "🚨 Paramètres de vente automatique",
-        p2: "❓ Besoin d'aide ?",
+        p1: "🚨 Paramètres de vente auto (Auto Sell)",
+        p2: "❓ Si vous avez besoin d'aide ?",
         p3: "Cliquez ici !",
-        p4: "🌐 Si activée, Foxy vend les Tokens collés selon vos règles.",
-        currentChain: "Chaîne actuelle :",
+        p4: "🦊 Si la vente auto est activée, FoxyBoTracker revendra auto.",
+        currentChain: "Blockchain sélectionnée :",
         p5: "Par défaut",
         p6: "📈 Niveau de Take Profit :",
         p7: "📉 Niveau de Stop Loss :",
-        p8: "💡 Configurez vos paramètres de vente automatique ci-dessous.",
+        p8: "💡 Configurez vos paramètres de vente automatique.",
         status1: "Activé",
         status2: "Désactivé",
         wallet: "💳 Wallet :",
-        noActivityTitle: "Vente si aucune activité",
+        noActivityTitle: "Vendre si inactivité",
         noActivityHint:
-            "Si DexScreener ne montre aucun changement de prix, volume, ou tx pendant la période choisie, Foxy ferme la position (même logique TP/SL).",
+            "Sans changement de prix, volume ou tx sur DexScreener, FoxyBoTracker clôture la position.",
         noActivityHintShort:
-            "Si DexScreener est plat sur la période, Foxy ferme la position (même ordre TP/SL).",
-        noActivityHintMinimal: "Pas de mouvement DexScreener → clôture comme TP/SL.",
-        noActivityPeriodLabel: "Période d'inactivité (minutes)",
+            "Sans changement de prix, volume ou tx sur DexScreener, FoxyBoTracker clôture la position.",
+        noActivityHintMinimal: "Pas de mouvement DexScreener → Clôture position.",
+        noActivityPeriodLabel: "Période d'inactivité",
         noActivityPrompt: "Entrez la durée en minutes (15–10080, Exemple : 60 = 1 h) :",
         noActivityInvalid: "Durée invalide. Utilisez un nombre entier entre 15 et 10080 minutes.",
-        devSellTitle: "Vente auto si le dev vend",
+        devSellTitle: "Vente auto si Dev Sell",
         devSellHintBeforePumpLink: "Solana / ",
         devSellHintAfterPumpLink:
-            " : quand le créateur vend, Foxy peut vendre votre position selon les règles ci-dessous.",
-        devSellMinSolLabel: "Vente min dev (SOL)",
-        devSellMinSupplyLabel: "% min supply (tx dev)",
+            " : Quand le Dev vend, FoxyBoTracker peut vendre égalmemnt la position selon les règlages ci-dessous.",
+        devSellMinSolLabel: "Vendre minimum Dev (SOL)",
+        devSellMinSupplyLabel: "Min supply (Tx dev)",
         devSellSupplyMenuNote:
-            ">0 : vente créateur ≥ ce % du supply sur une TX. 0 : désactivé.",
-        devSellPositionLabel: "% à vendre (vous)",
+            ">0 : Vente créateur ≥ ce % du supply sur une TX. 0 : Désactivé.",
+        devSellPositionLabel: "% à vendre (Vous)",
         devSellPromptMinSol: "SOL minimum dans la Transaction de vente du dev (0 = Dès que Dev Sell) :",
         devSellPromptSupply: "Pourcentage minimum du supply total vendu dans cette Transaction (0 = Ignorer ce filtre) :",
         devSellPromptPosition:
-            "Lorsque la vente automatique « le dev vend » se déclenche, quelle part de votre solde sur ce token faut-il vendre ? Saisissez un entier de 1 à 100 (100 = vous vendez tout le solde de ce token sur ce wallet).",
+            "Lorsque la vente automatique « le dev vend » se déclenche, quelle part de votre solde sur ce Token faut-il vendre ? Saisissez un entier de 1 à 100 (100 = Vous vendez tout le solde de ce Token sur ce Wallet).",
         devSellInvalidMinSol: "Valeur invalide. Entrez un nombre ≥ 0 (Max 1 000 000 SOL).",
         devSellInvalidSupply: "Valeur invalide. Entrez un nombre entre 0 et 100.",
         devSellInvalidPosition: "Valeur invalide. Entrez un entier entre 1 et 100.",
-        devSellPending: "⏳ Vente auto (DEV vend) — Exécution…",
+        devSellPending: "⏳ Vente auto (Dev Sell) — Exécution…",
         devSellDone: "✅ Le dev a vendu — Votre position a été vendue selon vos paramètres.",
-        devSellFailed: "❌ Échec de la vente automatique (DEV vend).",
+        devSellFailed: "❌ Échec de la vente automatique (Dev Sell).",
     },
 
     // Menu TP & SL
@@ -727,7 +727,7 @@ export const fr: Translations = {
         subscriptionRequired: "Activ. système d'abonnement",
         pressSubscribe: "Appuyez sur le bouton *S'abonner* dans le menu principal pour activer votre abonnement.",
         walletNotConfigured: "Le Wallet d'abonnement n'est pas configuré. Veuillez contacter le support.",
-        userNotFound: "Impossible de trouver votre enregistrement utilisateur. Veuillez réessayer /start.",
+        userNotFound: "Impossible de trouver votre enregistrement utilisateur. Veuillez réessayer la commande /start.",
         addWalletFirst: "Veuillez ajouter et activer un Wallet avant de vous abonner.",
         insufficientSol: "SOL insuffisant.",
         insufficientEth: "ETH insuffisant.",
@@ -737,6 +737,12 @@ export const fr: Translations = {
         txid: "TXID",
         activeUntil: "Actif jusqu'à",
         subscriptionFailed: "Échec de l'abonnement. Veuillez réessayer plus tard.",
+        activationInProgress: "⌛ Activation en cours…",
+        selectedPlan: "Plan sélectionné",
+        transaction: "Transaction",
+        viewOnSolscan: "Voir sur Solscan",
+        subscriptionActiveUntil: "⏳ Abonnement actif jusqu'au",
+        openSniper: "🔫 Sniper",
         subscribeButton: "💳 S'abonner",
         backToMenu: "⬅️ Retour Menu",
         week: "📅 1 Semaine",
@@ -947,7 +953,7 @@ export const fr: Translations = {
         enterMinAge: "Âge minimum du token en minutes (Création de la paire). 0 = Désactivé :",
         enterMinVol: "Volume 24h minimum en USD. 0 = Désactivé :",
         enterBlacklist: "Collez les adresses des Tokens Pump.fun à bloquer, séparées par des virgules. Envoyez la commande :<code>clear</code> pour vider la Whitelist.",
-        enterWhitelist: "Optionnel : Uniquement ces mints (Virgules). Envoyez <code>clear</code> pour désactiver la liste blanche.",
+        enterWhitelist: "Optionnel : Uniquement ces mints (Virgules). Envoyez <code>clear</code> pour désactiver la Whitelist.",
         skippedByFilters: "❌ Copie annulée : Le Token ne respecte pas les filtres de ce Wallet (Mcap, liquidité, âge, volume ou listes).",
         copyMode: "Mode copie",
         copyModeBuyOnly: "Achat seulement",
